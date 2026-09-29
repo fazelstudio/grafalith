@@ -37,6 +37,10 @@ coverage/
 packages/core/src/spatial/render-profile.ts
 packages/core/src/spatial/benchmark.ts
 
+# Rust workspace (Phase 01+)
+target/
+# NOTE: Cargo.lock is intentionally committed (deterministic builds).
+
 # AI Agent planning docs (not for public repo)
 docs/phases/
 docs/prompt/

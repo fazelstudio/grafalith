@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+# Workspace-level lint discipline (module 03 quality baseline + module 16 Gate 2).
+# Member crates opt in via `[lints] workspace = true`.
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
