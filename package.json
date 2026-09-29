@@ -1,0 +1,28 @@
+{
+  "name": "fazelidraw",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter @fazelstudio/fazelidraw build && bun run --filter @fazelstudio/react build",
+    "build:core": "bun run --filter @fazelstudio/fazelidraw build",
+    "build:react": "bun run --filter @fazelstudio/react build",
+    "test": "bun test --filter @fazelstudio/fazelidraw",
+    "typecheck": "bun run --filter @fazelstudio/fazelidraw typecheck && bun run --filter @fazelstudio/react typecheck",
+    "typecheck:core": "bun run --filter @fazelstudio/fazelidraw typecheck",
+    "typecheck:react": "bun run --filter @fazelstudio/react typecheck",
+    "lint": "eslint .",
+    "lint:core": "bun run --filter @fazelstudio/fazelidraw lint",
+    "lint:react": "bun run --filter @fazelstudio/react lint",
+    "check:all": "bun run lint --fix && bun run typecheck && bun run build",
+    "publish:core": "bun run build:core && cd packages/core && npm publish",
+    "publish:react": "bun run build && cd packages/react && npm publish",
+    "publish:all": "bun run publish:core && bun run publish:react"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "typescript-eslint": "^8"
+  }
+}

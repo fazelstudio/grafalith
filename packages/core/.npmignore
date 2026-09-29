@@ -1,0 +1,10 @@
+# Files to exclude from npm publish
+src/
+*.test.ts
+*.bench.ts
+render-profile.ts
+tsconfig.json
+bun.lock
+node_modules/
+dist/**/*.test.*
+dist/**/*.bench.*

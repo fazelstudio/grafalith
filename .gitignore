@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output (per-package)
+dist/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+tmp/
+temp/
+
+# Test coverage
+coverage/
+
+# Benchmark / profiling artifacts
+*.bench.ts
+packages/core/src/spatial/render-profile.ts
+packages/core/src/spatial/benchmark.ts
+
+# AI Agent planning docs (not for public repo)
+docs/phases/
+docs/prompt/
+docs/modules/
+docs/reports/

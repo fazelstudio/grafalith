@@ -1,0 +1,58 @@
+{
+  "name": "@fazelstudio/react",
+  "version": "0.1.0",
+  "description": "React bindings and UI components for Fazelidraw canvas engine",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "keywords": [
+    "react",
+    "canvas",
+    "whiteboard",
+    "drawing",
+    "infinite-canvas",
+    "fazelidraw"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fazelstudio/fazelidraw.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/fazelstudio/fazelidraw/issues"
+  },
+  "homepage": "https://github.com/fazelstudio/fazelidraw#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "prepublishOnly": "bun run typecheck && bun run build"
+  },
+  "dependencies": {
+    "@fazelstudio/fazelidraw": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.4.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

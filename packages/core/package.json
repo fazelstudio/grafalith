@@ -1,0 +1,142 @@
+{
+  "name": "@fazelstudio/fazelidraw",
+  "version": "0.1.0",
+  "description": "Lightweight, framework-agnostic canvas engine for infinite whiteboard applications",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "keywords": [
+    "canvas",
+    "whiteboard",
+    "drawing",
+    "infinite-canvas",
+    "2d-engine",
+    "typescript",
+    "headless",
+    "editor-api"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fazelstudio/fazelidraw.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/fazelstudio/fazelidraw/issues"
+  },
+  "homepage": "https://github.com/fazelstudio/fazelidraw#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./scene": {
+      "import": "./dist/scene/index.js",
+      "types": "./dist/scene/index.d.ts"
+    },
+    "./scene/*": {
+      "import": "./dist/scene/*.js",
+      "types": "./dist/scene/*.d.ts"
+    },
+    "./render": {
+      "import": "./dist/render/index.js",
+      "types": "./dist/render/index.d.ts"
+    },
+    "./render/fill-style": {
+      "import": "./dist/render/fill-style.js",
+      "types": "./dist/render/fill-style.d.ts"
+    },
+    "./render/*": {
+      "import": "./dist/render/*.js",
+      "types": "./dist/render/*.d.ts"
+    },
+    "./interaction": {
+      "import": "./dist/interaction/index.js",
+      "types": "./dist/interaction/index.d.ts"
+    },
+    "./interaction/*": {
+      "import": "./dist/interaction/*.js",
+      "types": "./dist/interaction/*.d.ts"
+    },
+    "./shapes": {
+      "import": "./dist/shapes/index.js",
+      "types": "./dist/shapes/index.d.ts"
+    },
+    "./shapes/*": {
+      "import": "./dist/shapes/*.js",
+      "types": "./dist/shapes/*.d.ts"
+    },
+    "./history": {
+      "import": "./dist/history/index.js",
+      "types": "./dist/history/index.d.ts"
+    },
+    "./history/*": {
+      "import": "./dist/history/*.js",
+      "types": "./dist/history/*.d.ts"
+    },
+    "./spatial": {
+      "import": "./dist/spatial/index.js",
+      "types": "./dist/spatial/index.d.ts"
+    },
+    "./spatial/*": {
+      "import": "./dist/spatial/*.js",
+      "types": "./dist/spatial/*.d.ts"
+    },
+    "./io": {
+      "import": "./dist/io/index.js",
+      "types": "./dist/io/index.d.ts"
+    },
+    "./io/*": {
+      "import": "./dist/io/*.js",
+      "types": "./dist/io/*.d.ts"
+    },
+    "./theme": {
+      "import": "./dist/theme/index.js",
+      "types": "./dist/theme/index.d.ts"
+    },
+    "./theme/*": {
+      "import": "./dist/theme/*.js",
+      "types": "./dist/theme/*.d.ts"
+    },
+    "./assets": {
+      "import": "./dist/assets/index.js",
+      "types": "./dist/assets/index.d.ts"
+    },
+    "./assets/*": {
+      "import": "./dist/assets/*.js",
+      "types": "./dist/assets/*.d.ts"
+    },
+    "./editor": {
+      "import": "./dist/editor/index.js",
+      "types": "./dist/editor/index.d.ts"
+    },
+    "./editor/*": {
+      "import": "./dist/editor/*.js",
+      "types": "./dist/editor/*.d.ts"
+    },
+    "./components": {
+      "import": "./dist/components/index.js",
+      "types": "./dist/components/index.d.ts"
+    },
+    "./components/*": {
+      "import": "./dist/components/*.js",
+      "types": "./dist/components/*.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "bun test",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
