@@ -1,0 +1,24 @@
+[package]
+name = "nary-io"
+version = "0.1.0"
+edition = "2021"
+description = "Serialization and interchange for the Nary Rust engine: versioned JSON schema, staged import pipeline, clipboard codec, PNG export descriptors. Host I/O (files, OS clipboard, canvas) stays outside."
+license = "MIT"
+
+[dependencies]
+nary-core = { version = "0.1.0", path = "../nary-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+
+# Benchmark + property harnesses (dev-only: never ship in library
+# artifacts, zero bundle-size impact — M5).
+[dev-dependencies]
+criterion = "0.5"
+proptest = "1"
+
+[[bench]]
+name = "scale"
+harness = false
+
+[lints]
+workspace = true

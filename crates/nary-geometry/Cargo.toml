@@ -1,0 +1,13 @@
+[package]
+name = "nary-geometry"
+version = "0.1.0"
+edition = "2021"
+description = "Pure 2D math for the Nary Rust engine: points, bounds, transforms, viewport math, spatial index, snapping. No host, no document, no UI."
+license = "MIT"
+
+# Property harness (dev-only: never ships in library artifacts — M5).
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true
