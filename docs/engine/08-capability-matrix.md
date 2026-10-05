@@ -37,7 +37,7 @@ command; no capability is internal-only.
 
 | Feature | Command(s) | Test | Status |
 |---|---|---|---|
-| Click/marquee/additive select | `tool.pointerDown/Move/Up`, `selection.set` | `interaction_model` (46) | ✅ (box-rubber; lasso M3) |
+| Click/marquee/additive select | `tool.pointerDown/Move/Up`, `selection.set` | `interaction_model` (46) | ✅ (box-rubber indexed; lasso M3) |
 | Move/resize/rotate + previews | `node.move/setBounds/setRotation`, `view.previewMove/Resize/Rotate` | `parity_model`, `bindings_react` | ✅ (single-rotate; multi-rotate M3) |
 | Snap (grid/object/guides) | `node.move` (inside), `session.configure` | `parity_model`, `geometry_model` | 🟡 (no spacing-distribution op) |
 | Pan/zoom + viewport + culling | `view.wheel`, `view.setViewport`, `view.renderModel` | `bindings_react`, `geometry_model` | ✅ (fit/fill M3) |
@@ -46,7 +46,8 @@ command; no capability is internal-only.
 | Undo/redo (atomic, coalesced) | `edit.undo/redo` | `history_model` (18) | ✅ (linear, max 100) |
 | PNG plan / JSON / assets | `view.renderModel`, `io.*`, `asset.notifyChanged` | `io_model`, `bindings_react` | 🟡 (raster + fetch host-side) |
 | Events + introspection | `session.drainEvents/state`, `selection.contextMenu`, `view.*` previews | `bindings_react` (37) | ✅ (finer `docChanged` granularity M1) |
-| Boolean ops / outline / offset / simplify / SVG / PDF / video / pages / skew / eraser / tracing | — | — | ❌ (boolean + SVG scoped: M2/M4; rest on demand) |
+| Boolean ops (rect-exact) | `boolean.union/subtract/intersect/exclude` | `boolean_ops` (3), `boolean_model` (3), geometry `boolean` (3 + 500-box invariants) | ✅ rect-only (paths → explicit `unsupported`; `i_overlay` follow-up needs approval) |
+| Outline / offset / simplify / SVG / PDF / video / pages / skew / eraser / tracing | — | — | ❌ (SVG scoped M4; rest on demand or needs-approval deps) |
 
 ## Harness gaps (all M5)
 

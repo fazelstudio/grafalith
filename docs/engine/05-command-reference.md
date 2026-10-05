@@ -1,4 +1,4 @@
-# 05 — Command Reference (all 72 commands)
+# 05 — Command Reference (all 76 commands)
 
 Every capability is reachable through a unique command. Wire `op` strings are
 frozen (protocol v1); command IDs follow ADR-0016 (`namespace.action`).
@@ -51,8 +51,20 @@ stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
 | `session.drainEvents` | `drainEvents` | — | Q | queued events, oldest first (clears) | `bindings_react` |
 | `selection.contextMenu` | `contextMenu` | — | Q | applicable intents (host renders) | `bindings_react` |
 
-## Plugin commands (dynamic dispatch)
+## Boolean operations (rectangles, exact)
 
+| Command ID | Wire op | Input | H | Result data | Test |
+|---|---|---|---|---|---|
+| `boolean.union` | `booleanUnion` | `ids` (exactly two unrotated rectangles) | ✅ | `{affected, changed}` (inputs consumed, disjoint cover on top) | `boolean_ops` |
+| `boolean.subtract` | `booleanSubtract` | `ids` (exactly two) | ✅ | `{affected, changed}` (full cover destroys both) | `boolean_ops` |
+| `boolean.intersect` | `booleanIntersect` | `ids` (exactly two) | ✅ | `{affected, changed}` | `boolean_ops` |
+| `boolean.exclude` | `booleanExclude` | `ids` (exactly two) | ✅ | `{affected, changed}` | `boolean_ops` |
+
+Arity violations are `invalidInput`, unknown/deleted ids `notFound`, locked or
+rotated inputs `invalidInput`, and non-rectangle inputs the stable
+`unsupported` code (path booleans are a follow-up behind a precision ADR).
+
+## Plugin commands (dynamic dispatch)
 | Command ID | Wire op | Input | H | Result data | Test |
 |---|---|---|---|---|---|
 | `plugin.execute` | `executeCommand` | `commandId` (e.g. `acme.sticker.create`; registration is native) | ✅ iff the command stored anything | `{affected: [], changed}` | `plugin_protocol` |

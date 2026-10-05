@@ -47,6 +47,21 @@ follow-up: `commands.list/describe/can/dryRun` introspection helpers.
   Follow-ups: offset/simplify/outline-stroke.
 - Contract impact: new `boolean.*` commands (additive); no schema change.
 
+**Status 2026-10-05: done (rectangle scope).** Shipped:
+`hit_test_top_indexed` + `query_in_bounds_indexed` (parity-proven vs the
+linear scans over rotation/lock/hide/delete fixtures) with the editor's click
+and rubber-band paths switched over (123 parity/interaction/geometry tests
+still green); debug numbers on the 5k row layout — indexed 4.245ms vs linear
+4.709ms (the O(n) order walk is the floor; a position-index follow-up is
+noted in `07-performance.md`). Exact rectangle booleans
+(`nary-geometry/src/boolean.rs`: intersect/subtract/union-partition/exclude
+with area/disjointness/commutativity invariants over 500 LCG boxes) plus
+`Editor::apply_boolean` (one entry, style inheritance, explicit
+`NotFound`/`InvalidInput`/`Unsupported`) and four additive wire ops
+(`booleanUnion/Subtract/Intersect/Exclude`, 76 total). Path booleans stay
+`unsupported` pending the `i_overlay` dependency decision (needs owner
+approval per AGENTS.md) — recommended in the final report, not smuggled in.
+
 ## M3 — Render seam & tools
 
 - Stored `RenderModel` goldens (like the `nary-io` TS-generated fixtures);
@@ -94,4 +109,5 @@ follow-up: `commands.list/describe/can/dryRun` introspection helpers.
 |---|---|
 | M0 | Done (2026-10-04) |
 | M1 | Done (2026-10-05) |
+| M2 | Done (2026-10-05) |
 | M2–M6 | Planned, ordered, unblocked in sequence; each is independently shippable |
