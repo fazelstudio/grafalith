@@ -94,3 +94,74 @@ fn bounds_algebra_invariants_hold() {
         }
     }
 }
+
+use proptest::prelude::*;
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    #[test]
+    fn rotation_round_trip_proptest(
+        px in any::<f64>(),
+        py in any::<f64>(),
+        cx in any::<f64>(),
+        cy in any::<f64>(),
+        rot in any::<f64>(),
+    ) {
+        prop_assume!(
+            px.is_finite()
+                && py.is_finite()
+                && cx.is_finite()
+                && cy.is_finite()
+                && rot.is_finite()
+        );
+        let local = to_local_space(px, py, cx, cy, rot);
+        let back = to_world_space(local[0], local[1], cx, cy, rot);
+        let scale = px.abs().max(py.abs()).max(cx.abs()).max(cy.abs()).max(1.0);
+        prop_assert!((back[0] - px).abs() <= 1e-9 * scale);
+        prop_assert!((back[1] - py).abs() <= 1e-9 * scale);
+    }
+
+    #[test]
+    fn boolean_area_identities_proptest(
+        ax in -50i32..50i32,
+        ay in -50i32..50i32,
+        aw in 0i32..50i32,
+        ah in 0i32..50i32,
+        bx in -50i32..50i32,
+        by in -50i32..50i32,
+        bw in 0i32..50i32,
+        bh in 0i32..50i32,
+    ) {
+        use nary_geometry::boolean::{exclude, intersect, subtract, union_partition};
+
+        let a = Bounds::from_xywh(ax as f64, ay as f64, aw as f64, ah as f64);
+        let b = Bounds::from_xywh(bx as f64, by as f64, bw as f64, bh as f64);
+        let area = |bounds: &Bounds| {
+            (bounds.max_x - bounds.min_x).max(0.0) * (bounds.max_y - bounds.min_y).max(0.0)
+        };
+        let total = |boxes: &[Bounds]| -> f64 { boxes.iter().map(area).sum() };
+        let overlap = intersect(&a, &b).map_or(0.0, |hit| area(&hit));
+
+        // Difference restores the input area minus the overlap.
+        prop_assert!((total(&subtract(&a, &b)) - (area(&a) - overlap)).abs() < 1e-9);
+        // Union and exclusion conserve area exactly.
+        prop_assert!(
+            (total(&union_partition(&a, &b)) - (area(&a) + area(&b) - overlap)).abs() < 1e-9
+        );
+        prop_assert!(
+            (total(&exclude(&a, &b)) - (area(&a) + area(&b) - 2.0 * overlap)).abs() < 1e-9
+        );
+        // Outputs are pairwise disjoint with positive area.
+        for outputs in [subtract(&a, &b), union_partition(&a, &b), exclude(&a, &b)] {
+            for (i, first) in outputs.iter().enumerate() {
+                prop_assert!(area(first) > 0.0);
+                for (j, second) in outputs.iter().enumerate() {
+                    if i != j {
+                        prop_assert!(intersect(first, second).is_none());
+                    }
+                }
+            }
+        }
+    }
+}

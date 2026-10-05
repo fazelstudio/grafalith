@@ -942,3 +942,54 @@ fn webp_plan_keeps_alpha_and_lossless_hint() {
 
     assert!(plan_webp_export(&empty_doc(), &WebpExportOptions::default()).is_err());
 }
+
+use proptest::prelude::*;
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    #[test]
+    fn gradient_fill_parses_with_preserved_stops(
+        angle in -720.0f64..720.0f64,
+        stops in proptest::collection::vec((0.0f64..1.0f64, ".*"), 0..5),
+    ) {
+        prop_assume!(angle.is_finite());
+        let stops_json: Vec<serde_json::Value> = stops
+            .iter()
+            .map(|(offset, color)| serde_json::json!({"offset": offset, "color": color}))
+            .collect();
+        let value = serde_json::json!({
+            "type": "gradient",
+            "gradientType": "linear",
+            "angle": angle,
+            "stops": stops_json,
+        });
+        let fill = parse_fill_style(&value).expect("generated gradient parses");
+        match fill {
+            nary_core::element::FillStyle::Gradient {
+                angle: parsed_angle,
+                stops: parsed_stops,
+                ..
+            } => {
+                prop_assert_eq!(parsed_angle, angle);
+                prop_assert_eq!(parsed_stops.len(), stops.len());
+                for (parsed, (offset, _)) in parsed_stops.iter().zip(stops.iter()) {
+                    prop_assert_eq!(parsed.offset, *offset);
+                }
+            }
+            nary_core::element::FillStyle::Solid { .. } => {
+                panic!("gradient must not parse as solid")
+            }
+        }
+    }
+
+    #[test]
+    fn plain_string_fill_always_parses_as_solid(color in ".*") {
+        let fill = parse_fill_style(&serde_json::Value::String(color.clone()))
+            .expect("any string parses");
+        prop_assert_eq!(
+            fill,
+            nary_core::element::FillStyle::Solid { color }
+        );
+    }
+}
