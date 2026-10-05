@@ -26,7 +26,7 @@
 use std::collections::HashSet;
 
 use crate::alignment::{AlignElements, AlignMode, DistributeAxis, DistributeElements};
-use crate::arrow_binding::update_bound_arrows;
+use crate::arrow_binding::{update_bound_arrows, update_bound_arrows_many};
 use crate::auto_layout::ApplyAutoLayout;
 use crate::command::{
     Command, CommandOutcome, CreateElements, DeleteElements, GroupElements, MoveElements, Reorder,
@@ -611,10 +611,9 @@ impl Editor {
                 ctx.upsert(element.clone())?;
                 affected.push(element.id().clone());
             }
-            for id in &[plan.first.clone(), plan.second.clone()] {
-                let follow = update_bound_arrows(ctx, id)?;
-                affected.extend(follow.affected);
-            }
+            // One scan for both consumed inputs (mass-operation linearity).
+            let follow = update_bound_arrows_many(ctx, &[plan.first.clone(), plan.second.clone()])?;
+            affected.extend(follow.affected);
             Ok(CommandOutcome {
                 affected,
                 changed: true,
@@ -636,11 +635,10 @@ impl Editor {
         let outcome = self.history.transaction(&mut self.doc, |ctx| {
             let mut cmd = MoveElements::new(ids.clone(), dx, dy);
             let mut outcome = cmd.execute(ctx)?;
-            for id in &ids {
-                let follow = update_bound_arrows(ctx, id)?;
-                outcome.affected.extend(follow.affected);
-                outcome.changed |= follow.changed;
-            }
+            // One arrow scan for the whole move (linear, not per-id).
+            let follow = update_bound_arrows_many(ctx, &ids)?;
+            outcome.affected.extend(follow.affected);
+            outcome.changed |= follow.changed;
             Ok(outcome)
         })?;
         self.after_mutation(&outcome);
@@ -1103,12 +1101,11 @@ impl Editor {
                     .collect(),
             );
             let mut outcome = cmd.execute(ctx)?;
-            // Detach arrows bound to a deleted target in the same entry.
-            for id in &selected {
-                let follow = update_bound_arrows(ctx, id)?;
-                outcome.affected.extend(follow.affected);
-                outcome.changed |= follow.changed;
-            }
+            // Detach arrows bound to a deleted target in the same entry —
+            // one scan for the whole selection (linear, not per-id).
+            let follow = update_bound_arrows_many(ctx, &selected)?;
+            outcome.affected.extend(follow.affected);
+            outcome.changed |= follow.changed;
             Ok(outcome)
         })?;
         self.state.selection.clear();
@@ -1125,11 +1122,10 @@ impl Editor {
         let outcome = self.history.transaction(&mut self.doc, |ctx| {
             let mut cmd = MoveElements::new(ids.clone(), dx, dy);
             let mut outcome = cmd.execute(ctx)?;
-            for id in &ids {
-                let follow = update_bound_arrows(ctx, id)?;
-                outcome.affected.extend(follow.affected);
-                outcome.changed |= follow.changed;
-            }
+            // One arrow scan for the whole nudge (linear, not per-id).
+            let follow = update_bound_arrows_many(ctx, &ids)?;
+            outcome.affected.extend(follow.affected);
+            outcome.changed |= follow.changed;
             Ok(outcome)
         })?;
         self.after_mutation(&outcome);
@@ -1275,11 +1271,10 @@ impl Editor {
         let outcome = self.history.transaction(&mut self.doc, |ctx| {
             let mut cmd = cmd.clone();
             let mut outcome = cmd.execute(ctx)?;
-            for id in &moved_ids {
-                let follow = update_bound_arrows(ctx, id)?;
-                outcome.affected.extend(follow.affected);
-                outcome.changed |= follow.changed;
-            }
+            // One arrow scan for the whole gesture (linear, not per-id).
+            let follow = update_bound_arrows_many(ctx, &moved_ids)?;
+            outcome.affected.extend(follow.affected);
+            outcome.changed |= follow.changed;
             Ok(outcome)
         })?;
         self.after_mutation(&outcome);
@@ -1792,11 +1787,10 @@ impl Editor {
                             moved.push(id);
                         }
                     }
-                    for id in &moved {
-                        let follow = update_bound_arrows(ctx, id)?;
-                        outcome.affected.extend(follow.affected);
-                        outcome.changed |= follow.changed;
-                    }
+                    // One arrow scan for the whole drag (linear, not per-id).
+                    let follow = update_bound_arrows_many(ctx, &moved)?;
+                    outcome.affected.extend(follow.affected);
+                    outcome.changed |= follow.changed;
                     Ok(outcome)
                 })?;
                 self.pending_collapse = None;
