@@ -697,10 +697,10 @@ pub struct RenderQueryJson {
 
 /// Scalar style patch (v1).
 ///
-/// Covers the scalar fields only. A `background` gradient object is an
-/// explicit per-op `unsupported` error — the fill DTO stays owned by the
-/// io schema until a later phase carries it across without duplicating
-/// the parser (ADR-0010). A plain-string `background` sets a solid fill.
+/// Covers the scalar fields plus `background` fills: a plain-string
+/// `background` sets a solid fill, a fill object parses through the shared
+/// io fill parser (M4 fill-DTO phase — no duplicated parser, ADR-0010 note
+/// retired).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StylePatchJson {
@@ -712,7 +712,9 @@ pub struct StylePatchJson {
     pub stroke_style: Option<String>,
     /// New opacity (`0–100`, clamped like TS).
     pub opacity: Option<f64>,
-    /// New background: plain strings only in v1 (solid fill).
+    /// New background: a plain string sets a solid fill, a fill object
+    /// (`{"type":"solid"|"gradient", …}`) parses through the shared io
+    /// fill parser (same validation as file import).
     pub background: Option<Value>,
 }
 
@@ -753,6 +755,36 @@ pub struct PngOptionsJson {
     pub padding: Option<f64>,
     /// Resolution scale factor.
     pub scale: Option<f64>,
+}
+
+/// JPEG export options (all fields optional; JPEG defaults apply).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JpegOptionsJson {
+    /// Canvas background (`"transparent"` resolves to white — no alpha).
+    pub background: Option<String>,
+    /// Padding around content bounds in scene units.
+    pub padding: Option<f64>,
+    /// Resolution scale factor.
+    pub scale: Option<f64>,
+    /// Quality hint 1–100 (clamped, default 90).
+    pub quality: Option<u8>,
+}
+
+/// WebP export options (all fields optional; WebP defaults apply).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebpOptionsJson {
+    /// Canvas background (`"transparent"` leaves alpha untouched).
+    pub background: Option<String>,
+    /// Padding around content bounds in scene units.
+    pub padding: Option<f64>,
+    /// Resolution scale factor.
+    pub scale: Option<f64>,
+    /// Quality hint 1–100 for lossy encoding (clamped, default 90).
+    pub quality: Option<u8>,
+    /// Lossless encoding hint (default false).
+    pub lossless: Option<bool>,
 }
 
 /// Default host click count (single click) when the field is absent.

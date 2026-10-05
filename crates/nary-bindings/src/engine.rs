@@ -39,7 +39,7 @@ use nary_core::command::{
 };
 use nary_core::document::{Document, ImportSummary, SCHEMA_VERSION};
 use nary_core::editor::Editor;
-use nary_core::element::{ElementId, FillStyle, StrokeStyle as DomainStrokeStyle};
+use nary_core::element::{ElementId, StrokeStyle as DomainStrokeStyle};
 use nary_core::geometry::viewport::Viewport;
 use nary_core::interaction::{Key, Modifiers, PointerButton};
 use nary_core::plugin::Plugin;
@@ -54,8 +54,9 @@ use serde_json::{json, Value};
 
 use crate::protocol::{err_result, ok_result, op_name, unsupported_result, OpResult};
 use crate::protocol::{
-    BatchOp, BatchResult, EngineStatus, ModifiersJson, PngOptionsJson, PointJson, RenderQueryJson,
-    SnapConfigJson, StylePatchJson, ThemeOverrideJson, ViewportStatusJson, PROTOCOL_VERSION,
+    BatchOp, BatchResult, EngineStatus, JpegOptionsJson, ModifiersJson, PngOptionsJson, PointJson,
+    RenderQueryJson, SnapConfigJson, StylePatchJson, ThemeOverrideJson, ViewportStatusJson,
+    WebpOptionsJson, PROTOCOL_VERSION,
 };
 use crate::render_dto::{
     context_intent_name, event_dto, key_action_dto, phase_name, pointer_down_dto, pointer_up_dto,
@@ -290,6 +291,67 @@ impl Engine {
             "effectiveScale": plan.effective_scale,
             "background": plan.background,
             "padding": plan.padding,
+        }))
+    }
+
+    /// Plans JPEG export (pure math — encoding stays host-side). JPEG has
+    /// no alpha channel: `"transparent"` resolves to white in the plan.
+    pub fn plan_jpeg_export(&self, options_json: &str) -> EngineResult<Value> {
+        let options: JpegOptionsJson = serde_json::from_str(options_json).map_err(|err| {
+            EngineError::InvalidInput(format!("JPEG options must be a JSON object: {err}"))
+        })?;
+        let backend = nary_io::JpegExportOptions {
+            background: options.background.unwrap_or_else(|| "#ffffff".to_string()),
+            padding: options.padding.unwrap_or(20.0),
+            scale: options.scale.unwrap_or(2.0),
+            quality: options.quality.unwrap_or(90),
+        };
+        let plan = nary_io::plan_jpeg_export(self.editor.document(), &backend)?;
+        Ok(json!({
+            "contentBounds": {
+                "minX": plan.content_bounds.min_x,
+                "minY": plan.content_bounds.min_y,
+                "maxX": plan.content_bounds.max_x,
+                "maxY": plan.content_bounds.max_y,
+            },
+            "canvasWidthPx": plan.canvas_width_px,
+            "canvasHeightPx": plan.canvas_height_px,
+            "effectiveScale": plan.effective_scale,
+            "background": plan.background,
+            "padding": plan.padding,
+            "quality": plan.quality,
+        }))
+    }
+
+    /// Plans WebP export (pure math — encoding stays host-side).
+    pub fn plan_webp_export(&self, options_json: &str) -> EngineResult<Value> {
+        let options: WebpOptionsJson = serde_json::from_str(options_json).map_err(|err| {
+            EngineError::InvalidInput(format!("WebP options must be a JSON object: {err}"))
+        })?;
+        let backend = nary_io::WebpExportOptions {
+            background: options
+                .background
+                .unwrap_or_else(|| "transparent".to_string()),
+            padding: options.padding.unwrap_or(20.0),
+            scale: options.scale.unwrap_or(2.0),
+            quality: options.quality.unwrap_or(90),
+            lossless: options.lossless.unwrap_or(false),
+        };
+        let plan = nary_io::plan_webp_export(self.editor.document(), &backend)?;
+        Ok(json!({
+            "contentBounds": {
+                "minX": plan.content_bounds.min_x,
+                "minY": plan.content_bounds.min_y,
+                "maxX": plan.content_bounds.max_x,
+                "maxY": plan.content_bounds.max_y,
+            },
+            "canvasWidthPx": plan.canvas_width_px,
+            "canvasHeightPx": plan.canvas_height_px,
+            "effectiveScale": plan.effective_scale,
+            "background": plan.background,
+            "padding": plan.padding,
+            "quality": plan.quality,
+            "lossless": plan.lossless,
         }))
     }
 
@@ -961,21 +1023,11 @@ impl Engine {
         }
     }
 
-    /// Applies a scalar style patch (gradient backgrounds are an explicit
-    /// `unsupported` per-op error in protocol v1 — ADR-0010).
+    /// Applies a style patch. Gradient `background` objects parse through
+    /// the shared io fill parser (same validation as file import, M4
+    /// fill-DTO phase); mistyped fills are explicit `invalidInput` errors.
     fn op_set_style(&mut self, ids: &[String], patch: &StylePatchJson) -> OpResult {
         let name = "setStyle";
-        if let Some(background) = &patch.background {
-            match background {
-                Value::String(_) | Value::Null => {}
-                _ => {
-                    return unsupported_result(
-                        name,
-                        "background gradients are unsupported in protocol v1; use importScene for gradient fills",
-                    );
-                }
-            }
-        }
         let domain = match parse_style_patch(patch) {
             Ok(patch) => patch,
             Err(err) => return err_result(name, &err),
@@ -1384,10 +1436,18 @@ fn parse_style_patch(patch: &StylePatchJson) -> EngineResult<StylePatch> {
         }
         domain.opacity = Some(opacity);
     }
-    if let Some(Value::String(color)) = &patch.background {
-        domain.background = Some(FillStyle::Solid {
-            color: color.clone(),
-        });
+    if let Some(background) = &patch.background {
+        match background {
+            Value::Null => {}
+            value => match nary_io::parse_fill_style(value) {
+                Some(fill) => domain.background = Some(fill),
+                None => {
+                    return Err(EngineError::InvalidInput(
+                        "background must be a color string or gradient object".to_string(),
+                    ));
+                }
+            },
+        }
     }
     Ok(domain)
 }
