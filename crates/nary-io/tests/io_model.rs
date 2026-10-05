@@ -27,7 +27,8 @@ use nary_core::element::{
 use nary_core::history::HistoryManager;
 use nary_io::{
     decode_clipboard, encode_clipboard, export_str, import_str, import_str_tracked,
-    plan_png_export, publish_clipboard, subscribe_clipboard, PngExportOptions,
+    parse_fill_style, plan_jpeg_export, plan_png_export, plan_webp_export, publish_clipboard,
+    subscribe_clipboard, JpegExportOptions, PngExportOptions, WebpExportOptions,
 };
 
 const BASIC_FIXTURE: &str = include_str!("fixtures/basic.json");
@@ -828,4 +829,116 @@ fn custom_typed_elements_skip_with_count_while_builtins_import() {
     assert_eq!(summary.skipped, 1);
     assert!(doc.get("rect-9").is_some());
     assert!(doc.get("sticker-1").is_none());
+}
+
+#[test]
+fn fill_parser_accepts_strings_and_gradient_objects() {
+    use nary_core::element::{FillStyle, GradientType};
+
+    let solid = parse_fill_style(&serde_json::json!("#ff0000")).expect("string parses");
+    assert_eq!(
+        solid,
+        FillStyle::Solid {
+            color: "#ff0000".to_string()
+        }
+    );
+    let gradient = parse_fill_style(&serde_json::json!({
+        "type": "gradient",
+        "gradientType": "linear",
+        "angle": 45.0,
+        "stops": [
+            {"offset": 0.0, "color": "#000000"},
+            {"offset": 1.0, "color": "#ffffff"},
+        ],
+    }))
+    .expect("gradient object parses");
+    match gradient {
+        FillStyle::Gradient {
+            gradient_type,
+            angle,
+            stops,
+        } => {
+            assert_eq!(gradient_type, GradientType::Linear);
+            assert_eq!(angle, 45.0);
+            assert_eq!(stops.len(), 2);
+            assert_eq!(stops[0].offset, 0.0);
+        }
+        FillStyle::Solid { .. } => panic!("gradient must not parse as solid"),
+    }
+    assert!(parse_fill_style(&serde_json::json!(42)).is_none());
+    assert!(parse_fill_style(&serde_json::json!({"type": "nope"})).is_none());
+}
+
+#[test]
+fn jpeg_plan_resolves_transparent_to_white_and_clamps_quality() {
+    let mut gen = CounterIdGenerator::new();
+    let mut doc = Document::new();
+    let mut rect = create_rectangle(&mut gen);
+    rect.base.id = ElementId::of("j1");
+    rect.base.x = 0.0;
+    rect.base.y = 0.0;
+    rect.base.width = 100.0;
+    rect.base.height = 50.0;
+    doc.upsert(Element::Rectangle(rect)).unwrap();
+
+    let plan = plan_jpeg_export(&doc, &JpegExportOptions::default()).unwrap();
+    assert_eq!(plan.background, "#ffffff");
+    assert_eq!(plan.quality, 90);
+    // (100 + 40) x (50 + 40) at scale 2.
+    assert_eq!(plan.canvas_width_px, 280);
+    assert_eq!(plan.canvas_height_px, 180);
+
+    let clamped = plan_jpeg_export(
+        &doc,
+        &JpegExportOptions {
+            quality: 0,
+            ..JpegExportOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(clamped.quality, 1);
+
+    let explicit = plan_jpeg_export(
+        &doc,
+        &JpegExportOptions {
+            background: "transparent".to_string(),
+            ..JpegExportOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(explicit.background, "#ffffff");
+
+    assert!(plan_jpeg_export(&empty_doc(), &JpegExportOptions::default()).is_err());
+}
+
+#[test]
+fn webp_plan_keeps_alpha_and_lossless_hint() {
+    let mut gen = CounterIdGenerator::new();
+    let mut doc = Document::new();
+    let mut rect = create_rectangle(&mut gen);
+    rect.base.id = ElementId::of("w1");
+    rect.base.x = 0.0;
+    rect.base.y = 0.0;
+    rect.base.width = 100.0;
+    rect.base.height = 50.0;
+    doc.upsert(Element::Rectangle(rect)).unwrap();
+
+    let plan = plan_webp_export(&doc, &WebpExportOptions::default()).unwrap();
+    assert_eq!(plan.background, "transparent");
+    assert!(!plan.lossless);
+    assert_eq!(plan.canvas_width_px, 280);
+
+    let lossless = plan_webp_export(
+        &doc,
+        &WebpExportOptions {
+            lossless: true,
+            quality: 250,
+            ..WebpExportOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(lossless.lossless);
+    assert_eq!(lossless.quality, 100);
+
+    assert!(plan_webp_export(&empty_doc(), &WebpExportOptions::default()).is_err());
 }
