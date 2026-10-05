@@ -118,6 +118,18 @@ asset GC/dedup/quota (unscoped design work).
 - CI matrix: Linux/macOS/Windows, `wasm32`, supported Python & Node; publish
   dry-runs for npm/PyPI; `cargo deny`/`audit`/`udeps`/public-API checks.
 
+**Status 2026-10-05: done (scoped).** Shipped: criterion benches
+(`nary-core`: hit-test/render/marquee/mass-move/undo/load at 1k–1M;
+`nary-io`: import/export at 1k–100k; dev-only deps, zero bundle impact) with
+numbers in `07-performance.md` §2.5; two benchmark-driven O(n²)→O(n) fixes
+(import order repair 26 s→4 s; batched arrow follow 18.6 s→160 ms);
+`proptest` (geometry rotation/boolean, io fills) + LCG history invariants;
+adversarial parser corpus (cargo-fuzz stand-in, documented); DAG-asserting
+`workspace_wiring` (path edges + per-layer externals); CI gains `wasm32`
+check (verified locally green) + maturin build jobs. Follow-ups (honest):
+CI regression gate, `cargo-fuzz` targets, `cargo-deny`/`audit` (tools
+unavailable here), Python/Tauri integration tests.
+
 ## M6 — Distribution & SDK
 
 - `wasm-opt -Oz` at publish, bundle-size tracking (<150KB gzipped core),
@@ -136,4 +148,5 @@ asset GC/dedup/quota (unscoped design work).
 | M2 | Done (2026-10-05) |
 | M3 | Done (2026-10-05) |
 | M4 | Done (2026-10-05) |
+| M5 | Done (2026-10-05) |
 | M2–M6 | Planned, ordered, unblocked in sequence; each is independently shippable |

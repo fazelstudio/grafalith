@@ -73,7 +73,6 @@ points × 2 filters; 200 × 300 bounds probes) pin identical results, so the
 editor's click and rubber-band paths now use the indexed variants.
 
 ### 2.4 Honest reading
-
 - Interaction-critical paths (snap math, undo/redo, serialize/export) are
   already sub-ms to low-ms in the worst profile (debug).
 - The two over-budget debug numbers (render rebuild 21ms, linear hit-test
@@ -84,9 +83,51 @@ editor's click and rubber-band paths now use the indexed variants.
   import path matters; per-node `apply_batch` creation at scale should stay a
   test-only pattern (documented anti-pattern, `protocol.rs:764-770`).
 
-## 3. Known limits
+### 2.5 M5 criterion series (2026-10-05, Windows dev machine, optimized bench profile)
 
-- No `criterion`/`divan` harness, baselines, or CI gate (M5).
-- No 10k/100k/1M series; no release-profile numbers; no machine-pinned lab.
+Harness: `crates/nary-core/benches/scale.rs`, `crates/nary-io/benches/scale.rs`
+(criterion 0.5.1, dev-only). Grid-layout scenes, shared `OnceLock` documents
+for read tiers. Full command in repo: `cargo bench -p nary-core --bench scale`
+/ `-p nary-io`.
+
+| Operation | 1k | 10k | 100k | 1M |
+|---|---|---|---|---|
+| Hit-test top (indexed) | 99µs | 1.0ms | 14.8ms | 176ms |
+| Render model (full build) | 1.1ms | 26ms | 302ms | — (not benched: allocation) |
+| Marquee query (indexed, 10k² probe) | — | 10.4ms | 54.7ms | 188ms |
+| Mass move (all + arrows + 1 entry) | 11ms | 160ms | — | — |
+| Undo after mass move (1k) | 7.6ms | — | — | — |
+| Document build (factories + upsert) | — | — | 465ms | — |
+| Import scene JSON | 22ms | 235ms | 4.0s | — |
+| Export scene JSON | — | 268ms | 1.6s | — |
+
+Two benchmark-driven fixes landed in M5 (optimize only on data):
+
+1. **Import order repair was O(n²)** (`restored.contains` per element):
+   import 100k measured **26 s → 4.0 s (6.5×)** after switching to a
+   `HashSet` membership set with identical output order.
+2. **Mass move was O(n²)** (`update_bound_arrows` scanned the whole
+   document per moved id): mass move 10k measured **18.6 s → 160 ms
+   (116×)** after adding `update_bound_arrows_many` (single scan, same
+   endpoint math, same one-entry semantics).
+
+Evidenced follow-ups (not implemented): full render at 10k costs 26ms
+(over the 16ms frame budget → tile/scene caching, M3 note); indexed
+hit-test is still an O(n) order walk (5ms budget holds to ~30k elements →
+position index); 1M mutating paths unmeasured (setup dominates).
+
+## 3. Known limits (updated M5)
+
+- Criterion harness + LCG/proptest properties + adversarial corpus + DAG
+  wiring test land in M5; stored baselines are this document's §2.5 table
+  (criterion's machine-local baselines live under `target/`, uncommitted).
+  No CI regression gate yet (follow-up: `critcmp` or bencher jobs).
+- No release-profile lab numbers beyond `cargo bench` (optimized); no
+  machine-pinned lab; 1M mutating paths unmeasured.
+- `cargo-fuzz` libfuzzer unavailable on the stable-only toolchain here —
+  deterministic adversarial corpus (`adversarial_parsers.rs`) stands in,
+  wired as future fuzz targets.
+- `cargo-deny` / `cargo-audit` / `cargo-semver-checks` unavailable here —
+  recorded as CI follow-up (master allows "bila tersedia").
 - Desktop host drops images/hatch/grid/bounded-chrome (visual, not engine).
 - `wasm-opt=false` (larger WASM; documented Windows tradeoff, publish-time fix).

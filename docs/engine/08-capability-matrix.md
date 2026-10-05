@@ -49,9 +49,14 @@ command; no capability is internal-only.
 | Events + introspection | `session.drainEvents/state`, `selection.contextMenu`, `view.*` previews | `bindings_react` (37) | ✅ (finer `docChanged` granularity M1) |
 | Boolean ops (rect-exact) | `boolean.union/subtract/intersect/exclude` | `boolean_ops` (3), `boolean_model` (3), geometry `boolean` (3 + 500-box invariants) | ✅ rect-only (paths → explicit `unsupported`; `i_overlay` follow-up needs approval) |
 
-## Harness gaps (all M5)
+## Harness status (M5 landed)
 
-`criterion`/`divan` series + baselines + CI gate · `proptest` (geometry/
-round-trip/history) · `cargo-fuzz` (import/clipboard/batch) · DAG-asserting
-`workspace_wiring` · Python/Tauri integration tests · stored render goldens ·
+✅ `criterion` series 1k/10k/100k/1M (`nary-core` + `nary-io` benches, numbers
+in `07-performance.md` §2.5) · ✅ `proptest` (geometry rotation/boolean,
+io fill parsing) + deterministic LCG properties (history undo/redo
+invariants) · 🟡 `cargo-fuzz`: deterministic adversarial corpus
+(`adversarial_parsers.rs`) stands in on the stable-only toolchain; wire the
+same shapes into fuzz targets as follow-up · ✅ DAG-asserting
+`workspace_wiring` (path edges + external deps per layer) · ✅ stored render
+goldens · follow-ups: CI regression gate, Python/Tauri integration tests,
 tightened snap/rotate asserts.
