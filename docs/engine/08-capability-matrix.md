@@ -1,0 +1,56 @@
+# 08 — Capability Matrix (feature ↔ command ↔ test ↔ status)
+
+Source: audit `00` §5, gap analysis `02` §1, reference `05`. Status:
+✅ present + tested · 🟡 partial · ❌ absent with plan. Every ✅/🟡 row names a
+command; no capability is internal-only.
+
+## Document & scene
+
+| Feature | Command(s) | Test | Status |
+|---|---|---|---|
+| Scene store (Map + order + nonce) | `io.importScene`, `io.exportScene`, `session.state` | `document_model` (19) | ✅ |
+| Soft delete + tombstones | `node.delete`, `selection.delete` | `document_model`, `parity_model` | ✅ |
+| Frame | `node.create`, `view.renderModel` (clip partition) | `document_model` | ✅ |
+| Group / ungroup + drill-in | `node.group`, `node.ungroup` | `bindings_model`, `parity_model` | ✅ |
+| Component/instance + overrides | `node.create` (instance), resolve (render) | `nary-core` units (20) | 🟡 (no nesting/variants) |
+| Custom types + plugins | `node.create` (custom), `tool.activate` (custom tool), `plugin.execute` (commands) | `plugin_example` (4), `plugin_commands` (6), `plugin_protocol` (3), `command_coverage` (2) | 🟡 (import skips unknown types by design, pinned in `io_model`; commands/tools flow into the live session since M1) |
+| Lock/hide | `node.setLocked`, `node.create/update` | `document_model` | ✅ |
+| Z-order | `node.reorder`, `node.bringToFront/SendToBack/BringForward/SendBackward` | `parity_model`, `bindings_react` | ✅ |
+| Schema v1 + repair + clipboard codec | `io.importScene/exportScene`, `clipboard.*` | `io_model` (21, TS goldens) | 🟡 (v1 only; M4) |
+| Pages | — | — | ❌ (no plan until host demand) |
+
+## Shapes & style
+
+| Feature | Command(s) | Test | Status |
+|---|---|---|---|
+| Rectangle/ellipse/line/arrow/text/freedraw/image/path | `node.create`, `node.setBounds/Rotation` | `parity_model` (57) | ✅ (rect radius single; arc/ring ❌) |
+| Pen session | `pen.begin/click/dragHandle/commit/cancel` | `layout_binding_ops` | ✅ |
+| Path edit session | `path.begin/press/drag/release/commit/cancel` | `layout_binding_ops` | ✅ |
+| Crop session | `crop.start/drag/commit/cancel` | `layout_binding_ops` | ✅ |
+| Solid fill / stroke / opacity | `style.set` | `bindings_model` | ✅ |
+| Linear/radial gradient | stored; `style.set` rejects (explicit `unsupported`) | `bindings_model` | 🟡 (fill-DTO phase, M4) |
+| Align (6) / distribute (2) | `align.align`, `distribute.distribute` | `layout_binding_ops` | ✅ |
+| Constraints / manual auto-layout / block resize | `node.setBounds/Rotation` (constraints inside), `layout.applyAutoLayout`, `selection.resize` | units + `layout_binding_ops` | ✅/🟡 (no live re-layout) |
+| Arrow binding follow | `node.move`, `node.setBounds`, `selection.nudge`, `clipboard.paste` (inside) | `layout_binding_ops` | ✅ |
+
+## Interaction, history, view, I/O, observability
+
+| Feature | Command(s) | Test | Status |
+|---|---|---|---|
+| Click/marquee/additive select | `tool.pointerDown/Move/Up`, `selection.set` | `interaction_model` (46) | ✅ (box-rubber; lasso M3) |
+| Move/resize/rotate + previews | `node.move/setBounds/setRotation`, `view.previewMove/Resize/Rotate` | `parity_model`, `bindings_react` | ✅ (single-rotate; multi-rotate M3) |
+| Snap (grid/object/guides) | `node.move` (inside), `session.configure` | `parity_model`, `geometry_model` | 🟡 (no spacing-distribution op) |
+| Pan/zoom + viewport + culling | `view.wheel`, `view.setViewport`, `view.renderModel` | `bindings_react`, `geometry_model` | ✅ (fit/fill M3) |
+| Text + IME sessions | `text.*` (10 commands) | `bindings_react`, `parity_model` | 🟡 (plain text; `parley` deferred) |
+| Clipboard (internal, fresh ids) | `clipboard.copy/paste/duplicate/cut` | `clipboard_model` (19) | ✅ |
+| Undo/redo (atomic, coalesced) | `edit.undo/redo` | `history_model` (18) | ✅ (linear, max 100) |
+| PNG plan / JSON / assets | `view.renderModel`, `io.*`, `asset.notifyChanged` | `io_model`, `bindings_react` | 🟡 (raster + fetch host-side) |
+| Events + introspection | `session.drainEvents/state`, `selection.contextMenu`, `view.*` previews | `bindings_react` (37) | ✅ (finer `docChanged` granularity M1) |
+| Boolean ops / outline / offset / simplify / SVG / PDF / video / pages / skew / eraser / tracing | — | — | ❌ (boolean + SVG scoped: M2/M4; rest on demand) |
+
+## Harness gaps (all M5)
+
+`criterion`/`divan` series + baselines + CI gate · `proptest` (geometry/
+round-trip/history) · `cargo-fuzz` (import/clipboard/batch) · DAG-asserting
+`workspace_wiring` · Python/Tauri integration tests · stored render goldens ·
+tightened snap/rotate asserts.
