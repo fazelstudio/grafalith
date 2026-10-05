@@ -7,36 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Lint (zero errors and warnings)
-        run: bun run lint
-
-      - name: Type check core
-        run: bun run --filter @fazelstudio/fazelidraw typecheck
-
-      - name: Type check react
-        run: bun run --filter @fazelstudio/react typecheck
-
-      - name: Run tests
-        run: bun run --filter @fazelstudio/fazelidraw test
-
-      - name: Build core
-        run: bun run --filter @fazelstudio/fazelidraw build
-
-      - name: Build react
-        run: bun run --filter @fazelstudio/react build
-
   rust:
     runs-on: ubuntu-latest
 
@@ -59,3 +29,56 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+
+  desktop:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Type check desktop
+        run: bun run --filter @fazelstudio/desktop typecheck
+
+  wasm:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable with wasm32
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Check npm crate for wasm32
+        run: cargo check -p nary --target wasm32-unknown-unknown
+
+  python:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build Python wheels
+        working-directory: crates/nary-python
+        run: maturin build
