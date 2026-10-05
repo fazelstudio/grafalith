@@ -35,7 +35,7 @@ stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
 
 | Command ID | Wire op | Input | H | Result data | Test |
 |---|---|---|---|---|---|
-| `style.set` | `setStyle` | `ids[], patch` (scalars; gradient → `unsupported`) | ✅ | — | `bindings_model` |
+| `style.set` | `setStyle` | `ids[], patch` (scalars + `background` string or gradient object via the shared io fill parser) | ✅ | — | `bindings_model` |
 | `align.align` | `align` | `ids[], mode: left\|right\|top\|bottom\|centerH\|centerV` | ✅ | — | `layout_binding_ops` |
 | `distribute.distribute` | `distribute` | `ids[], axis: horizontal\|vertical` (<3 valid = no-op) | ✅ | — | `layout_binding_ops` |
 | `layout.applyAutoLayout` | `applyAutoLayout` | `frameId` | ✅ | — | `layout_binding_ops` |

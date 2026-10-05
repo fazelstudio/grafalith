@@ -28,7 +28,7 @@ command; no capability is internal-only.
 | Path edit session | `path.begin/press/drag/release/commit/cancel` | `layout_binding_ops` | ✅ |
 | Crop session | `crop.start/drag/commit/cancel` | `layout_binding_ops` | ✅ |
 | Solid fill / stroke / opacity | `style.set` | `bindings_model` | ✅ |
-| Linear/radial gradient | stored; `style.set` rejects (explicit `unsupported`) | `bindings_model` | 🟡 (fill-DTO phase, M4) |
+| Linear/radial gradient | stored + `style.set` gradient objects (shared io fill parser) | `bindings_model`, `io_model` | ✅ (angular/diamond still ❌ — needs element field, approval-gated) |
 | Align (6) / distribute (2) | `align.align`, `distribute.distribute` | `layout_binding_ops` | ✅ |
 | Constraints / manual auto-layout / block resize | `node.setBounds/Rotation` (constraints inside), `layout.applyAutoLayout`, `selection.resize` | units + `layout_binding_ops` | ✅/🟡 (no live re-layout) |
 | Arrow binding follow | `node.move`, `node.setBounds`, `selection.nudge`, `clipboard.paste` (inside) | `layout_binding_ops` | ✅ |
@@ -44,10 +44,10 @@ command; no capability is internal-only.
 | Text + IME sessions | `text.*` (10 commands) | `bindings_react`, `parity_model` | 🟡 (plain text; `parley` deferred) |
 | Clipboard (internal, fresh ids) | `clipboard.copy/paste/duplicate/cut` | `clipboard_model` (19) | ✅ |
 | Undo/redo (atomic, coalesced) | `edit.undo/redo` | `history_model` (18) | ✅ (linear, max 100) |
-| PNG plan / JSON / assets | `view.renderModel`, `io.*`, `asset.notifyChanged` | `io_model`, `bindings_react` | 🟡 (raster + fetch host-side) |
+| PNG/JPEG/WebP plans / JSON / assets | `view.renderModel`, `io.*`, `asset.notifyChanged`, `plan_*_export` methods | `io_model`, `bindings_react`, `bindings_model` | ✅ plans (raster + fetch host-side, by design) |
+| Outline / offset / simplify / SVG / PDF / video / pages / skew / eraser / tracing | — | — | ❌ (SVG import needs `usvg` dep approval; outline/offset need path-boolean ADR; rest on demand — see M4 status) |
 | Events + introspection | `session.drainEvents/state`, `selection.contextMenu`, `view.*` previews | `bindings_react` (37) | ✅ (finer `docChanged` granularity M1) |
 | Boolean ops (rect-exact) | `boolean.union/subtract/intersect/exclude` | `boolean_ops` (3), `boolean_model` (3), geometry `boolean` (3 + 500-box invariants) | ✅ rect-only (paths → explicit `unsupported`; `i_overlay` follow-up needs approval) |
-| Outline / offset / simplify / SVG / PDF / video / pages / skew / eraser / tracing | — | — | ❌ (SVG scoped M4; rest on demand or needs-approval deps) |
 
 ## Harness gaps (all M5)
 

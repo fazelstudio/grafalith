@@ -94,6 +94,17 @@ invalidation complexity unjustified yet).
 - Contract impact: additive commands/DTO fields; `setStyle` gradient support
   arrives with the fill-DTO phase (replacing today's explicit `unsupported`).
 
+**Status 2026-10-05: done (no-new-deps scope).** Shipped: gradient
+`setStyle` through the shared io fill parser (ADR-0018 retires the ADR-0010
+`unsupported` note — one observable behavior change, documented there);
+JPEG plans (transparent→white made explicit, quality clamped) + WebP plans
+(alpha kept, lossless hint) in `nary-io` with `Engine`/`JsEngine`/`PyEngine`
++ Python-facade parity and plan tests at every layer. Explicitly **not**
+built (need owner approval per AGENTS.md, asked in the final report):
+per-corner radius / arc-ring / stroke cap-join-align (new element fields),
+`usvg` SVG import (new engine dep), `parley` text (new engine dep),
+asset GC/dedup/quota (unscoped design work).
+
 ## M5 — Benchmarks, fuzz, gates
 
 - `criterion`/`divan` benches: 1k/10k/100k/1M series for load, select, marquee,
@@ -124,4 +135,5 @@ invalidation complexity unjustified yet).
 | M1 | Done (2026-10-05) |
 | M2 | Done (2026-10-05) |
 | M3 | Done (2026-10-05) |
+| M4 | Done (2026-10-05) |
 | M2–M6 | Planned, ordered, unblocked in sequence; each is independently shippable |
