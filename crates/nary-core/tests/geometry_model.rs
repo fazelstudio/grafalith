@@ -947,3 +947,43 @@ fn indexed_bounds_query_matches_linear_scan() {
         query_in_bounds(&doc, &nan_probe)
     );
 }
+
+#[test]
+fn render_model_entries_carry_pinned_values() {
+    let mut gen = CounterIdGenerator::new();
+    let r1 = map_base(
+        rectangle(&mut gen, "r1", 10.0, 20.0, 100.0, 50.0, 0.0),
+        |base| {
+            base.background_color = FillStyle::Solid {
+                color: "#112233".to_string(),
+            };
+        },
+    );
+    let e1 = ellipse(&mut gen, "e1", 200.0, 100.0, 80.0, 60.0);
+    let doc = upserted(vec![r1, e1]);
+    let model = RenderModel::build(
+        &doc,
+        &Viewport::identity(),
+        &RenderConfig::new(800.0, 600.0),
+        &|_| true,
+    );
+    assert_eq!(model.entry_count(), 2);
+    // Z-order: insertion order, back to front.
+    assert_eq!(model.base[0].id.as_str(), "r1");
+    assert_eq!(model.base[0].kind, DrawKind::Rectangle);
+    assert_eq!(model.base[0].bounds, Bounds::new(10.0, 20.0, 110.0, 70.0));
+    assert_eq!(model.base[0].rotation, 0.0);
+    assert_eq!(
+        model.base[0].paint,
+        PaintDesc::Solid {
+            color: "#112233".to_string()
+        }
+    );
+    assert_eq!(model.base[1].id.as_str(), "e1");
+    assert_eq!(model.base[1].kind, DrawKind::Ellipse);
+    assert_eq!(
+        model.base[1].bounds,
+        Bounds::new(200.0, 100.0, 280.0, 160.0)
+    );
+    assert!(model.frames.is_empty());
+}

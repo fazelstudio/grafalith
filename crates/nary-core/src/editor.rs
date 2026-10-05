@@ -44,7 +44,9 @@ use crate::geometry::viewport::{clamp_zoom, screen_to_scene, Viewport};
 use crate::gesture::{GestureSession, DRAG_THRESHOLD_PX};
 use crate::group::outermost_group_id;
 use crate::history::{HistoryManager, HistoryStatus};
-use crate::hit_test::{hit_test_top_indexed, query_in_bounds_indexed, HitTestFilter};
+use crate::hit_test::{
+    combined_bounds, hit_test_top_indexed, query_in_bounds_indexed, HitTestFilter,
+};
 use crate::interaction::{
     context_menu_intents, draw_box_element, event_to_scene, key_to_intent, resize_handle_at,
     resolve_group_selection, rotate_handle_at, rubber_band_bounds, screen_distance,
@@ -286,6 +288,95 @@ impl Editor {
         };
         self.emit_viewport();
         Ok(())
+    }
+
+    /// Fits content into the canvas as one session change (no history):
+    /// the whole content (or `ids` when given) becomes visible with
+    /// `padding` scene units on every side.
+    pub fn fit_viewport(
+        &mut self,
+        canvas_width: f64,
+        canvas_height: f64,
+        padding: f64,
+        ids: Option<Vec<ElementId>>,
+    ) -> EngineResult<Viewport> {
+        self.frame_viewport(canvas_width, canvas_height, padding, ids, false)
+    }
+
+    /// Fills the canvas with content as one session change (no history):
+    /// like [`Editor::fit_viewport`], but the content covers the canvas
+    /// (edges may crop).
+    pub fn fill_viewport(
+        &mut self,
+        canvas_width: f64,
+        canvas_height: f64,
+        padding: f64,
+        ids: Option<Vec<ElementId>>,
+    ) -> EngineResult<Viewport> {
+        self.frame_viewport(canvas_width, canvas_height, padding, ids, true)
+    }
+
+    /// Shared fit/fill math: zoom to the padded content box, then center
+    /// it. Empty content, non-finite inputs, and non-positive canvas sizes
+    /// are explicit errors. Zoom clamps to the `0.1–10` range through
+    /// [`Editor::set_viewport`].
+    fn frame_viewport(
+        &mut self,
+        canvas_width: f64,
+        canvas_height: f64,
+        padding: f64,
+        ids: Option<Vec<ElementId>>,
+        fill: bool,
+    ) -> EngineResult<Viewport> {
+        if !canvas_width.is_finite() || !canvas_height.is_finite() {
+            return Err(crate::EngineError::InvalidInput(format!(
+                "fit/fill needs a finite canvas, got ({canvas_width}, {canvas_height})"
+            )));
+        }
+        if canvas_width <= 0.0 || canvas_height <= 0.0 {
+            return Err(crate::EngineError::InvalidInput(format!(
+                "fit/fill needs a positive canvas, got ({canvas_width}, {canvas_height})"
+            )));
+        }
+        if !padding.is_finite() || padding < 0.0 {
+            return Err(crate::EngineError::InvalidInput(format!(
+                "fit/fill padding must be finite and non-negative, got {padding}"
+            )));
+        }
+        let targets = match ids {
+            Some(ids) => ids,
+            None => self
+                .doc
+                .get_all()
+                .iter()
+                .map(|element| element.id().clone())
+                .collect(),
+        };
+        let Some(content) = combined_bounds(&self.doc, &targets) else {
+            return Err(crate::EngineError::InvalidInput(
+                "fit/fill found no visible content".to_string(),
+            ));
+        };
+        let padded_w = (content.max_x - content.min_x) + padding * 2.0;
+        let padded_h = (content.max_y - content.min_y) + padding * 2.0;
+        // Degenerate (point) content frames at zoom 1, centered.
+        let zoom = if padded_w <= 0.0 || padded_h <= 0.0 {
+            1.0
+        } else if fill {
+            (canvas_width / padded_w).max(canvas_height / padded_h)
+        } else {
+            (canvas_width / padded_w).min(canvas_height / padded_h)
+        };
+        let center_x = (content.min_x + content.max_x) / 2.0;
+        let center_y = (content.min_y + content.max_y) / 2.0;
+        // Invert `screen = (scene + scroll) * zoom` for the canvas center.
+        let clamped = clamp_zoom(zoom);
+        self.set_viewport(Viewport {
+            scroll_x: canvas_width / (2.0 * clamped) - center_x,
+            scroll_y: canvas_height / (2.0 * clamped) - center_y,
+            zoom: clamped,
+        })?;
+        Ok(self.viewport())
     }
 
     /// Replaces the tool allow-list (`None` = every tool allowed, TS
