@@ -733,6 +733,18 @@ impl Engine {
                     Err(err) => err_result(op_name(op), &err),
                 }
             }
+            BatchOp::FitViewport {
+                canvas_width,
+                canvas_height,
+                padding,
+                ids,
+            } => self.op_frame_viewport(op, *canvas_width, *canvas_height, *padding, ids, false),
+            BatchOp::FillViewport {
+                canvas_width,
+                canvas_height,
+                padding,
+                ids,
+            } => self.op_frame_viewport(op, *canvas_width, *canvas_height, *padding, ids, true),
             BatchOp::Configure {
                 enabled_tools,
                 theme,
@@ -920,6 +932,33 @@ impl Engine {
             ElementId::of(second.clone()),
         );
         outcome_result(op, outcome)
+    }
+
+    /// Fits or fills the canvas with content as one session change.
+    fn op_frame_viewport(
+        &mut self,
+        op: &BatchOp,
+        canvas_width: f64,
+        canvas_height: f64,
+        padding: f64,
+        ids: &Option<Vec<String>>,
+        fill: bool,
+    ) -> OpResult {
+        let selection = ids.clone().map(|ids| ids_of(&ids));
+        let framed = if fill {
+            self.editor
+                .fill_viewport(canvas_width, canvas_height, padding, selection)
+        } else {
+            self.editor
+                .fit_viewport(canvas_width, canvas_height, padding, selection)
+        };
+        match framed {
+            Ok(viewport) => ok_result(
+                op_name(op),
+                Some(json!({ "viewport": viewport_dto(&viewport) })),
+            ),
+            Err(err) => err_result(op_name(op), &err),
+        }
     }
 
     /// Applies a scalar style patch (gradient backgrounds are an explicit

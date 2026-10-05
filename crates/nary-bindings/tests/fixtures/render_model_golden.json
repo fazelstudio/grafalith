@@ -1,0 +1,131 @@
+{
+  "assetGeneration": 0,
+  "base": [
+    {
+      "bounds": {
+        "maxX": 110.0,
+        "maxY": 70.0,
+        "minX": 10.0,
+        "minY": 20.0
+      },
+      "detail": {
+        "roundness": null,
+        "type": "rectangle"
+      },
+      "fillHatch": "solid",
+      "id": "r1",
+      "kind": "rectangle",
+      "opacity": 100.0,
+      "paint": {
+        "color": "#112233",
+        "type": "solid"
+      },
+      "rotation": 0.0,
+      "strokeColor": "#445566",
+      "strokeStyle": "solid",
+      "strokeWidth": 2.0
+    },
+    {
+      "bounds": {
+        "maxX": 431.8319752575905,
+        "maxY": 303.8688347918671,
+        "minX": 288.1680247424095,
+        "minY": 176.13116520813293
+      },
+      "detail": {
+        "roundness": null,
+        "type": "rectangle"
+      },
+      "fillHatch": "solid",
+      "id": "r2",
+      "kind": "rectangle",
+      "opacity": 100.0,
+      "paint": {
+        "color": "#112233",
+        "type": "solid"
+      },
+      "rotation": 0.5,
+      "strokeColor": "#445566",
+      "strokeStyle": "solid",
+      "strokeWidth": 2.0
+    },
+    {
+      "bounds": {
+        "maxX": 590.0,
+        "maxY": 460.0,
+        "minX": 500.0,
+        "minY": 400.0
+      },
+      "detail": {
+        "type": "none"
+      },
+      "fillHatch": "solid",
+      "id": "e1",
+      "kind": "ellipse",
+      "opacity": 100.0,
+      "paint": {
+        "color": "#112233",
+        "type": "solid"
+      },
+      "rotation": 0.0,
+      "strokeColor": "#445566",
+      "strokeStyle": "solid",
+      "strokeWidth": 2.0
+    }
+  ],
+  "frames": [],
+  "selection": {
+    "bounds": {
+      "maxX": 110.0,
+      "maxY": 70.0,
+      "minX": 10.0,
+      "minY": 20.0
+    },
+    "handles": [
+      [
+        10.0,
+        20.0
+      ],
+      [
+        60.0,
+        20.0
+      ],
+      [
+        110.0,
+        20.0
+      ],
+      [
+        10.0,
+        45.0
+      ],
+      [
+        110.0,
+        45.0
+      ],
+      [
+        10.0,
+        70.0
+      ],
+      [
+        60.0,
+        70.0
+      ],
+      [
+        110.0,
+        70.0
+      ]
+    ],
+    "rotateHandle": [
+      60.0,
+      -4.0
+    ],
+    "rotation": 0.0
+  },
+  "snapGuides": [],
+  "textEditing": null,
+  "viewport": {
+    "scrollX": 0.0,
+    "scrollY": 0.0,
+    "zoom": 1.0
+  }
+}

@@ -104,6 +104,8 @@ fn all_ops() -> Vec<Value> {
         json!({"op": "pathEditCommit"}),
         json!({"op": "pathEditCancel"}),
         json!({"op": "setViewport", "scrollX": 0, "scrollY": 0, "zoom": 1}),
+        json!({"op": "fitViewport", "canvasWidth": 800, "canvasHeight": 600}),
+        json!({"op": "fillViewport", "canvasWidth": 800, "canvasHeight": 600, "ids": ["cov-1"]}),
         json!({"op": "configure", "theme": {}}),
         json!({"op": "notifyAssetsChanged"}),
         json!({"op": "renderModel", "canvasWidth": 800, "canvasHeight": 600}),
@@ -152,8 +154,8 @@ fn every_op_has_a_unique_well_formed_wire_name() {
         .map(|op| serde_json::from_value(op.clone()).expect("every coverage op parses"))
         .collect();
     // 71 built-ins plus executeCommand (72), plus nine boolean-support
-    // creates and seven boolean ops (88).
-    assert_eq!(ops.len(), 88);
+    // creates and seven boolean ops (88), plus fit/fill (90).
+    assert_eq!(ops.len(), 90);
 
     let mut names: Vec<&str> = ops.iter().map(op_name).collect();
     for name in &names {
@@ -161,15 +163,18 @@ fn every_op_has_a_unique_well_formed_wire_name() {
     }
     names.sort_unstable();
     names.dedup();
-    // 71 built-ins plus executeCommand (72), plus four boolean ops (76).
-    // Setup ops reuse `create` on purpose; uniqueness is per wire name.
-    assert_eq!(names.len(), 76, "wire names are globally unique");
+    // 71 built-ins plus executeCommand (72), plus four boolean ops (76),
+    // plus fit/fill viewport (78). Setup ops reuse names on purpose;
+    // uniqueness is per wire name.
+    assert_eq!(names.len(), 78);
     for required in [
         "executeCommand",
         "booleanUnion",
         "booleanSubtract",
         "booleanIntersect",
         "booleanExclude",
+        "fitViewport",
+        "fillViewport",
     ] {
         assert!(
             names.contains(&required),

@@ -405,6 +405,39 @@ pub enum BatchOp {
         #[serde(flatten)]
         viewport: ViewportJson,
     },
+    /// Fit content into the canvas as one session change (no history).
+    /// `ids` restricts to a selection; absent fits all visible content.
+    /// Padding is scene units on every side.
+    FitViewport {
+        /// Canvas width in screen pixels.
+        #[serde(rename = "canvasWidth")]
+        canvas_width: f64,
+        /// Canvas height in screen pixels.
+        #[serde(rename = "canvasHeight")]
+        canvas_height: f64,
+        /// Padding in scene units (default 0).
+        #[serde(default)]
+        padding: f64,
+        /// Selection to frame (default all visible content).
+        #[serde(default)]
+        ids: Option<Vec<String>>,
+    },
+    /// Fill the canvas with content as one session change (no history):
+    /// like `fitViewport`, but content covers the canvas (edges may crop).
+    FillViewport {
+        /// Canvas width in screen pixels.
+        #[serde(rename = "canvasWidth")]
+        canvas_width: f64,
+        /// Canvas height in screen pixels.
+        #[serde(rename = "canvasHeight")]
+        canvas_height: f64,
+        /// Padding in scene units (default 0).
+        #[serde(default)]
+        padding: f64,
+        /// Selection to frame (default all visible content).
+        #[serde(default)]
+        ids: Option<Vec<String>>,
+    },
     /// Propagate host configuration: tool allow-list, theme override, snap
     /// config. Absent fields are unchanged; `enabledTools: null` clears the
     /// allow-list (every tool allowed, TS default).
@@ -979,6 +1012,8 @@ pub fn op_name(op: &BatchOp) -> &'static str {
         BatchOp::PathEditCommit => "pathEditCommit",
         BatchOp::PathEditCancel => "pathEditCancel",
         BatchOp::SetViewport { .. } => "setViewport",
+        BatchOp::FitViewport { .. } => "fitViewport",
+        BatchOp::FillViewport { .. } => "fillViewport",
         BatchOp::Configure { .. } => "configure",
         BatchOp::NotifyAssetsChanged => "notifyAssetsChanged",
         BatchOp::RenderModel { .. } => "renderModel",
