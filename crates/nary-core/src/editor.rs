@@ -44,14 +44,15 @@ use crate::geometry::viewport::{clamp_zoom, screen_to_scene, Viewport};
 use crate::gesture::{GestureSession, DRAG_THRESHOLD_PX};
 use crate::group::outermost_group_id;
 use crate::history::{HistoryManager, HistoryStatus};
-use crate::hit_test::{hit_test_top, query_in_bounds, HitTestFilter};
-use crate::plugin::{Plugin, PluginRegistry};use crate::interaction::{
+use crate::hit_test::{hit_test_top_indexed, query_in_bounds_indexed, HitTestFilter};
+use crate::interaction::{
     context_menu_intents, draw_box_element, event_to_scene, key_to_intent, resize_handle_at,
     resolve_group_selection, rotate_handle_at, rubber_band_bounds, screen_distance,
     snap_move_delta, wheel_intent, ContextMenuIntent, EditorPointerPhase, InputEvent, Key,
     KeyIntent, Modifiers, PointerButton, PressedCapture, SnapGuide, ToolId, ToolRegistry,
     WheelIntent,
 };
+use crate::plugin::{Plugin, PluginRegistry};
 use crate::render_model::TextMeasurer;
 use crate::text_session::{estimate_caret_index, FallbackMeasurer, TextCommitAction, TextSession};
 use crate::theme::{default_theme, NaryTheme};
@@ -480,7 +481,57 @@ impl Editor {
         Ok(outcome)
     }
 
-    /// Moves elements by a scene-space delta as one undoable step.
+    /// Applies a rectangle boolean op to two elements as one undoable step.
+    ///
+    /// Both inputs are soft-deleted and every result box becomes a fresh
+    /// rectangle (first input's style, fresh ids, on top). See
+    /// [`crate::boolean`] for validation rules. Arrow bindings that
+    /// referenced a consumed input detach in the same entry.
+    pub fn apply_boolean(
+        &mut self,
+        kind: crate::boolean::BooleanOp,
+        first: ElementId,
+        second: ElementId,
+    ) -> EngineResult<CommandOutcome> {
+        let plan = crate::boolean::plan_boolean(&self.doc, kind, first, second)?;
+        let mut created = Vec::with_capacity(plan.results.len());
+        for bounds in &plan.results {
+            // Collision-guarded like paste: the counter source is
+            // independent of stored ids, so loop until fresh.
+            let mut id = self.doc.fresh_element_id();
+            while self.doc.contains(id.as_str()) {
+                id = self.doc.fresh_element_id();
+            }
+            let seed = self.doc.fresh_seed();
+            let nonce = self.doc.fresh_nonce();
+            created.push(crate::boolean::result_element(
+                &plan.style_source,
+                id,
+                seed,
+                nonce,
+                bounds,
+            ));
+        }
+        let outcome = self.history.transaction(&mut self.doc, |ctx| {
+            let mut affected = vec![plan.first.clone(), plan.second.clone()];
+            ctx.soft_delete(plan.first.as_str())?;
+            ctx.soft_delete(plan.second.as_str())?;
+            for element in &created {
+                ctx.upsert(element.clone())?;
+                affected.push(element.id().clone());
+            }
+            for id in &[plan.first.clone(), plan.second.clone()] {
+                let follow = update_bound_arrows(ctx, id)?;
+                affected.extend(follow.affected);
+            }
+            Ok(CommandOutcome {
+                affected,
+                changed: true,
+            })
+        })?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
     ///
     /// Bound arrow endpoints that track a moved target follow in the same
     /// entry (TS `updateBoundArrows` parity, routed through commands rather
@@ -1250,7 +1301,8 @@ impl Editor {
         }
         match button {
             PointerButton::Right => {
-                let hit = hit_test_top(&self.doc, scene[0], scene[1], HitTestFilter::selection());
+                let hit =
+                    hit_test_top_indexed(&self.doc, scene[0], scene[1], HitTestFilter::selection());
                 if let Some(hit_id) = hit.clone() {
                     if !self.state.selection.contains(&hit_id) {
                         self.right_click_select(&hit_id, modifiers.is_additive());
@@ -1319,7 +1371,7 @@ impl Editor {
                 });
             }
         }
-        let hit = hit_test_top(&self.doc, scene[0], scene[1], HitTestFilter::selection());
+        let hit = hit_test_top_indexed(&self.doc, scene[0], scene[1], HitTestFilter::selection());
         // Double-click: text edits with a positioned caret; grouped elements
         // drill into group editing (TS parity).
         if click_count >= 2 {
@@ -1705,7 +1757,7 @@ impl Editor {
                 additive,
             } => {
                 let bounds = rubber_band_bounds(&origin_scene, &scene);
-                let ids = query_in_bounds(&self.doc, &bounds);
+                let ids = query_in_bounds_indexed(&self.doc, &bounds);
                 if additive {
                     for id in &ids {
                         self.state.selection.add(id.clone());
