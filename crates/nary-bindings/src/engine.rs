@@ -31,6 +31,7 @@
 
 use std::collections::HashSet;
 
+use nary_core::boolean::BooleanOp;
 use nary_core::clipboard::{duplicate_elements, Clipboard};
 use nary_core::command::{
     CommandOutcome, CreateElements, GroupElements, Reorder, SetLocked, SetStyle, StylePatch,
@@ -854,6 +855,10 @@ impl Engine {
                 let outcome = self.editor.execute_plugin_command(command_id);
                 outcome_result(op, outcome)
             }
+            BatchOp::BooleanUnion { ids } => self.op_boolean(op, BooleanOp::Union, ids),
+            BatchOp::BooleanSubtract { ids } => self.op_boolean(op, BooleanOp::Subtract, ids),
+            BatchOp::BooleanIntersect { ids } => self.op_boolean(op, BooleanOp::Intersect, ids),
+            BatchOp::BooleanExclude { ids } => self.op_boolean(op, BooleanOp::Exclude, ids),
         }
     }
 
@@ -894,6 +899,27 @@ impl Engine {
             ),
             Err(err) => err_result(name, &err),
         }
+    }
+
+    /// Applies one rectangle boolean op: exactly two ids, one undoable
+    /// entry. Non-rectangle inputs surface the stable `unsupported` code
+    /// (path booleans are a follow-up); every other failure is typed.
+    fn op_boolean(&mut self, op: &BatchOp, kind: BooleanOp, ids: &[String]) -> OpResult {
+        let [first, second] = ids else {
+            return err_result(
+                op_name(op),
+                &EngineError::InvalidInput(format!(
+                    "boolean.{} needs exactly two element ids",
+                    kind.name()
+                )),
+            );
+        };
+        let outcome = self.editor.apply_boolean(
+            kind,
+            ElementId::of(first.clone()),
+            ElementId::of(second.clone()),
+        );
+        outcome_result(op, outcome)
     }
 
     /// Applies a scalar style patch (gradient backgrounds are an explicit

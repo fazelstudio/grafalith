@@ -31,6 +31,15 @@ fn rect(id: &str) -> Value {
     })
 }
 
+fn ellipse(id: &str) -> Value {
+    let mut el = rect(id);
+    el["type"] = Value::String("ellipse".to_string());
+    el.as_object_mut()
+        .expect("rect helper builds an object")
+        .remove("roundness");
+    el
+}
+
 /// One JSON op per [`BatchOp`] variant, in a stateful order (setup first).
 fn all_ops() -> Vec<Value> {
     vec![
@@ -105,6 +114,23 @@ fn all_ops() -> Vec<Value> {
         json!({"op": "drainEvents"}),
         json!({"op": "sessionState"}),
         json!({"op": "executeCommand", "commandId": "acme.missing.nope"}),
+        // Boolean ops work on fresh rectangles (earlier ops mutate cov-*).
+        json!({"op": "create", "element": rect("b1")}),
+        json!({"op": "create", "element": rect("b2")}),
+        json!({"op": "create", "element": rect("b3")}),
+        json!({"op": "create", "element": rect("b4")}),
+        json!({"op": "create", "element": rect("b5")}),
+        json!({"op": "create", "element": rect("b6")}),
+        json!({"op": "create", "element": rect("b7")}),
+        json!({"op": "create", "element": rect("b8")}),
+        json!({"op": "create", "element": ellipse("el1")}),
+        json!({"op": "booleanUnion", "ids": ["el1", "b1"]}),
+        json!({"op": "booleanUnion", "ids": ["b1", "b2"]}),
+        json!({"op": "booleanSubtract", "ids": ["b3", "b4"]}),
+        json!({"op": "booleanIntersect", "ids": ["b5", "b6"]}),
+        json!({"op": "booleanExclude", "ids": ["b7", "b8"]}),
+        json!({"op": "booleanUnion", "ids": ["b1"]}),
+        json!({"op": "booleanUnion", "ids": ["ghost-1", "ghost-2"]}),
         // Second delete exercises a different path than the first.
         json!({"op": "delete", "ids": ["cov-2"]}),
     ]
@@ -125,8 +151,9 @@ fn every_op_has_a_unique_well_formed_wire_name() {
         .iter()
         .map(|op| serde_json::from_value(op.clone()).expect("every coverage op parses"))
         .collect();
-    // 71 built-ins plus executeCommand.
-    assert_eq!(ops.len(), 72);
+    // 71 built-ins plus executeCommand (72), plus nine boolean-support
+    // creates and seven boolean ops (88).
+    assert_eq!(ops.len(), 88);
 
     let mut names: Vec<&str> = ops.iter().map(op_name).collect();
     for name in &names {
@@ -134,7 +161,21 @@ fn every_op_has_a_unique_well_formed_wire_name() {
     }
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), ops.len(), "wire names are globally unique");
+    // 71 built-ins plus executeCommand (72), plus four boolean ops (76).
+    // Setup ops reuse `create` on purpose; uniqueness is per wire name.
+    assert_eq!(names.len(), 76, "wire names are globally unique");
+    for required in [
+        "executeCommand",
+        "booleanUnion",
+        "booleanSubtract",
+        "booleanIntersect",
+        "booleanExclude",
+    ] {
+        assert!(
+            names.contains(&required),
+            "wire name '{required}' is covered"
+        );
+    }
 }
 
 #[test]

@@ -497,6 +497,27 @@ pub enum BatchOp {
         #[serde(rename = "commandId")]
         command_id: String,
     },
+    /// Boolean union of two rectangles as one undo step (inputs consumed,
+    /// exact disjoint cover created with the first input's style).
+    BooleanUnion {
+        /// Exactly two element ids.
+        ids: Vec<String>,
+    },
+    /// Boolean subtraction (first minus second) as one undo step.
+    BooleanSubtract {
+        /// Exactly two element ids.
+        ids: Vec<String>,
+    },
+    /// Boolean intersection of two rectangles as one undo step.
+    BooleanIntersect {
+        /// Exactly two element ids.
+        ids: Vec<String>,
+    },
+    /// Boolean exclusion (symmetric difference) as one undo step.
+    BooleanExclude {
+        /// Exactly two element ids.
+        ids: Vec<String>,
+    },
 }
 
 /// Modifier keys for an input op (host translates DOM `shiftKey`/`altKey`/
@@ -841,6 +862,7 @@ pub fn engine_error_code(err: &EngineError) -> &'static str {
         EngineError::InvalidInput(_) => "invalidInput",
         EngineError::NotFound(_) => "notFound",
         EngineError::InvariantViolation(_) => "invariantViolation",
+        EngineError::Unsupported(_) => "unsupported",
         _ => "engineError",
     }
 }
@@ -967,5 +989,9 @@ pub fn op_name(op: &BatchOp) -> &'static str {
         BatchOp::DrainEvents => "drainEvents",
         BatchOp::SessionState => "sessionState",
         BatchOp::ExecuteCommand { .. } => "executeCommand",
+        BatchOp::BooleanUnion { .. } => "booleanUnion",
+        BatchOp::BooleanSubtract { .. } => "booleanSubtract",
+        BatchOp::BooleanIntersect { .. } => "booleanIntersect",
+        BatchOp::BooleanExclude { .. } => "booleanExclude",
     }
 }
