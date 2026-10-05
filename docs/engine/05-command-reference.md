@@ -1,4 +1,4 @@
-# 05 — Command Reference (all 76 commands)
+# 05 — Command Reference (all 78 commands)
 
 Every capability is reachable through a unique command. Wire `op` strings are
 frozen (protocol v1); command IDs follow ADR-0016 (`namespace.action`).
@@ -104,6 +104,8 @@ describe / can / dryRun`) stays roadmap M1-follow-up; the dispatch seam is
 | `tool.key` | `keyDown` | `key, modifiers` | ✅ for delete/nudge/undo/redo | `UnhandledIntent` for clipboard (host routes) | `bindings_react` |
 | `view.wheel` | `wheel` | `dx,dy, zoomGesture, x,y` | — | — | `bindings_react` |
 | `view.setViewport` | `setViewport` | `scrollX,scrollY,zoom` (clamped 0.1–10) | — | — | `bindings_react` |
+| `view.fit` | `fitViewport` | `canvasWidth,canvasHeight, padding=0, ids?` (absent = all visible) | — | `{viewport}` | `viewport_frame` |
+| `view.fill` | `fillViewport` | `canvasWidth,canvasHeight, padding=0, ids?` (edges may crop) | — | `{viewport}` | `viewport_frame` |
 
 ## Text & IME
 

@@ -40,7 +40,7 @@ command; no capability is internal-only.
 | Click/marquee/additive select | `tool.pointerDown/Move/Up`, `selection.set` | `interaction_model` (46) | ✅ (box-rubber indexed; lasso M3) |
 | Move/resize/rotate + previews | `node.move/setBounds/setRotation`, `view.previewMove/Resize/Rotate` | `parity_model`, `bindings_react` | ✅ (single-rotate; multi-rotate M3) |
 | Snap (grid/object/guides) | `node.move` (inside), `session.configure` | `parity_model`, `geometry_model` | 🟡 (no spacing-distribution op) |
-| Pan/zoom + viewport + culling | `view.wheel`, `view.setViewport`, `view.renderModel` | `bindings_react`, `geometry_model` | ✅ (fit/fill M3) |
+| Pan/zoom + viewport + culling | `view.wheel`, `view.setViewport`, `view.fit/fill`, `view.renderModel` | `bindings_react`, `geometry_model`, `viewport_frame` (4), `render_golden` | ✅ (golden-locked DTO; tile cache follow-up) |
 | Text + IME sessions | `text.*` (10 commands) | `bindings_react`, `parity_model` | 🟡 (plain text; `parley` deferred) |
 | Clipboard (internal, fresh ids) | `clipboard.copy/paste/duplicate/cut` | `clipboard_model` (19) | ✅ |
 | Undo/redo (atomic, coalesced) | `edit.undo/redo` | `history_model` (18) | ✅ (linear, max 100) |

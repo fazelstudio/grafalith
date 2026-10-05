@@ -71,6 +71,19 @@ approval per AGENTS.md) — recommended in the final report, not smuggled in.
   spam; lasso select; multi-select rotate; fit/fill viewport ops.
 - Desktop host paints images/hatch/grid/bounded-chrome (host-side, noted only).
 
+**Status 2026-10-05: done (scoped).** Shipped: `Editor::fit_viewport` /
+`fill_viewport` + additive `fitViewport`/`fillViewport` ops (78 total,
+session change with `ViewportChanged` event, explicit errors for empty
+content and degenerate canvas); core pinned-values render test plus a
+bindings JSON golden (`render_golden` + checked-in fixture with
+`UPDATE_GOLDEN=1` regeneration, rotated-bounds value hand-verified).
+Evaluated and intentionally **not** built: custom-tool core behavior hooks
+(host-owned tools through capture + preview/commit ops is the architecture
+per ADR-0011 — core stays behavior-free for custom tools by design, with a
+worked host-driven flow in `06-extension-guide.md`); tile/scene caching and
+lasso/multi-rotate (recorded follow-ups: payoff unproven at current scale,
+invalidation complexity unjustified yet).
+
 ## M4 — Shape/style/text & I/O
 
 - Per-corner radius, arc/ring primitives (only on host demand); stroke
@@ -110,4 +123,5 @@ approval per AGENTS.md) — recommended in the final report, not smuggled in.
 | M0 | Done (2026-10-04) |
 | M1 | Done (2026-10-05) |
 | M2 | Done (2026-10-05) |
+| M3 | Done (2026-10-05) |
 | M2–M6 | Planned, ordered, unblocked in sequence; each is independently shippable |
