@@ -30,6 +30,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+      - name: Check generated bindings
+        run: python3 scripts/gen_command_bindings.py --check
+
   desktop:
     runs-on: windows-latest
 
