@@ -156,10 +156,10 @@ fn plugin_command_create_is_one_undoable_entry() {
     assert_eq!(editor.document().element_count(), 1);
     assert_eq!(editor.history().undo_len(), 1);
 
-    assert_eq!(editor.undo().expect("undo works"), true);
+    assert!(editor.undo().expect("undo works"));
     assert_eq!(editor.document().element_count(), 0);
 
-    assert_eq!(editor.redo().expect("redo works"), true);
+    assert!(editor.redo().expect("redo works"));
     assert_eq!(editor.document().element_count(), 1);
 }
 

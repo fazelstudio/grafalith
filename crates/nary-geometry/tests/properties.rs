@@ -102,24 +102,40 @@ proptest! {
 
     #[test]
     fn rotation_round_trip_proptest(
-        px in any::<f64>(),
-        py in any::<f64>(),
-        cx in any::<f64>(),
-        cy in any::<f64>(),
-        rot in any::<f64>(),
+        px in -1e6f64..1e6f64,
+        py in -1e6f64..1e6f64,
+        cx in -1e6f64..1e6f64,
+        cy in -1e6f64..1e6f64,
+        rot in -1e4f64..1e4f64,
     ) {
-        prop_assume!(
-            px.is_finite()
-                && py.is_finite()
-                && cx.is_finite()
-                && cy.is_finite()
-                && rot.is_finite()
-        );
+        // Supported domain: scene-size coordinates and sane angles.
+        // Outside it (e.g. 1e308 centers with 1e16-rad rotations, found by
+        // an unbounded run) f64 argument reduction cannot round-trip to
+        // 1e-9 — inherent float behavior, covered for robustness (no NaN,
+        // no panic) by `extreme_inputs_stay_finite` below instead.
         let local = to_local_space(px, py, cx, cy, rot);
         let back = to_world_space(local[0], local[1], cx, cy, rot);
         let scale = px.abs().max(py.abs()).max(cx.abs()).max(cy.abs()).max(1.0);
         prop_assert!((back[0] - px).abs() <= 1e-9 * scale);
         prop_assert!((back[1] - py).abs() <= 1e-9 * scale);
+    }
+
+    #[test]
+    fn extreme_inputs_stay_finite(
+        px in -1e300f64..1e300f64,
+        py in -1e300f64..1e300f64,
+        cx in -1e300f64..1e300f64,
+        cy in -1e300f64..1e300f64,
+        rot in any::<f64>(),
+    ) {
+        // Overflow-free zone: beyond ~1e300, `px - cx` itself can overflow
+        // to inf (pure float behavior, no panic — downstream finite guards
+        // at storage/input boundaries already treat inf as miss/invalid).
+        prop_assume!(rot.is_finite());
+        let local = to_local_space(px, py, cx, cy, rot);
+        let back = to_world_space(local[0], local[1], cx, cy, rot);
+        prop_assert!(local[0].is_finite() && local[1].is_finite());
+        prop_assert!(back[0].is_finite() && back[1].is_finite());
     }
 
     #[test]
