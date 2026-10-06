@@ -1,0 +1,30 @@
+[package]
+name = "nary-io-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Detached workspace: fuzzing pins nightly + libfuzzer and must never
+# leak into the engine workspace graph.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nary-core = { path = "../../nary-core" }
+nary-io = { path = ".." }
+serde_json = "1"
+
+[[bin]]
+name = "import_scene"
+path = "fuzz_targets/import_scene.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "clipboard"
+path = "fuzz_targets/clipboard.rs"
+test = false
+doc = false

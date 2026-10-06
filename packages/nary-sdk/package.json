@@ -1,0 +1,15 @@
+{
+  "name": "@fazelstudio/nary-sdk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TypeScript SDK for Nary engine extensions: typed engine client, extension manifest and registry.",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "example": "bun example/toolbar-extension.ts"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}
