@@ -148,6 +148,16 @@ pub enum BatchOp {
         #[serde(default)]
         tracked: bool,
     },
+    /// Replace document content from an SVG string (M8, `svg` feature).
+    /// Same atomicity and tracked semantics as `importScene`.
+    #[cfg(feature = "svg")]
+    ImportSvg {
+        /// SVG document text.
+        svg: String,
+        /// `true` records one undo entry; `false` replaces without history.
+        #[serde(default)]
+        tracked: bool,
+    },
     /// Export the document to its scene-JSON string (returned in `data`).
     ExportScene,
     /// Pointer pressed (screen px — the host translates DOM coordinates;
@@ -710,6 +720,12 @@ pub struct StylePatchJson {
     pub stroke_width: Option<f64>,
     /// New dash pattern (`"solid"`, `"dashed"`, `"dotted"`).
     pub stroke_style: Option<String>,
+    /// New stroke cap (`"butt"`, `"round"`, `"square"` — M8).
+    pub stroke_cap: Option<String>,
+    /// New stroke join (`"miter"`, `"round"`, `"bevel"` — M8).
+    pub stroke_join: Option<String>,
+    /// New stroke alignment (`"inside"`, `"center"`, `"outside"` — M8).
+    pub stroke_align: Option<String>,
     /// New opacity (`0–100`, clamped like TS).
     pub opacity: Option<f64>,
     /// New background: a plain string sets a solid fill, a fill object
@@ -1003,6 +1019,8 @@ pub fn op_name(op: &BatchOp) -> &'static str {
         BatchOp::Undo => "undo",
         BatchOp::Redo => "redo",
         BatchOp::ImportScene { .. } => "importScene",
+        #[cfg(feature = "svg")]
+        BatchOp::ImportSvg { .. } => "importSvg",
         BatchOp::ExportScene => "exportScene",
         BatchOp::PointerDown { .. } => "pointerDown",
         BatchOp::PointerMove { .. } => "pointerMove",

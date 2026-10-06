@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use nary_core::command::CommandContext;
 use nary_core::command_extension::CommandExtension;
 use nary_core::element::{
-    BaseElement, CustomElement, Element, ElementFillStyle, FillStyle, PatchValue, StrokeStyle,
+    BaseElement, CustomElement, Element, ElementFillStyle, FillStyle, PatchValue, StrokeAlign,
+    StrokeCap, StrokeJoin, StrokeStyle,
 };
 use nary_core::geometry::rect::Bounds;
 use nary_core::plugin::{Plugin, PluginContext, PluginMetadata};
@@ -57,6 +58,9 @@ pub fn sticker_element(
             },
             stroke_width: 2.0,
             stroke_style: StrokeStyle::Solid,
+            stroke_cap: StrokeCap::default(),
+            stroke_join: StrokeJoin::default(),
+            stroke_align: StrokeAlign::default(),
             fill_style: ElementFillStyle::Solid,
             opacity: 100.0,
             seed,

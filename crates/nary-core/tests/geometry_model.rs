@@ -57,6 +57,7 @@ fn rectangle(
     Element::Rectangle(RectangleElement {
         base: el.base,
         roundness: el.roundness,
+        corners: None,
     })
 }
 

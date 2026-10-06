@@ -33,6 +33,9 @@ pub mod pipeline;
 /// Versioned JSON schema (v1 DTOs, envelope rules, element dispatch).
 /// Crate-internal: the wire shape is pinned by fixture tests, not by API.
 pub(crate) mod schema;
+/// SVG import through `usvg` (host-gated `svg` feature, M8).
+#[cfg(feature = "svg")]
+mod svg;
 
 pub use clipboard_codec::{decode_clipboard, encode_clipboard, ClipboardDecode};
 pub use clipboard_codec::{publish_clipboard, subscribe_clipboard};
@@ -41,3 +44,5 @@ pub use pipeline::{
     plan_png_export, plan_webp_export, JpegExportOptions, JpegExportPlan, PngExportOptions,
     PngExportPlan, WebpExportOptions, WebpExportPlan, PNG_MAX_DIMENSION,
 };
+#[cfg(feature = "svg")]
+pub use svg::{import_svg_str, import_svg_str_tracked, svg_to_elements};

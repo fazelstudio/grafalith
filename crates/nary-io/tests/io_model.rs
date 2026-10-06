@@ -993,3 +993,76 @@ proptest! {
         );
     }
 }
+
+#[test]
+fn new_style_fields_round_trip_and_old_json_defaults() {
+    use nary_core::element::{CornerRadii, GradientType, StrokeAlign, StrokeCap, StrokeJoin};
+
+    // Full new-fields round trip.
+    let mut gen = CounterIdGenerator::new();
+    let mut doc = Document::new();
+    let mut rect = create_rectangle(&mut gen);
+    rect.base.id = ElementId::of("styled");
+    rect.corners = Some(CornerRadii {
+        top_left: 1.0,
+        top_right: 2.0,
+        bottom_right: 3.0,
+        bottom_left: 4.0,
+    });
+    rect.base.stroke_cap = StrokeCap::Round;
+    rect.base.stroke_join = StrokeJoin::Bevel;
+    rect.base.stroke_align = StrokeAlign::Outside;
+    rect.base.background_color = nary_core::element::FillStyle::Gradient {
+        gradient_type: GradientType::Angular,
+        angle: 90.0,
+        stops: vec![
+            nary_core::element::GradientStop {
+                offset: 0.0,
+                color: "#000000".to_string(),
+            },
+            nary_core::element::GradientStop {
+                offset: 1.0,
+                color: "#ffffff".to_string(),
+            },
+        ],
+    };
+    doc.upsert(Element::Rectangle(rect)).unwrap();
+    let exported = export_str(&doc).unwrap();
+
+    let mut doc2 = Document::new();
+    let summary = import_str(&mut doc2, &exported).unwrap();
+    assert_eq!(summary.skipped, 0);
+    let stored = doc2.get("styled").expect("styled rect imports");
+    assert_eq!(
+        stored.base().stroke_cap,
+        nary_core::element::StrokeCap::Round
+    );
+    assert!(matches!(
+        &stored.base().background_color,
+        nary_core::element::FillStyle::Gradient { .. }
+    ));
+    // Export is stable across the round trip.
+    assert_eq!(export_str(&doc2).unwrap(), exported);
+
+    // Old v1 JSON without the new fields still parses with defaults.
+    let legacy = serde_json::json!({
+        "schemaVersion": 1,
+        "elements": [{
+            "id": "old", "type": "rectangle",
+            "x": 0, "y": 0, "width": 10, "height": 10, "rotation": 0,
+            "strokeColor": "#000",
+            "backgroundColor": {"type": "solid", "color": "#fff"},
+            "strokeWidth": 1, "strokeStyle": "solid", "fillStyle": "solid",
+            "opacity": 100, "seed": 1, "version": 0, "versionNonce": 1,
+            "isDeleted": false, "groupIds": [], "locked": false,
+        }],
+        "elementOrder": ["old"],
+    });
+    let mut doc3 = Document::new();
+    let summary = import_str(&mut doc3, &legacy.to_string()).unwrap();
+    assert_eq!(summary.skipped, 0);
+    let stored = doc3.get("old").expect("legacy rect imports");
+    assert_eq!(stored.base().stroke_cap, StrokeCap::Butt);
+    assert_eq!(stored.base().stroke_join, StrokeJoin::Miter);
+    assert_eq!(stored.base().stroke_align, StrokeAlign::Center);
+}

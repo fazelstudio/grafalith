@@ -5,7 +5,7 @@
 export interface SdkPoint { x: number; y: number }
 export interface SdkModifiers { shift?: boolean; alt?: boolean; ctrlOrCmd?: boolean }
 export interface SdkBoundsBox { minX: number; minY: number; maxX: number; maxY: number }
-export interface SdkStylePatch { strokeColor?: string; strokeWidth?: number; strokeStyle?: string; opacity?: number; background?: string | unknown }
+export interface SdkStylePatch { strokeColor?: string; strokeWidth?: number; strokeStyle?: string; strokeCap?: string; strokeJoin?: string; strokeAlign?: string; opacity?: number; background?: string | unknown }
 
 export type SdkBatchOp =
   | { op: "create"; element: unknown } // node.create
@@ -29,6 +29,7 @@ export type SdkBatchOp =
   | { op: "undo" } // edit.undo
   | { op: "redo" } // edit.redo
   | { op: "importScene"; scene: unknown; tracked?: boolean } // io.importScene
+  | { op: "importSvg"; svg: string; tracked?: boolean } // io.importSvg
   | { op: "exportScene" } // io.exportScene
   | { op: "pointerDown"; x: number; y: number; button: string; modifiers?: SdkModifiers; clickCount?: number } // tool.pointerDown
   | { op: "pointerMove"; x: number; y: number; modifiers?: SdkModifiers } // tool.pointerMove
@@ -87,5 +88,5 @@ export type SdkBatchOp =
   | { op: "booleanIntersect"; ids: string[] } // boolean.intersect
   | { op: "booleanExclude"; ids: string[] } // boolean.exclude
 
-export type SdkOpName = "create" | "delete" | "move" | "setBounds" | "setRotation" | "setStyle" | "setLocked" | "reorder" | "group" | "ungroup" | "select" | "setTool" | "copy" | "paste" | "duplicate" | "cut" | "nudge" | "deleteSelected" | "undo" | "redo" | "importScene" | "exportScene" | "pointerDown" | "pointerMove" | "pointerUp" | "pointerCancel" | "keyDown" | "wheel" | "setViewport" | "fitViewport" | "fillViewport" | "configure" | "notifyAssetsChanged" | "startTextAt" | "textInput" | "textBackspace" | "textDelete" | "textSetCaret" | "compositionStart" | "compositionUpdate" | "compositionEnd" | "commitText" | "cancelText" | "bringToFront" | "sendToBack" | "bringForward" | "sendBackward" | "align" | "distribute" | "applyAutoLayout" | "resizeSelection" | "penBegin" | "penClick" | "penDragHandle" | "penCommit" | "penCancel" | "cropStart" | "cropDrag" | "cropCommit" | "cropCancel" | "pathEditBegin" | "pathEditPress" | "pathEditDrag" | "pathEditRelease" | "pathEditCommit" | "pathEditCancel" | "renderModel" | "previewMove" | "previewResize" | "previewRotate" | "contextMenu" | "drainEvents" | "sessionState" | "executeCommand" | "booleanUnion" | "booleanSubtract" | "booleanIntersect" | "booleanExclude";
+export type SdkOpName = "create" | "delete" | "move" | "setBounds" | "setRotation" | "setStyle" | "setLocked" | "reorder" | "group" | "ungroup" | "select" | "setTool" | "copy" | "paste" | "duplicate" | "cut" | "nudge" | "deleteSelected" | "undo" | "redo" | "importScene" | "importSvg" | "exportScene" | "pointerDown" | "pointerMove" | "pointerUp" | "pointerCancel" | "keyDown" | "wheel" | "setViewport" | "fitViewport" | "fillViewport" | "configure" | "notifyAssetsChanged" | "startTextAt" | "textInput" | "textBackspace" | "textDelete" | "textSetCaret" | "compositionStart" | "compositionUpdate" | "compositionEnd" | "commitText" | "cancelText" | "bringToFront" | "sendToBack" | "bringForward" | "sendBackward" | "align" | "distribute" | "applyAutoLayout" | "resizeSelection" | "penBegin" | "penClick" | "penDragHandle" | "penCommit" | "penCancel" | "cropStart" | "cropDrag" | "cropCommit" | "cropCancel" | "pathEditBegin" | "pathEditPress" | "pathEditDrag" | "pathEditRelease" | "pathEditCommit" | "pathEditCancel" | "renderModel" | "previewMove" | "previewResize" | "previewRotate" | "contextMenu" | "drainEvents" | "sessionState" | "executeCommand" | "booleanUnion" | "booleanSubtract" | "booleanIntersect" | "booleanExclude";
 

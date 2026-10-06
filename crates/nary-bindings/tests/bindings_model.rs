@@ -550,3 +550,35 @@ fn jpeg_and_webp_plans_resolve_through_json_methods() {
     assert!(empty.plan_jpeg_export("{}").is_err());
     assert!(empty.plan_webp_export("{}").is_err());
 }
+
+#[test]
+fn stroke_cap_join_align_apply_and_reject_explicitly() {
+    use nary_core::element::{StrokeAlign, StrokeCap, StrokeJoin};
+
+    let mut engine = Engine::new();
+    seed_two(&mut engine);
+    let result = apply(
+        &mut engine,
+        json!([{"op": "setStyle", "ids": ["a"], "patch": {
+            "strokeCap": "round", "strokeJoin": "bevel", "strokeAlign": "outside",
+        }}]),
+    );
+    assert_eq!(result_at(&result, 0)["ok"], true);
+    let base = engine.document().get("a").expect("a").base().clone();
+    assert_eq!(base.stroke_cap, StrokeCap::Round);
+    assert_eq!(base.stroke_join, StrokeJoin::Bevel);
+    assert_eq!(base.stroke_align, StrokeAlign::Outside);
+
+    for (patch, code) in [
+        (json!({"strokeCap": "oval"}), "invalidInput"),
+        (json!({"strokeJoin": "spike"}), "invalidInput"),
+        (json!({"strokeAlign": "sideways"}), "invalidInput"),
+    ] {
+        let result = apply(
+            &mut engine,
+            json!([{"op": "setStyle", "ids": ["a"], "patch": patch}]),
+        );
+        assert_eq!(result_at(&result, 0)["ok"], false);
+        assert_eq!(result_at(&result, 0)["code"], code);
+    }
+}

@@ -26,7 +26,7 @@
 //! - `ops`: [`group`], [`lock`], [`zorder`], [`style`], [`frame`],
 //!   [`alignment`], [`arrow_binding`], [`constraints`], [`auto_layout`],
 //!   [`clipboard`], [`components`], [`assets`], [`path_edit`],
-//!   [`boolean`]
+//!   [`boolean`], [`path_boolean`]
 //! - `view`: [`hit_test`], [`render_model`], [`canvas_mode`], [`theme`]
 //! - `ext`: [`shape_registry`], [`shape_extension`], [`plugin`],
 //!   [`command_extension`], [`serializer`]
@@ -86,6 +86,7 @@ pub mod history;
 pub mod hit_test;
 pub mod interaction;
 pub mod lock;
+pub mod path_boolean;
 pub mod path_edit;
 pub mod plugin;
 pub mod render_model;

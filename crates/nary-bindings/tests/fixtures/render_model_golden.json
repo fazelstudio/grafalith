@@ -9,6 +9,7 @@
         "minY": 20.0
       },
       "detail": {
+        "corners": null,
         "roundness": null,
         "type": "rectangle"
       },
@@ -21,7 +22,10 @@
         "type": "solid"
       },
       "rotation": 0.0,
+      "strokeAlign": "center",
+      "strokeCap": "butt",
       "strokeColor": "#445566",
+      "strokeJoin": "miter",
       "strokeStyle": "solid",
       "strokeWidth": 2.0
     },
@@ -33,6 +37,7 @@
         "minY": 176.13116520813293
       },
       "detail": {
+        "corners": null,
         "roundness": null,
         "type": "rectangle"
       },
@@ -45,7 +50,10 @@
         "type": "solid"
       },
       "rotation": 0.5,
+      "strokeAlign": "center",
+      "strokeCap": "butt",
       "strokeColor": "#445566",
+      "strokeJoin": "miter",
       "strokeStyle": "solid",
       "strokeWidth": 2.0
     },
@@ -68,7 +76,10 @@
         "type": "solid"
       },
       "rotation": 0.0,
+      "strokeAlign": "center",
+      "strokeCap": "butt",
       "strokeColor": "#445566",
+      "strokeJoin": "miter",
       "strokeStyle": "solid",
       "strokeWidth": 2.0
     }

@@ -81,6 +81,19 @@ impl JsEngine {
         }
     }
 
+    /// Replaces document content from an SVG string (M8, `svg` feature).
+    /// Returns `{"imported","skipped"}` or an error envelope string.
+    #[cfg(feature = "svg")]
+    pub fn import_svg(&mut self, svg: &str, tracked: bool) -> String {
+        match self.inner.import_svg(svg, tracked) {
+            Ok(summary) => summary_json(summary.imported, summary.skipped),
+            Err(err) => nary_bindings::protocol::error_envelope(
+                nary_bindings::protocol::engine_error_code(&err),
+                &err.to_string(),
+            ),
+        }
+    }
+
     /// Executes a JSON array of ops in one crossing and returns the
     /// batch-result JSON string (never throws for domain failures —
     /// per-op problems are `ok: false` entries).

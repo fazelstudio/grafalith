@@ -585,8 +585,7 @@ impl Editor {
         second: ElementId,
     ) -> EngineResult<CommandOutcome> {
         let plan = crate::boolean::plan_boolean(&self.doc, kind, first, second)?;
-        let mut created = Vec::with_capacity(plan.results.len());
-        for bounds in &plan.results {
+        let mut mint = || {
             // Collision-guarded like paste: the counter source is
             // independent of stored ids, so loop until fresh.
             let mut id = self.doc.fresh_element_id();
@@ -595,13 +594,34 @@ impl Editor {
             }
             let seed = self.doc.fresh_seed();
             let nonce = self.doc.fresh_nonce();
-            created.push(crate::boolean::result_element(
-                &plan.style_source,
-                id,
-                seed,
-                nonce,
-                bounds,
-            ));
+            (id, seed, nonce)
+        };
+        let mut created = Vec::new();
+        match &plan.results {
+            crate::boolean::BooleanResults::Rects(boxes) => {
+                for bounds in boxes {
+                    let (id, seed, nonce) = mint();
+                    created.push(crate::boolean::result_element(
+                        &plan.style_source,
+                        id,
+                        seed,
+                        nonce,
+                        bounds,
+                    ));
+                }
+            }
+            crate::boolean::BooleanResults::Paths(contours) => {
+                for anchors in contours {
+                    let (id, seed, nonce) = mint();
+                    created.push(crate::boolean::path_result_element(
+                        &plan.style_source,
+                        id,
+                        seed,
+                        nonce,
+                        anchors,
+                    ));
+                }
+            }
         }
         let outcome = self.history.transaction(&mut self.doc, |ctx| {
             let mut affected = vec![plan.first.clone(), plan.second.clone()];

@@ -28,7 +28,9 @@
 use std::collections::HashMap;
 
 use crate::document::Document;
-use crate::element::{Element, ElementId, FillStyle, StrokeStyle};
+use crate::element::{
+    Element, ElementId, FillStyle, StrokeAlign, StrokeCap, StrokeJoin, StrokeStyle,
+};
 use crate::geometry::point::Point;
 use crate::geometry::rect::Bounds;
 use crate::geometry::rotation::rotate_delta;
@@ -529,6 +531,12 @@ pub struct StylePatch {
     pub stroke_width: Option<f64>,
     /// New stroke dash pattern.
     pub stroke_style: Option<StrokeStyle>,
+    /// New stroke cap (M8).
+    pub stroke_cap: Option<StrokeCap>,
+    /// New stroke join (M8).
+    pub stroke_join: Option<StrokeJoin>,
+    /// New stroke alignment (M8).
+    pub stroke_align: Option<StrokeAlign>,
     /// New opacity (clamped to 0–100 in the operation, TS
     /// `style-actions.ts` parity).
     pub opacity: Option<f64>,
@@ -541,6 +549,9 @@ impl StylePatch {
             && self.background.is_none()
             && self.stroke_width.is_none()
             && self.stroke_style.is_none()
+            && self.stroke_cap.is_none()
+            && self.stroke_join.is_none()
+            && self.stroke_align.is_none()
             && self.opacity.is_none()
     }
 }
@@ -595,6 +606,15 @@ impl Command for SetStyle {
             }
             if let Some(style) = self.patch.stroke_style {
                 base.stroke_style = style;
+            }
+            if let Some(cap) = self.patch.stroke_cap {
+                base.stroke_cap = cap;
+            }
+            if let Some(join) = self.patch.stroke_join {
+                base.stroke_join = join;
+            }
+            if let Some(align) = self.patch.stroke_align {
+                base.stroke_align = align;
             }
             if let Some(opacity) = self.patch.opacity {
                 base.opacity = opacity.clamp(0.0, 100.0);

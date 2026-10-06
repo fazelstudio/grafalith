@@ -123,3 +123,62 @@ fn boolean_on_non_rectangle_is_explicitly_unsupported() {
     assert_eq!(result["results"][1]["code"], "unsupported");
     assert_eq!(engine.element_count(), 1);
 }
+
+fn closed_path(id: &str, x: f64, y: f64, size: f64) -> Value {
+    json!({
+        "id": id,
+        "type": "path",
+        "x": x, "y": y, "width": size, "height": size,
+        "rotation": 0,
+        "strokeColor": "#333333",
+        "backgroundColor": {"type": "solid", "color": "#e8f4fc"},
+        "strokeWidth": 2,
+        "strokeStyle": "solid",
+        "fillStyle": "solid",
+        "opacity": 100,
+        "seed": 1,
+        "version": 0,
+        "versionNonce": 1,
+        "isDeleted": false,
+        "groupIds": [],
+        "locked": false,
+        "hidden": false,
+        "frameId": null,
+        "segments": [
+            {"point": [0, 0]},
+            {"point": [size, 0]},
+            {"point": [size, size]},
+            {"point": [0, size]},
+        ],
+        "closed": true,
+    })
+}
+
+#[test]
+fn boolean_union_of_paths_returns_one_closed_path() {
+    let mut engine = Engine::new();
+    let created = run(
+        &mut engine,
+        json!([
+            {"op": "create", "element": closed_path("pa", 0.0, 0.0, 100.0)},
+            {"op": "create", "element": closed_path("pb", 50.0, 50.0, 100.0)},
+        ]),
+    );
+    assert_eq!(created["results"][0]["ok"], true);
+    assert_eq!(created["results"][1]["ok"], true);
+
+    let result = run(
+        &mut engine,
+        json!([{"op": "booleanUnion", "ids": ["pa", "pb"]}]),
+    );
+    assert_eq!(result["results"][0]["ok"], true);
+    assert_eq!(engine.element_count(), 1);
+
+    let exported = run(&mut engine, json!([{"op": "exportScene"}]));
+    let elements = exported["results"][0]["data"]["elements"]
+        .as_array()
+        .expect("elements array");
+    assert_eq!(elements.len(), 1);
+    assert_eq!(elements[0]["type"], "path");
+    assert_eq!(elements[0]["closed"], true);
+}

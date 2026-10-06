@@ -39,7 +39,10 @@ use nary_core::command::{
 };
 use nary_core::document::{Document, ImportSummary, SCHEMA_VERSION};
 use nary_core::editor::Editor;
-use nary_core::element::{ElementId, StrokeStyle as DomainStrokeStyle};
+use nary_core::element::{
+    ElementId, StrokeAlign as DomainStrokeAlign, StrokeCap as DomainStrokeCap,
+    StrokeJoin as DomainStrokeJoin, StrokeStyle as DomainStrokeStyle,
+};
 use nary_core::geometry::viewport::Viewport;
 use nary_core::interaction::{Key, Modifiers, PointerButton};
 use nary_core::plugin::Plugin;
@@ -181,6 +184,21 @@ impl Engine {
             nary_io::import_str_tracked(doc, history, scene_json)
         } else {
             nary_io::import_str(self.editor.document_mut(), scene_json)
+        }
+    }
+
+    /// Replaces document content from an SVG string (M8, `svg` feature).
+    ///
+    /// Same atomicity contract as [`Engine::import_scene`]; shapes resolve
+    /// to paths, text chunks to text, groups to group ids, and unsupported
+    /// content counts as skips. `tracked` records one undo entry.
+    #[cfg(feature = "svg")]
+    pub fn import_svg(&mut self, svg: &str, tracked: bool) -> EngineResult<ImportSummary> {
+        if tracked {
+            let (doc, history) = self.editor.doc_history_mut();
+            nary_io::import_svg_str_tracked(doc, history, svg)
+        } else {
+            nary_io::import_svg_str(self.editor.document_mut(), svg)
         }
     }
 
@@ -520,11 +538,21 @@ impl Engine {
                 match self.import_scene(&payload, *tracked) {
                     Ok(summary) => ok_result(
                         op_name(op),
-                        Some(json!({ "imported": summary.imported, "skipped": summary.skipped })),
+                        Some(json!({ "imported": summary.imported, "skipped":
+                            summary.skipped })),
                     ),
                     Err(err) => err_result(op_name(op), &err),
                 }
             }
+            #[cfg(feature = "svg")]
+            BatchOp::ImportSvg { svg, tracked } => match self.import_svg(svg, *tracked) {
+                Ok(summary) => ok_result(
+                    op_name(op),
+                    Some(json!({ "imported": summary.imported, "skipped":
+                            summary.skipped })),
+                ),
+                Err(err) => err_result(op_name(op), &err),
+            },
             BatchOp::ExportScene => match self.export_scene() {
                 Ok(scene) => match serde_json::from_str::<Value>(&scene) {
                     Ok(value) => ok_result(op_name(op), Some(value)),
@@ -1444,6 +1472,42 @@ fn parse_style_patch(patch: &StylePatchJson) -> EngineResult<StylePatch> {
             _ => {
                 return Err(EngineError::InvalidInput(format!(
                     "unknown strokeStyle '{style}' (expected solid, dashed, or dotted)"
+                )));
+            }
+        });
+    }
+    if let Some(cap) = &patch.stroke_cap {
+        domain.stroke_cap = Some(match cap.as_str() {
+            "butt" => DomainStrokeCap::Butt,
+            "round" => DomainStrokeCap::Round,
+            "square" => DomainStrokeCap::Square,
+            _ => {
+                return Err(EngineError::InvalidInput(format!(
+                    "unknown strokeCap '{cap}' (expected butt, round, or square)"
+                )));
+            }
+        });
+    }
+    if let Some(join) = &patch.stroke_join {
+        domain.stroke_join = Some(match join.as_str() {
+            "miter" => DomainStrokeJoin::Miter,
+            "round" => DomainStrokeJoin::Round,
+            "bevel" => DomainStrokeJoin::Bevel,
+            _ => {
+                return Err(EngineError::InvalidInput(format!(
+                    "unknown strokeJoin '{join}' (expected miter, round, or bevel)"
+                )));
+            }
+        });
+    }
+    if let Some(align) = &patch.stroke_align {
+        domain.stroke_align = Some(match align.as_str() {
+            "inside" => DomainStrokeAlign::Inside,
+            "center" => DomainStrokeAlign::Center,
+            "outside" => DomainStrokeAlign::Outside,
+            _ => {
+                return Err(EngineError::InvalidInput(format!(
+                    "unknown strokeAlign '{align}' (expected inside, center, or outside)"
                 )));
             }
         });

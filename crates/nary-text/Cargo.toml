@@ -1,0 +1,15 @@
+[package]
+name = "nary-text"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Text layout research spike for the Nary engine (M8, owner-approved): parley-based measurement and line breaking behind the core TextMeasurer seam. Host-gated; nary-core never depends on this crate."
+
+[dependencies]
+nary-core = { version = "0.1.0", path = "../nary-core" }
+# Layout engine (M8 spike): shaping, line breaking, bidi. Pure Rust,
+# WASM-safe; hosts register fonts (system fonts here, embedded later).
+parley = "0.11"
+
+[lints]
+workspace = true

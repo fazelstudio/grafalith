@@ -25,11 +25,11 @@ use std::collections::HashMap;
 use nary_core::element::ElementId;
 use nary_core::element::{
     ArrowElement, ArrowheadType, AutoLayoutConfig, BaseElement, Binding, ChildLayoutSizing,
-    ConstraintAnchor, Constraints, CounterAxisAlign, CropRegion, Element, ElementFillStyle,
-    EllipseElement, FillStyle, FrameElement, FramePadding, FrameSizing, FreedrawElement,
-    GradientStop, GradientType, ImageElement, InstanceElement, LayoutDirection, LineElement,
-    PatchValue, PathElement, PathSegment, PrimaryAxisAlign, RectangleElement, StrokeStyle,
-    TextAlign, TextElement,
+    ConstraintAnchor, Constraints, CornerRadii, CounterAxisAlign, CropRegion, Element,
+    ElementFillStyle, EllipseElement, FillStyle, FrameElement, FramePadding, FrameSizing,
+    FreedrawElement, GradientStop, GradientType, ImageElement, InstanceElement, LayoutDirection,
+    LineElement, PatchValue, PathElement, PathSegment, PrimaryAxisAlign, RectangleElement,
+    StrokeAlign, StrokeCap, StrokeJoin, StrokeStyle, TextAlign, TextElement,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,6 +61,33 @@ pub(crate) enum StrokeStyleDto {
     Dotted,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum StrokeCapDto {
+    #[default]
+    Butt,
+    Round,
+    Square,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum StrokeJoinDto {
+    #[default]
+    Miter,
+    Round,
+    Bevel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum StrokeAlignDto {
+    Inside,
+    #[default]
+    Center,
+    Outside,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum ElementFillStyleDto {
     #[serde(rename = "solid")]
@@ -76,6 +103,7 @@ pub(crate) enum ElementFillStyleDto {
 pub(crate) enum GradientTypeDto {
     Linear,
     Radial,
+    Angular,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -238,6 +266,15 @@ pub(crate) struct BaseDto {
     pub background_color: FillStyleDto,
     pub stroke_width: f64,
     pub stroke_style: StrokeStyleDto,
+    /// Cap style; absent in older v1 exports means butt (M8).
+    #[serde(default)]
+    pub stroke_cap: StrokeCapDto,
+    /// Join style; absent in older v1 exports means miter (M8).
+    #[serde(default)]
+    pub stroke_join: StrokeJoinDto,
+    /// Stroke alignment; absent in older v1 exports means center (M8).
+    #[serde(default)]
+    pub stroke_align: StrokeAlignDto,
     pub fill_style: ElementFillStyleDto,
     pub opacity: f64,
     pub seed: u32,
@@ -261,6 +298,19 @@ pub(crate) struct RectangleDto {
     #[serde(flatten)]
     pub base: BaseDto,
     pub roundness: Option<f64>,
+    /// Per-corner radii; absent in older v1 exports (M8).
+    #[serde(default)]
+    pub corners: Option<CornerRadiiDto>,
+}
+
+/// Per-corner radii, clockwise from top-left (M8).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CornerRadiiDto {
+    pub top_left: f64,
+    pub top_right: f64,
+    pub bottom_right: f64,
+    pub bottom_left: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -368,6 +418,54 @@ fn stroke_to_dto(value: StrokeStyle) -> StrokeStyleDto {
     }
 }
 
+fn cap_to_domain(value: StrokeCapDto) -> StrokeCap {
+    match value {
+        StrokeCapDto::Butt => StrokeCap::Butt,
+        StrokeCapDto::Round => StrokeCap::Round,
+        StrokeCapDto::Square => StrokeCap::Square,
+    }
+}
+
+fn cap_to_dto(value: StrokeCap) -> StrokeCapDto {
+    match value {
+        StrokeCap::Butt => StrokeCapDto::Butt,
+        StrokeCap::Round => StrokeCapDto::Round,
+        StrokeCap::Square => StrokeCapDto::Square,
+    }
+}
+
+fn join_to_domain(value: StrokeJoinDto) -> StrokeJoin {
+    match value {
+        StrokeJoinDto::Miter => StrokeJoin::Miter,
+        StrokeJoinDto::Round => StrokeJoin::Round,
+        StrokeJoinDto::Bevel => StrokeJoin::Bevel,
+    }
+}
+
+fn join_to_dto(value: StrokeJoin) -> StrokeJoinDto {
+    match value {
+        StrokeJoin::Miter => StrokeJoinDto::Miter,
+        StrokeJoin::Round => StrokeJoinDto::Round,
+        StrokeJoin::Bevel => StrokeJoinDto::Bevel,
+    }
+}
+
+fn align_to_domain(value: StrokeAlignDto) -> StrokeAlign {
+    match value {
+        StrokeAlignDto::Inside => StrokeAlign::Inside,
+        StrokeAlignDto::Center => StrokeAlign::Center,
+        StrokeAlignDto::Outside => StrokeAlign::Outside,
+    }
+}
+
+fn align_to_dto(value: StrokeAlign) -> StrokeAlignDto {
+    match value {
+        StrokeAlign::Inside => StrokeAlignDto::Inside,
+        StrokeAlign::Center => StrokeAlignDto::Center,
+        StrokeAlign::Outside => StrokeAlignDto::Outside,
+    }
+}
+
 fn fill_style_to_domain(value: &ElementFillStyleDto) -> ElementFillStyle {
     match value {
         ElementFillStyleDto::Solid => ElementFillStyle::Solid,
@@ -397,6 +495,7 @@ fn fill_to_domain(value: &FillStyleDto) -> FillStyle {
             gradient_type: match gradient_type {
                 GradientTypeDto::Linear => GradientType::Linear,
                 GradientTypeDto::Radial => GradientType::Radial,
+                GradientTypeDto::Angular => GradientType::Angular,
             },
             angle: *angle,
             stops: stops
@@ -442,6 +541,7 @@ fn fill_to_dto(value: &FillStyle) -> FillStyleDto {
             gradient_type: match gradient_type {
                 GradientType::Linear => GradientTypeDto::Linear,
                 GradientType::Radial => GradientTypeDto::Radial,
+                GradientType::Angular => GradientTypeDto::Angular,
             },
             angle: *angle,
             stops: stops
@@ -487,6 +587,9 @@ fn base_to_domain(value: BaseDto) -> BaseElement {
         background_color: fill_to_domain(&value.background_color),
         stroke_width: value.stroke_width,
         stroke_style: stroke_to_domain(value.stroke_style),
+        stroke_cap: cap_to_domain(value.stroke_cap),
+        stroke_join: join_to_domain(value.stroke_join),
+        stroke_align: align_to_domain(value.stroke_align),
         fill_style: fill_style_to_domain(&value.fill_style),
         opacity: value.opacity,
         seed: value.seed,
@@ -520,6 +623,9 @@ fn base_to_dto(value: &BaseElement) -> BaseDto {
         background_color: fill_to_dto(&value.background_color),
         stroke_width: value.stroke_width,
         stroke_style: stroke_to_dto(value.stroke_style),
+        stroke_cap: cap_to_dto(value.stroke_cap),
+        stroke_join: join_to_dto(value.stroke_join),
+        stroke_align: align_to_dto(value.stroke_align),
         fill_style: fill_style_to_dto(value.fill_style),
         opacity: value.opacity,
         seed: value.seed,
@@ -628,6 +734,12 @@ pub(crate) fn element_from_value(value: &Value) -> Option<Element> {
             Element::Rectangle(RectangleElement {
                 base: base_to_domain(dto.base),
                 roundness: dto.roundness,
+                corners: dto.corners.map(|corners| CornerRadii {
+                    top_left: corners.top_left,
+                    top_right: corners.top_right,
+                    bottom_right: corners.bottom_right,
+                    bottom_left: corners.bottom_left,
+                }),
             })
         }
         TYPE_ELLIPSE => {
@@ -774,6 +886,12 @@ pub(crate) fn element_to_value(element: &Element) -> Result<Value, serde_json::E
             serde_json::to_value(RectangleDto {
                 base: base_to_dto(&inner.base),
                 roundness: inner.roundness,
+                corners: inner.corners.map(|corners| CornerRadiiDto {
+                    top_left: corners.top_left,
+                    top_right: corners.top_right,
+                    bottom_right: corners.bottom_right,
+                    bottom_left: corners.bottom_left,
+                }),
             })?,
         ),
         Element::Ellipse(inner) => (

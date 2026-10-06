@@ -35,6 +35,7 @@ fn allowed_edges() -> HashMap<&'static str, Vec<&'static str>> {
         ("nary-core", vec!["nary-geometry"]),
         ("nary-geometry", vec![]),
         ("nary-sdk", vec!["nary-core"]),
+        ("nary-text", vec!["nary-core"]),
     ])
 }
 
@@ -92,10 +93,11 @@ fn allowed_external() -> HashMap<&'static str, Vec<&'static str>> {
         ("nary", vec!["serde_json", "wasm-bindgen"]),
         ("nary-python", vec!["pyo3", "serde_json"]),
         ("nary-bindings", vec!["serde", "serde_json", "wasm-bindgen"]),
-        ("nary-io", vec!["serde", "serde_json"]),
-        ("nary-core", vec![]),
+        ("nary-io", vec!["serde", "serde_json", "usvg"]),
+        ("nary-core", vec!["i_overlay"]),
         ("nary-geometry", vec![]),
         ("nary-sdk", vec![]),
+        ("nary-text", vec!["parley"]),
     ])
 }
 

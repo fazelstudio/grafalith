@@ -121,3 +121,68 @@ fn boolean_errors_are_explicit_per_input_kind() {
     ));
     assert_eq!(editor.document().scene_nonce(), nonce_before);
 }
+
+use nary_core::element::{PathElement, PathSegment};
+
+fn closed_square(gen: &mut CounterIdGenerator, id: &str, x: f64, y: f64, size: f64) -> Element {
+    let mut base = create_rectangle(gen).base;
+    base.id = ElementId::of(id);
+    base.x = x;
+    base.y = y;
+    base.width = size;
+    base.height = size;
+    Element::Path(PathElement {
+        base,
+        segments: vec![
+            PathSegment {
+                point: [0.0, 0.0],
+                handle_in: None,
+                handle_out: None,
+            },
+            PathSegment {
+                point: [size, 0.0],
+                handle_in: None,
+                handle_out: None,
+            },
+            PathSegment {
+                point: [size, size],
+                handle_in: None,
+                handle_out: None,
+            },
+            PathSegment {
+                point: [0.0, size],
+                handle_in: None,
+                handle_out: None,
+            },
+        ],
+        closed: true,
+    })
+}
+
+#[test]
+fn path_union_replaces_inputs_with_one_path_and_undoes() {
+    let mut editor = Editor::new();
+    let mut gen = CounterIdGenerator::new();
+    editor
+        .create(closed_square(&mut gen, "pa", 0.0, 0.0, 10.0))
+        .unwrap();
+    editor
+        .create(closed_square(&mut gen, "pb", 5.0, 5.0, 10.0))
+        .unwrap();
+    let outcome = editor
+        .apply_boolean(
+            nary_core::boolean::BooleanOp::Union,
+            ElementId::of("pa"),
+            ElementId::of("pb"),
+        )
+        .unwrap();
+    assert!(outcome.changed);
+    let live = editor.document().get_all();
+    assert_eq!(live.len(), 1);
+    assert!(matches!(live[0], Element::Path(_)));
+    assert!(live[0].base().width > 0.0 && live[0].base().height > 0.0);
+
+    editor.undo().unwrap();
+    assert_eq!(editor.document().element_count(), 2);
+    assert!(editor.document().get("pa").is_some());
+}

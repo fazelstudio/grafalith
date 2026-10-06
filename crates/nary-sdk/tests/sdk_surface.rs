@@ -3,7 +3,10 @@
 //! with no direct engine imports in the plugin code below.
 
 use nary_sdk::command::{CommandContext, CommandExtension};
-use nary_sdk::element::{CustomElement, Element, ElementFillStyle, FillStyle, StrokeStyle};
+use nary_sdk::element::{
+    CustomElement, Element, ElementFillStyle, FillStyle, StrokeAlign, StrokeCap, StrokeJoin,
+    StrokeStyle,
+};
 use nary_sdk::plugin::{Plugin, PluginContext, PluginMetadata, PluginRegistry};
 use nary_sdk::{EngineResult, PROTOCOL_VERSION, SDK_VERSION};
 
@@ -32,6 +35,9 @@ impl CommandExtension for Ping {
                 },
                 stroke_width: 1.0,
                 stroke_style: StrokeStyle::Solid,
+                stroke_cap: StrokeCap::default(),
+                stroke_join: StrokeJoin::default(),
+                stroke_align: StrokeAlign::default(),
                 fill_style: ElementFillStyle::Solid,
                 opacity: 100.0,
                 seed,

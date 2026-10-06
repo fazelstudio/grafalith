@@ -42,7 +42,9 @@ fn ellipse(id: &str) -> Value {
 
 /// One JSON op per [`BatchOp`] variant, in a stateful order (setup first).
 fn all_ops() -> Vec<Value> {
-    vec![
+    // `mut` is only exercised when the `svg` push below compiles in.
+    #[cfg_attr(not(feature = "svg"), allow(unused_mut))]
+    let mut ops = vec![
         json!({"op": "importScene", "scene": {"schemaVersion": 1, "elements": [rect("cov-1"), rect("cov-2")], "elementOrder": ["cov-1", "cov-2"]}}),
         json!({"op": "create", "element": rect("cov-3")}),
         json!({"op": "move", "ids": ["cov-1"], "dx": 5, "dy": 5}),
@@ -135,7 +137,11 @@ fn all_ops() -> Vec<Value> {
         json!({"op": "booleanUnion", "ids": ["ghost-1", "ghost-2"]}),
         // Second delete exercises a different path than the first.
         json!({"op": "delete", "ids": ["cov-2"]}),
-    ]
+    ];
+    // importSvg exists only with the `svg` feature (zero-cost default).
+    #[cfg(feature = "svg")]
+    ops.push(json!({"op": "importSvg", "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>", "tracked": false}));
+    ops
 }
 
 fn is_camel_case(name: &str) -> bool {
@@ -155,7 +161,11 @@ fn every_op_has_a_unique_well_formed_wire_name() {
         .collect();
     // 71 built-ins plus executeCommand (72), plus nine boolean-support
     // creates and seven boolean ops (88), plus fit/fill (90).
+    // With the `svg` feature the importSvg op makes 91 occurrences.
+    #[cfg(not(feature = "svg"))]
     assert_eq!(ops.len(), 90);
+    #[cfg(feature = "svg")]
+    assert_eq!(ops.len(), 91);
 
     let mut names: Vec<&str> = ops.iter().map(op_name).collect();
     for name in &names {
@@ -164,9 +174,13 @@ fn every_op_has_a_unique_well_formed_wire_name() {
     names.sort_unstable();
     names.dedup();
     // 71 built-ins plus executeCommand (72), plus four boolean ops (76),
-    // plus fit/fill viewport (78). Setup ops reuse names on purpose;
-    // uniqueness is per wire name.
+    // plus fit/fill viewport (78). With the `svg` feature, importSvg
+    // makes 79. Setup ops reuse names on purpose; uniqueness is per wire
+    // name.
+    #[cfg(not(feature = "svg"))]
     assert_eq!(names.len(), 78);
+    #[cfg(feature = "svg")]
+    assert_eq!(names.len(), 79);
     for required in [
         "executeCommand",
         "booleanUnion",

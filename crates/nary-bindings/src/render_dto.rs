@@ -115,6 +115,13 @@ pub enum PaintDto {
         /// Color stops.
         stops: Vec<PaintStopDto>,
     },
+    /// Angular (conic) gradient sweeping around the entry center (M8).
+    Angular {
+        /// Sweep start angle in degrees.
+        angle: f64,
+        /// Color stops.
+        stops: Vec<PaintStopDto>,
+    },
 }
 
 /// Maps a fill description to its DTO.
@@ -142,7 +149,31 @@ pub fn paint_dto(paint: &PaintDesc) -> PaintDto {
                 })
                 .collect(),
         },
+        PaintDesc::Angular { angle, stops } => PaintDto::Angular {
+            angle: *angle,
+            stops: stops
+                .iter()
+                .map(|stop| PaintStopDto {
+                    offset: stop.offset,
+                    color: stop.color.clone(),
+                })
+                .collect(),
+        },
     }
+}
+
+/// Per-corner radii, clockwise from top-left (M8).
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CornerRadiiDto {
+    /// Top-left corner radius in scene units.
+    pub top_left: f64,
+    /// Top-right corner radius in scene units.
+    pub top_right: f64,
+    /// Bottom-right corner radius in scene units.
+    pub bottom_right: f64,
+    /// Bottom-left corner radius in scene units.
+    pub bottom_left: f64,
 }
 
 /// Per-kind payload beyond the shared entry fields (tagged by `type`).
@@ -155,6 +186,8 @@ pub enum DrawDetailDto {
     Rectangle {
         /// Corner radius in scene units, or `None` (wire `null`) for sharp corners.
         roundness: Option<f64>,
+        /// Per-corner radii (`null` = uniform/`roundness` corners, M8).
+        corners: Option<CornerRadiiDto>,
     },
     /// Text content + font + alignment (the host measures with its 2D context).
     Text {
@@ -264,8 +297,14 @@ pub fn fill_hatch_name(style: &ElementFillStyle) -> &'static str {
 pub fn detail_dto(detail: &DrawDetail) -> DrawDetailDto {
     match detail {
         DrawDetail::None => DrawDetailDto::None,
-        DrawDetail::Rectangle { roundness } => DrawDetailDto::Rectangle {
+        DrawDetail::Rectangle { roundness, corners } => DrawDetailDto::Rectangle {
             roundness: *roundness,
+            corners: corners.map(|values| CornerRadiiDto {
+                top_left: values[0],
+                top_right: values[1],
+                bottom_right: values[2],
+                bottom_left: values[3],
+            }),
         },
         DrawDetail::Text {
             text,
@@ -359,6 +398,12 @@ pub struct DrawEntryDto {
     pub stroke_width: f64,
     /// Stroke dash pattern (`"solid"`, `"dashed"`, or `"dotted"`).
     pub stroke_style: String,
+    /// Stroke cap (`"butt"`, `"round"`, or `"square"` — M8).
+    pub stroke_cap: String,
+    /// Stroke join (`"miter"`, `"round"`, or `"bevel"` — M8).
+    pub stroke_join: String,
+    /// Stroke alignment (`"inside"`, `"center"`, or `"outside"` — M8).
+    pub stroke_align: String,
     /// Opacity on the 0–100 scale.
     pub opacity: f64,
     /// Per-kind payload.
@@ -384,6 +429,9 @@ pub fn draw_entry_dto(entry: &DrawEntry) -> DrawEntryDto {
         stroke_color: entry.stroke_color.clone(),
         stroke_width: entry.stroke_width,
         stroke_style: entry.stroke_style.clone(),
+        stroke_cap: entry.stroke_cap.clone(),
+        stroke_join: entry.stroke_join.clone(),
+        stroke_align: entry.stroke_align.clone(),
         opacity: entry.opacity,
         detail: detail_dto(&entry.detail),
         points: entry.points.clone(),
@@ -1241,7 +1289,10 @@ mod tests {
         rounded.roundness = Some(12.0);
         let entry = DrawEntry::for_element(&Element::Rectangle(rounded), &ready);
         match detail_dto(&entry.detail) {
-            DrawDetailDto::Rectangle { roundness } => assert_eq!(roundness, Some(12.0)),
+            DrawDetailDto::Rectangle { roundness, corners } => {
+                assert_eq!(roundness, Some(12.0));
+                assert!(corners.is_none());
+            }
             other => panic!("expected rectangle DTO, got {other:?}"),
         }
 
@@ -1249,12 +1300,16 @@ mod tests {
         let entry = DrawEntry::for_element(&Element::Rectangle(sharp), &ready);
         let dto = detail_dto(&entry.detail);
         match &dto {
-            DrawDetailDto::Rectangle { roundness } => assert_eq!(*roundness, None),
+            DrawDetailDto::Rectangle { roundness, corners } => {
+                assert_eq!(*roundness, None);
+                assert!(corners.is_none());
+            }
             other => panic!("expected rectangle DTO, got {other:?}"),
         }
         // Wire `null` (TS `roundness: null`), not an absent field.
         let json = serde_json::to_value(&dto).expect("serializable");
         assert_eq!(json["roundness"], serde_json::Value::Null);
+        assert_eq!(json["corners"], serde_json::Value::Null);
     }
 
     #[test]

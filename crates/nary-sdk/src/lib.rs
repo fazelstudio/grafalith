@@ -54,8 +54,9 @@ pub mod format {
 /// Element model (plain data) for reading inputs and building outputs.
 pub mod element {
     pub use nary_core::element::{
-        BaseElement, CustomElement, Element, ElementFillStyle, ElementId, FillStyle, GradientStop,
-        GradientType, IdGenerator, PatchValue, StrokeStyle,
+        BaseElement, CornerRadii, CustomElement, Element, ElementFillStyle, ElementId, FillStyle,
+        GradientStop, GradientType, IdGenerator, PatchValue, StrokeAlign, StrokeCap, StrokeJoin,
+        StrokeStyle,
     };
 }
 

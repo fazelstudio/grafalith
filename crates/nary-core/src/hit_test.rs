@@ -452,6 +452,7 @@ mod tests {
         let el = Element::Rectangle(crate::element::RectangleElement {
             base: rect_base(&mut gen, 10.0, 20.0, 100.0, 80.0),
             roundness: None,
+            corners: None,
         });
         assert!(hit_test_element(&el, 50.0, 50.0));
         assert!(hit_test_element(&el, 10.0, 50.0));
