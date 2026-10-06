@@ -60,7 +60,7 @@ use crate::protocol::{
 };
 use crate::render_dto::{
     context_intent_name, event_dto, key_action_dto, phase_name, pointer_down_dto, pointer_up_dto,
-    render_model_dto, session_state_dto, snap_guide_dto, viewport_dto,
+    render_model_dto, session_state_dto, snap_guide_dto, viewport_dto, RenderCache, RenderCacheKey,
 };
 
 /// Bindings crate version (echoed in [`EngineStatus`] for skew detection).
@@ -77,6 +77,9 @@ pub struct Engine {
     editor: Editor,
     clipboard: Clipboard,
     asset_generation: u64,
+    /// One-entry render cache: hosts poll `renderModel` every frame, and
+    /// most polls repeat the previous inputs exactly.
+    render_cache: RenderCache,
 }
 
 impl Engine {
@@ -86,6 +89,7 @@ impl Engine {
             editor: Editor::new(),
             clipboard: Clipboard::new(),
             asset_generation: 0,
+            render_cache: RenderCache::new(),
         }
     }
 
@@ -1135,7 +1139,23 @@ impl Engine {
         }
         config.asset_generation = self.asset_generation;
         let ready: HashSet<String> = query.ready_images.iter().cloned().collect();
-        dto_result(name, render_model_dto(&self.editor, &config, &ready))
+        // Cached across identical polls (one frame costs one clone, not one
+        // rebuild); any input change misses and rebuilds transparently.
+        let key = RenderCacheKey::capture(&self.editor, &config, &ready);
+        let dto = self
+            .render_cache
+            .get_or_build(key, || render_model_dto(&self.editor, &config, &ready));
+        dto_result(name, dto)
+    }
+
+    /// Render-cache hits so far (observability for hosts and benchmarks).
+    pub fn render_cache_hits(&self) -> u64 {
+        self.render_cache.hits()
+    }
+
+    /// Render-cache misses (rebuilds) so far.
+    pub fn render_cache_misses(&self) -> u64 {
+        self.render_cache.misses()
     }
 
     /// Drops dead ids from the selection mirror (TS `deleteSelected`

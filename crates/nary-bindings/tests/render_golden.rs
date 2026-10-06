@@ -101,3 +101,71 @@ fn render_model_matches_golden_fixture() {
         "renderModel output matches the golden fixture"
     );
 }
+
+fn render_query(engine: &mut Engine) -> Value {
+    let out = engine.apply_batch(
+        &serde_json::json!([{"op": "renderModel", "canvasWidth": 800, "canvasHeight": 600}])
+            .to_string(),
+    );
+    let out: Value = serde_json::from_str(&out).expect("render result parses");
+    assert_eq!(out["results"][0]["ok"], true);
+    out["results"][0]["data"].clone()
+}
+
+fn seeded_engine() -> Engine {
+    let mut engine = Engine::new();
+    let setup = engine.apply_batch(
+        &serde_json::json!([
+            {"op": "create", "element": rect("c1", 10.0, 20.0, 100.0, 50.0, 0.0)},
+            {"op": "create", "element": rect("c2", 300.0, 200.0, 120.0, 80.0, 0.0)},
+        ])
+        .to_string(),
+    );
+    let setup: Value = serde_json::from_str(&setup).expect("setup parses");
+    assert!(setup["results"]
+        .as_array()
+        .expect("results")
+        .iter()
+        .all(|r| r["ok"] == true));
+    engine
+}
+
+#[test]
+fn repeated_identical_polls_hit_the_cache() {
+    let mut engine = seeded_engine();
+    let first = render_query(&mut engine);
+    assert_eq!(engine.render_cache_misses(), 1);
+    let second = render_query(&mut engine);
+    assert_eq!(engine.render_cache_hits(), 1);
+    assert_eq!(first, second, "cached frame is identical");
+    let _ = render_query(&mut engine);
+    assert_eq!(engine.render_cache_hits(), 2);
+}
+
+#[test]
+fn any_input_change_misses_and_never_serves_stale_frames() {
+    let mut engine = seeded_engine();
+    let before = render_query(&mut engine);
+    // Content change invalidates.
+    engine.apply_batch(
+        &serde_json::json!([{"op": "move", "ids": ["c1"], "dx": 5.0, "dy": 0.0}]).to_string(),
+    );
+    let after_move = render_query(&mut engine);
+    assert_ne!(before, after_move);
+    assert_eq!(engine.render_cache_misses(), 2);
+    // Selection change invalidates (overlay differs).
+    engine.apply_batch(&serde_json::json!([{"op": "select", "ids": ["c2"]}]).to_string());
+    let after_select = render_query(&mut engine);
+    assert_ne!(after_move, after_select);
+    // Viewport change invalidates.
+    engine.apply_batch(
+        &serde_json::json!([{"op": "setViewport", "scrollX": 10, "scrollY": 0, "zoom": 1}])
+            .to_string(),
+    );
+    let after_pan = render_query(&mut engine);
+    assert_ne!(after_select, after_pan);
+    assert_eq!(engine.render_cache_misses(), 4);
+    // Repeating the latest state hits again.
+    let _ = render_query(&mut engine);
+    assert_eq!(engine.render_cache_hits(), 1);
+}
