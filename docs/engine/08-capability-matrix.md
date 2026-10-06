@@ -14,6 +14,9 @@ command; no capability is internal-only.
 | Group / ungroup + drill-in | `node.group`, `node.ungroup` | `bindings_model`, `parity_model` | ✅ |
 | Component/instance + overrides | `node.create` (instance), resolve (render) | `nary-core` units (20) | 🟡 (no nesting/variants) |
 | Custom types + plugins | `node.create` (custom), `tool.activate` (custom tool), `plugin.execute` (commands) | `plugin_example` (4), `plugin_commands` (6), `plugin_protocol` (3), `command_coverage` (2) | 🟡 (import skips unknown types by design, pinned in `io_model`; commands/tools flow into the live session since M1) |
+| Out-of-workspace SDK example | `plugin.execute` (`example.sticker.create`) | `ext-sticker` (3, own workspace) | ✅ |
+| Custom-button demos (Rust/JS/Python) | `tool.activate`, pointer ops, `session.state`, `view.renderModel` | runnable examples vs real artifacts | ✅ |
+| Generated `.d.ts`/`.pyi` parity | all 78 wire ops | generator `--check` (CI) + `tsc` + protocol cross-check | ✅ |
 | Lock/hide | `node.setLocked`, `node.create/update` | `document_model` | ✅ |
 | Z-order | `node.reorder`, `node.bringToFront/SendToBack/BringForward/SendBackward` | `parity_model`, `bindings_react` | ✅ |
 | Schema v1 + repair + clipboard codec | `io.importScene/exportScene`, `clipboard.*` | `io_model` (21, TS goldens) | 🟡 (v1 only; M4) |

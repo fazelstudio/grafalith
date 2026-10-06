@@ -139,6 +139,23 @@ unavailable here), Python/Tauri integration tests.
   first out-of-tree example crate (node type + tool + command) living outside
   the workspace, built in CI against the published artifact.
 
+**Status 2026-10-05: done.** Shipped: `examples/ext-sticker` (own
+workspace via root `exclude`, sticker type + tool + command, 3 tests
+green); `CommandContext::{fresh_element_id, fresh_nonce, fresh_seed}` so
+plugin commands mint ids without touching internals; custom-button demos
+in Rust + JS + Python, each executed green against real artifacts (native
+example, `pkg/node` wasm build, installed maturin wheel);
+`scripts/gen_command_bindings.py` (single 78-op table →
+`generated/nary-commands.d.ts` + `generated/nary.pyi`, cross-checked
+against `protocol.rs` op names, `.d.ts` passes `tsc --noEmit`, CI runs
+`--check`); `bun run build:wasm` + `build:wasm:node` green
+(`nary_bg.wasm` 1303 KB raw / 374 KB gzip — the <150 KB PRD target is
+**not** met with `wasm-opt=false`; publish-time `-Oz` is the recorded
+follow-up); `maturin build` debug + `--release` green (release wheel
+0.63 MB) with the Python demo run green on the installed wheel. Deferred
+as designed: full `nary-sdk` facade crate (registries + `executeCommand`
+already cover its surface; the crate is packaging, not capability).
+
 ## Status
 
 | Milestone | State (2026-10-04) |
@@ -149,4 +166,5 @@ unavailable here), Python/Tauri integration tests.
 | M3 | Done (2026-10-05) |
 | M4 | Done (2026-10-05) |
 | M5 | Done (2026-10-05) |
+| M6 | Done (2026-10-05) |
 | M2–M6 | Planned, ordered, unblocked in sequence; each is independently shippable |

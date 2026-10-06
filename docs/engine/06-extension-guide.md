@@ -128,3 +128,18 @@ direct field mutation).
 - `engine-preset-minimal`: document + selection + history only.
 - Heavy codecs (`usvg`, `parley`-based layout) arrive as Cargo features so
   minimal users pay nothing (M4/M6).
+
+## 5. Worked examples in this repo (M6, all executed green)
+
+- `examples/ext-sticker/` — standalone workspace crate (excluded from the
+  engine workspace): sticker node type + tool + history-tracked command,
+  3 integration tests. Run: `cargo test --manifest-path
+  examples/ext-sticker/Cargo.toml`.
+- `examples/custom-button/` — one toolbar scenario on three hosts, each
+  against a real built artifact: Rust (`cargo run -p nary-bindings
+  --example custom_button`), JS (`node examples/custom-button/button.cjs`
+  after `bun run build:wasm:node`), Python (`python
+  examples/custom-button/button.py` after installing the maturin wheel).
+- `generated/nary-commands.d.ts` + `generated/nary.pyi` — produced by
+  `scripts/gen_command_bindings.py` from the single 78-op table
+  (cross-checked against `protocol.rs`; CI runs `--check`).

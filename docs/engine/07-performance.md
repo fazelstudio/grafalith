@@ -129,5 +129,10 @@ position index); 1M mutating paths unmeasured (setup dominates).
   wired as future fuzz targets.
 - `cargo-deny` / `cargo-audit` / `cargo-semver-checks` unavailable here —
   recorded as CI follow-up (master allows "bila tersedia").
+- Property testing found one real boundary (proptest shrinking to
+  `cx=1.27e308, rot=-1.6e16`): rotation round-trips hold to 1e-9 inside
+  scene-size domains; beyond ~1e300, `px - cx` itself overflows to inf
+  (pure float behavior, never a panic — downstream finite guards at
+  storage/input boundaries treat inf as miss/invalid, as designed).
 - Desktop host drops images/hatch/grid/bounded-chrome (visual, not engine).
 - `wasm-opt=false` (larger WASM; documented Windows tradeoff, publish-time fix).
