@@ -20,10 +20,10 @@
 #![allow(clippy::useless_conversion)]
 
 use nary_bindings::{Engine, BINDINGS_VERSION, PROTOCOL_VERSION};
-use pyo3::conversion::IntoPy;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyFloat, PyList, PyLong, PyString, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
+use pyo3::{BoundObject, IntoPyObject, Py, PyAny};
 
 /// Instance-scoped engine handle for one Python document view.
 ///
@@ -50,7 +50,7 @@ fn py_to_json_value(obj: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
         let b: bool = obj.extract()?;
         return Ok(serde_json::Value::Bool(b));
     }
-    if obj.is_instance_of::<PyLong>() {
+    if obj.is_instance_of::<PyInt>() {
         if let Ok(n) = obj.extract::<i64>() {
             return Ok(serde_json::Value::from(n));
         }
@@ -76,7 +76,7 @@ fn py_to_json_value(obj: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
         return Ok(serde_json::Value::String(s));
     }
     if obj.is_instance_of::<PyList>() || obj.is_instance_of::<PyTuple>() {
-        let iter = obj.iter()?;
+        let iter = obj.try_iter()?;
         let mut items = Vec::new();
         for item in iter {
             items.push(py_to_json_value(&item?)?);
@@ -85,7 +85,7 @@ fn py_to_json_value(obj: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
     }
     if obj.is_instance_of::<PyDict>() {
         let dict = obj
-            .downcast::<PyDict>()
+            .cast::<PyDict>()
             .map_err(|_| PyErr::new::<PyValueError, _>("failed to downcast dict"))?;
         let mut map = serde_json::Map::new();
         for (key, value) in dict.iter() {
@@ -101,47 +101,61 @@ fn py_to_json_value(obj: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
     ))
 }
 
+/// Converts a primitive into an owned `PyAny`.
+///
+/// Infallible by construction: primitive Python conversions cannot fail,
+/// so the empty error arm documents the invariant instead of panicking.
+fn into_py_any<T>(py: Python<'_>, value: T) -> Py<PyAny>
+where
+    T: for<'py> IntoPyObject<'py, Error = std::convert::Infallible>,
+{
+    match value.into_pyobject(py) {
+        Ok(bound) => bound.into_any().unbind(),
+        Err(never) => match never {},
+    }
+}
+
 /// Converts a JSON value to its Python object.
 ///
 /// Uses `PyDict` for objects and `PyList` for arrays; scalars map to
 /// `None`/`bool`/`int`/`float`/`str` directly.
-fn json_to_py(py: Python<'_>, value: &serde_json::Value) -> PyResult<PyObject> {
+fn json_to_py(py: Python<'_>, value: &serde_json::Value) -> PyResult<Py<PyAny>> {
     match value {
         serde_json::Value::Null => Ok(py.None()),
-        serde_json::Value::Bool(b) => Ok(b.into_py(py)),
+        serde_json::Value::Bool(b) => Ok(into_py_any(py, *b)),
         serde_json::Value::Number(n) => {
             if let Some(n) = n.as_i64() {
-                Ok(n.into_py(py))
+                Ok(into_py_any(py, n))
             } else if let Some(n) = n.as_u64() {
-                Ok(n.into_py(py))
+                Ok(into_py_any(py, n))
             } else if let Some(n) = n.as_f64() {
-                Ok(n.into_py(py))
+                Ok(into_py_any(py, n))
             } else {
                 Err(PyErr::new::<PyValueError, _>(
                     "JSON number out of range for Python conversion",
                 ))
             }
         }
-        serde_json::Value::String(s) => Ok(s.clone().into_py(py)),
+        serde_json::Value::String(s) => Ok(into_py_any(py, s.clone())),
         serde_json::Value::Array(items) => {
-            let list = PyList::empty_bound(py);
+            let list = PyList::empty(py);
             for item in items {
                 list.append(json_to_py(py, item)?)?;
             }
-            Ok(list.into())
+            Ok(list.into_any().unbind())
         }
         serde_json::Value::Object(map) => {
-            let dict = PyDict::new_bound(py);
+            let dict = PyDict::new(py);
             for (key, item) in map {
                 dict.set_item(key, json_to_py(py, item)?)?;
             }
-            Ok(dict.into())
+            Ok(dict.into_any().unbind())
         }
     }
 }
 
 /// Parses a JSON-text string into a Python object.
-fn json_str_to_py(py: Python<'_>, text: &str) -> PyResult<PyObject> {
+fn json_str_to_py(py: Python<'_>, text: &str) -> PyResult<Py<PyAny>> {
     let value: serde_json::Value = serde_json::from_str(text).map_err(|err| {
         PyErr::new::<PyValueError, _>(format!("engine returned invalid JSON: {err}"))
     })?;
@@ -150,7 +164,7 @@ fn json_str_to_py(py: Python<'_>, text: &str) -> PyResult<PyObject> {
 
 /// Converts a Python `list[dict]` (or an already-encoded JSON-text
 /// string) into the batch JSON text the engine consumes.
-fn batch_to_json_string(py: Python<'_>, ops: &PyObject) -> PyResult<String> {
+fn batch_to_json_string(py: Python<'_>, ops: &Py<PyAny>) -> PyResult<String> {
     let bound = ops.bind(py);
     if let Ok(text) = bound.extract::<String>() {
         return Ok(text);
@@ -167,7 +181,7 @@ fn batch_to_json_string(py: Python<'_>, ops: &PyObject) -> PyResult<String> {
 
 /// Converts a Python scene (`dict` or JSON-text string) into the scene
 /// JSON text the engine consumes.
-fn scene_to_json_string(py: Python<'_>, scene: &PyObject) -> PyResult<String> {
+fn scene_to_json_string(py: Python<'_>, scene: &Py<PyAny>) -> PyResult<String> {
     let bound = scene.bind(py);
     if let Ok(text) = bound.extract::<String>() {
         return Ok(text);
@@ -179,7 +193,7 @@ fn scene_to_json_string(py: Python<'_>, scene: &PyObject) -> PyResult<String> {
 
 /// Converts Python PNG options (`dict`, JSON-text string, or `None`) into
 /// the options JSON text the engine consumes (`None` means defaults).
-fn options_to_json_string(py: Python<'_>, options: &PyObject) -> PyResult<String> {
+fn options_to_json_string(py: Python<'_>, options: &Py<PyAny>) -> PyResult<String> {
     let bound = options.bind(py);
     if bound.is_none() {
         return Ok("{}".to_string());
@@ -213,7 +227,7 @@ impl PyEngine {
     /// protocol, including `align`, `distribute`, and `applyAutoLayout`
     /// (e.g. `{"op": "align", "ids": ["a", "b"], "mode": "left"}`).
     /// Per-op problems are `ok: False` entries — never raised.
-    pub fn apply_batch(&mut self, py: Python<'_>, ops: PyObject) -> PyResult<PyObject> {
+    pub fn apply_batch(&mut self, py: Python<'_>, ops: Py<PyAny>) -> PyResult<Py<PyAny>> {
         batch_to_json_string(py, &ops).and_then(|batch_json| {
             let out = self.inner.apply_batch(&batch_json);
             json_str_to_py(py, &out)
@@ -221,14 +235,14 @@ impl PyEngine {
     }
 
     /// Returns the whitelisted status snapshot as a dict (render-loop dirty checks, toolbar state).
-    pub fn status(&self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn status(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         serde_json::to_value(self.inner.status())
             .map_err(engine_err)
             .and_then(|value| json_to_py(py, &value))
     }
 
     /// Exports the document to its scene dict.
-    pub fn export_scene(&self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn export_scene(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.inner
             .export_scene()
             .map_err(engine_err)
@@ -243,9 +257,9 @@ impl PyEngine {
     pub fn import_scene(
         &mut self,
         py: Python<'_>,
-        scene: PyObject,
+        scene: Py<PyAny>,
         tracked: bool,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         scene_to_json_string(py, &scene).and_then(|payload| {
             let summary = self
                 .inner
@@ -296,14 +310,14 @@ impl PyEngine {
 
     /// Decodes a clipboard payload string to `{"count", "skipped", "ids"}` without touching engine state.
     #[staticmethod]
-    pub fn decode_clipboard(py: Python<'_>, payload: &str) -> PyResult<PyObject> {
+    pub fn decode_clipboard(py: Python<'_>, payload: &str) -> PyResult<Py<PyAny>> {
         Engine::decode_clipboard(payload)
             .map_err(engine_err)
             .and_then(|value| json_to_py(py, &value))
     }
 
     /// Plans PNG export from an options dict and returns the plan dict (pure math — the host rasterizes).
-    pub fn plan_png_export(&self, py: Python<'_>, options: PyObject) -> PyResult<PyObject> {
+    pub fn plan_png_export(&self, py: Python<'_>, options: Py<PyAny>) -> PyResult<Py<PyAny>> {
         options_to_json_string(py, &options).and_then(|options_json| {
             self.inner
                 .plan_png_export(&options_json)
@@ -313,7 +327,7 @@ impl PyEngine {
     }
 
     /// Plans JPEG export from an options dict and returns the plan dict (no alpha: transparent resolves to white).
-    pub fn plan_jpeg_export(&self, py: Python<'_>, options: PyObject) -> PyResult<PyObject> {
+    pub fn plan_jpeg_export(&self, py: Python<'_>, options: Py<PyAny>) -> PyResult<Py<PyAny>> {
         options_to_json_string(py, &options).and_then(|options_json| {
             self.inner
                 .plan_jpeg_export(&options_json)
@@ -323,7 +337,7 @@ impl PyEngine {
     }
 
     /// Plans WebP export from an options dict and returns the plan dict (pure math — the host encodes).
-    pub fn plan_webp_export(&self, py: Python<'_>, options: PyObject) -> PyResult<PyObject> {
+    pub fn plan_webp_export(&self, py: Python<'_>, options: Py<PyAny>) -> PyResult<Py<PyAny>> {
         options_to_json_string(py, &options).and_then(|options_json| {
             self.inner
                 .plan_webp_export(&options_json)
@@ -348,7 +362,7 @@ impl PyEngine {
     ///
     /// `mode` is one of `"left"`, `"right"`, `"top"`, `"bottom"`,
     /// `"centerH"`, `"centerV"`. Returns the batch-result dict.
-    pub fn align(&mut self, py: Python<'_>, ids: Vec<String>, mode: String) -> PyResult<PyObject> {
+    pub fn align(&mut self, py: Python<'_>, ids: Vec<String>, mode: String) -> PyResult<Py<PyAny>> {
         let ops = serde_json::json!([{ "op": "align", "ids": ids, "mode": mode }]).to_string();
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
@@ -361,13 +375,13 @@ impl PyEngine {
         py: Python<'_>,
         ids: Vec<String>,
         axis: String,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let ops = serde_json::json!([{ "op": "distribute", "ids": ids, "axis": axis }]).to_string();
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Runs a frame's auto-layout config as one undo step.
-    pub fn apply_auto_layout(&mut self, py: Python<'_>, frame_id: String) -> PyResult<PyObject> {
+    pub fn apply_auto_layout(&mut self, py: Python<'_>, frame_id: String) -> PyResult<Py<PyAny>> {
         let ops = serde_json::json!([{ "op": "applyAutoLayout", "frameId": frame_id }]).to_string();
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
@@ -381,7 +395,7 @@ impl PyEngine {
         ids: Vec<String>,
         original: (f64, f64, f64, f64),
         next: (f64, f64, f64, f64),
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let ops = serde_json::json!([{
             "op": "resizeSelection",
             "ids": ids,
@@ -403,12 +417,12 @@ impl PyEngine {
     }
 
     /// Starts a pen session for multi-click path creation.
-    pub fn pen_begin(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn pen_begin(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"penBegin"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Clicks a pen anchor at a scene point (`closed` = path closed).
-    pub fn pen_click(&mut self, py: Python<'_>, x: f64, y: f64) -> PyResult<PyObject> {
+    pub fn pen_click(&mut self, py: Python<'_>, x: f64, y: f64) -> PyResult<Py<PyAny>> {
         let ops = format!(r#"[{{"op":"penClick","x":{x},"y":{y}}}]"#);
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
@@ -420,23 +434,23 @@ impl PyEngine {
         x: f64,
         y: f64,
         alt_break: bool,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let ops = format!(r#"[{{"op":"penDragHandle","x":{x},"y":{y},"altBreak":{alt_break}}}]"#);
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Commits the pen session as one history entry (`committed` + `id`).
-    pub fn pen_commit(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn pen_commit(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"penCommit"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Cancels the pen session with no document effect.
-    pub fn pen_cancel(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn pen_cancel(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"penCancel"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Starts a crop session over an image element.
-    pub fn crop_start(&mut self, py: Python<'_>, id: String) -> PyResult<PyObject> {
+    pub fn crop_start(&mut self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         let ops = format!(r#"[{{"op":"cropStart","id":"{id}"}}]"#);
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
@@ -448,23 +462,23 @@ impl PyEngine {
         handle: String,
         x: f64,
         y: f64,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let ops = format!(r#"[{{"op":"cropDrag","handle":"{handle}","x":{x},"y":{y}}}]"#);
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Commits the crop session as one history entry.
-    pub fn crop_commit(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn crop_commit(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"cropCommit"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Cancels the crop session with no document effect.
-    pub fn crop_cancel(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn crop_cancel(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"cropCancel"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Starts a path-edit session over a path element.
-    pub fn path_edit_begin(&mut self, py: Python<'_>, id: String) -> PyResult<PyObject> {
+    pub fn path_edit_begin(&mut self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         let ops = format!(r#"[{{"op":"pathEditBegin","id":"{id}"}}]"#);
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
@@ -478,7 +492,7 @@ impl PyEngine {
         y: f64,
         zoom: f64,
         alt: bool,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let ops =
             format!(r#"[{{"op":"pathEditPress","x":{x},"y":{y},"zoom":{zoom},"alt":{alt}}}]"#);
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
@@ -491,29 +505,29 @@ impl PyEngine {
         x: f64,
         y: f64,
         alt_break: bool,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let ops = format!(r#"[{{"op":"pathEditDrag","x":{x},"y":{y},"altBreak":{alt_break}}}]"#);
         text_to_py(py, &ops).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Releases the active path-edit drag.
-    pub fn path_edit_release(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn path_edit_release(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"pathEditRelease"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Commits the path-edit session as one history entry.
-    pub fn path_edit_commit(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn path_edit_commit(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"pathEditCommit"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 
     /// Cancels the path-edit session with no document effect.
-    pub fn path_edit_cancel(&mut self, py: Python<'_>) -> PyResult<PyObject> {
+    pub fn path_edit_cancel(&mut self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         text_to_py(py, r#"[{"op":"pathEditCancel"}]"#).and_then(|ops| self.apply_batch(py, ops))
     }
 }
 
 /// Parses a JSON-text string into a Python object.
-fn text_to_py(py: Python<'_>, text: &str) -> PyResult<PyObject> {
+fn text_to_py(py: Python<'_>, text: &str) -> PyResult<Py<PyAny>> {
     json_str_to_py(py, text)
 }
 
@@ -542,8 +556,7 @@ mod tests {
 
     #[test]
     fn json_round_trip_covers_scalars_and_containers() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let cases = [
                 serde_json::json!(null),
                 serde_json::json!(true),

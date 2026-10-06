@@ -1,0 +1,59 @@
+# cargo-deny configuration (M7 follow-up).
+#
+# Scope: the ENGINE workspace (crates/nary-*). The desktop host
+# (apps/desktop, untracked Tauri scaffold) is excluded: it is a separate
+# product with its own GUI-stack licenses (MPL-2.0 via wry, Unicode-3.0
+# via idna) that never ship in npm/PyPI engine artifacts. Engine policy
+# stays strict permissive (MIT/Apache-2.0/BSD/Zlib-family); copyleft,
+# proprietary, and unknown licenses fail the gate.
+
+[graph]
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+exclude = ["nary-desktop"]
+
+[advisories]
+db-path = "~/.cargo/advisory-dbs"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Scope (not severity): report unmaintained crates everywhere, including
+# transitive deps.
+# Note: RUSTSEC-2024-0370 (proc-macro-error) lives only in the excluded
+# desktop host stack (gtk → tauri); it is intentionally absent here. If
+# the desktop host ever enters this gate's scope, add it back with a
+# dated justification instead of weakening `unmaintained`.
+unmaintained = "all"
+ignore = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+# The desktop host manifest is untracked upstream scaffolding outside this
+# gate's scope (see [graph] exclude); its path-only deps stay untouched.
+[[bans.skip]]
+name = "nary-desktop"
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "Unlicense",
+    "Zlib",
+    "ISC",
+    # Apache-2.0 plus an additional permission (strictly more permissive):
+    # target-lexicon, via build tooling.
+    "Apache-2.0 WITH LLVM-exception",
+    # Unicode data tables for identifier lexing (unicode-ident, via syn in
+    # every derive macro — unavoidable in any Rust project using serde).
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+]
+private = { ignore = true }
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
