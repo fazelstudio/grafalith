@@ -32,6 +32,11 @@ jobs:
       - name: Clippy (zero warnings)
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Run tests
         run: cargo test --workspace
 

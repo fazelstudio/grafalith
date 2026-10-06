@@ -100,6 +100,11 @@ bun run dev:python
 bun run build:python
 ```
 
+Native Rust tests for the Python converters run inside
+`cargo test --workspace` (they link the system interpreter).
+maturin enables the `extension-module` feature for wheels automatically,
+so never pass it to plain `cargo` commands.
+
 ### Desktop demo (Tauri reference host)
 
 ```bash
