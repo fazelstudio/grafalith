@@ -16,8 +16,8 @@ command; no capability is internal-only.
 | Custom types + plugins | `node.create` (custom), `tool.activate` (custom tool), `plugin.execute` (commands) | `plugin_example` (4), `plugin_commands` (6), `plugin_protocol` (3), `command_coverage` (2) | 🟡 (import skips unknown types by design, pinned in `io_model`; commands/tools flow into the live session since M1) |
 | Out-of-workspace SDK example | `plugin.execute` (`example.sticker.create`) | `ext-sticker` (3, own workspace) | ✅ |
 | Custom-button demos (Rust/JS/Python) | `tool.activate`, pointer ops, `session.state`, `view.renderModel` | runnable examples vs real artifacts | ✅ |
-| Generated `.d.ts`/`.pyi` parity | all 78 wire ops | generator `--check` (CI) + `tsc` + protocol cross-check | ✅ |
-| TypeScript SDK (client + registry) | all 78 wire ops via `batch()` + typed helpers | `tsc --noEmit` + runnable bun example vs real wasm | ✅ |
+| Generated `.d.ts`/`.pyi` parity | all 79 wire ops | generator `--check` (CI) + `tsc` + protocol cross-check | ✅ |
+| TypeScript SDK (client + registry) | all 79 wire ops via `batch()` + typed helpers | `tsc --noEmit` + runnable bun example vs real wasm | ✅ |
 | Rust SDK facade | plugin traits + registry (re-export) | `sdk_surface` (1) | ✅ |
 | Dependency security gate | advisories + bans + licenses + sources | `cargo deny check` green (deny.toml, engine scope) | ✅ (pyo3 0.29 upgrade killed 2 RUSTSEC) |
 | Lock/hide | `node.setLocked`, `node.create/update` | `document_model` | ✅ |
@@ -29,12 +29,13 @@ command; no capability is internal-only.
 
 | Feature | Command(s) | Test | Status |
 |---|---|---|---|
-| Rectangle/ellipse/line/arrow/text/freedraw/image/path | `node.create`, `node.setBounds/Rotation` | `parity_model` (57) | ✅ (rect radius single; arc/ring ❌) |
+| Rectangle/ellipse/line/arrow/text/freedraw/image/path | `node.create`, `node.setBounds/Rotation` | `parity_model` (57) | ✅ (rect per-corner radii + legacy roundness; arc/ring ❌) |
 | Pen session | `pen.begin/click/dragHandle/commit/cancel` | `layout_binding_ops` | ✅ |
 | Path edit session | `path.begin/press/drag/release/commit/cancel` | `layout_binding_ops` | ✅ |
 | Crop session | `crop.start/drag/commit/cancel` | `layout_binding_ops` | ✅ |
 | Solid fill / stroke / opacity | `style.set` | `bindings_model` | ✅ |
-| Linear/radial gradient | stored + `style.set` gradient objects (shared io fill parser) | `bindings_model`, `io_model` | ✅ (angular/diamond still ❌ — needs element field, approval-gated) |
+| Linear/radial/angular gradient | stored + `style.set` gradient objects (shared io fill parser) | `bindings_model`, `io_model` | ✅ (diamond still ❌ — on demand) |
+| Stroke cap/join/align | `style.set` (`strokeCap/Join/Align`, explicit reject) | `bindings_model` | ✅ (per-side/dash-pattern ❌) |
 | Align (6) / distribute (2) | `align.align`, `distribute.distribute` | `layout_binding_ops` | ✅ |
 | Constraints / manual auto-layout / block resize | `node.setBounds/Rotation` (constraints inside), `layout.applyAutoLayout`, `selection.resize` | units + `layout_binding_ops` | ✅/🟡 (no live re-layout) |
 | Arrow binding follow | `node.move`, `node.setBounds`, `selection.nudge`, `clipboard.paste` (inside) | `layout_binding_ops` | ✅ |
@@ -47,13 +48,14 @@ command; no capability is internal-only.
 | Move/resize/rotate + previews | `node.move/setBounds/setRotation`, `view.previewMove/Resize/Rotate` | `parity_model`, `bindings_react` | ✅ (single-rotate; multi-rotate M3) |
 | Snap (grid/object/guides) | `node.move` (inside), `session.configure` | `parity_model`, `geometry_model` | 🟡 (no spacing-distribution op) |
 | Pan/zoom + viewport + culling | `view.wheel`, `view.setViewport`, `view.fit/fill`, `view.renderModel` | `bindings_react`, `geometry_model`, `viewport_frame` (4), `render_golden` | ✅ (golden-locked DTO; tile cache follow-up) |
-| Text + IME sessions | `text.*` (10 commands) | `bindings_react`, `parity_model` | 🟡 (plain text; `parley` deferred) |
+| Text + IME sessions | `text.*` (10 commands) | `bindings_react`, `parity_model` | 🟡 (plain text; `parley` spike in `nary-text`, integration deferred) |
 | Clipboard (internal, fresh ids) | `clipboard.copy/paste/duplicate/cut` | `clipboard_model` (19) | ✅ |
 | Undo/redo (atomic, coalesced) | `edit.undo/redo` | `history_model` (18) | ✅ (linear, max 100) |
 | PNG/JPEG/WebP plans / JSON / assets | `view.renderModel`, `io.*`, `asset.notifyChanged`, `plan_*_export` methods | `io_model`, `bindings_react`, `bindings_model` | ✅ plans (raster + fetch host-side, by design) |
-| Outline / offset / simplify / SVG / PDF / video / pages / skew / eraser / tracing | — | — | ❌ (SVG import needs `usvg` dep approval; outline/offset need path-boolean ADR; rest on demand — see M4 status) |
+| SVG import | `io.importSvg` (`svg` feature; JS/wasm + native) | `svg_model`, `svg_protocol` | ✅ (Python facade defers; outline/offset need follow-up; PDF/video/pages/skew/eraser/tracing rest on demand) |
+| Outline / offset / simplify / PDF / video / pages / skew / eraser / tracing | — | — | ❌ (on demand; outline/offset build on the M8 path-boolean seam) |
 | Events + introspection | `session.drainEvents/state`, `selection.contextMenu`, `view.*` previews | `bindings_react` (37) | ✅ (finer `docChanged` granularity M1) |
-| Boolean ops (rect-exact) | `boolean.union/subtract/intersect/exclude` | `boolean_ops` (3), `boolean_model` (3), geometry `boolean` (3 + 500-box invariants) | ✅ rect-only (paths → explicit `unsupported`; `i_overlay` follow-up needs approval) |
+| Boolean ops (rect-exact + paths) | `boolean.union/subtract/intersect/exclude` | `boolean_ops` (3), `boolean_model` (3), geometry `boolean` (3 + 500-box invariants) | ✅ rect-exact; closed paths via flatten + `i_overlay` (ADR-0020), holed → explicit `unsupported` |
 
 ## Harness status (M5 landed)
 

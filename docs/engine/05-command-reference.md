@@ -1,4 +1,4 @@
-# 05 — Command Reference (all 78 commands)
+# 05 — Command Reference (all 79 commands)
 
 Every capability is reachable through a unique command. Wire `op` strings are
 frozen (protocol v1); command IDs follow ADR-0016 (`namespace.action`).
@@ -8,7 +8,7 @@ stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
 `parseError`) + message. Source of truth: `crates/nary-bindings/src/protocol.rs`
 (`BatchOp`, `op_name`) and `engine.rs` dispatch. Tests: `bindings_model.rs`,
 `bindings_react.rs`, `layout_binding_ops.rs`, `parity_model.rs`,
-`interaction_model.rs`.
+`interaction_model.rs`, `svg_protocol.rs`.
 
 ## Document & nodes
 
@@ -35,7 +35,7 @@ stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
 
 | Command ID | Wire op | Input | H | Result data | Test |
 |---|---|---|---|---|---|
-| `style.set` | `setStyle` | `ids[], patch` (scalars + `background` string or gradient object via the shared io fill parser) | ✅ | — | `bindings_model` |
+| `style.set` | `setStyle` | `ids[], patch` (scalars + `strokeCap: butt\|round\|square`, `strokeJoin: miter\|round\|bevel`, `strokeAlign: center\|inside\|outside` + `background` string or gradient object incl. angular via the shared io fill parser) | ✅ | — | `bindings_model` |
 | `align.align` | `align` | `ids[], mode: left\|right\|top\|bottom\|centerH\|centerV` | ✅ | — | `layout_binding_ops` |
 | `distribute.distribute` | `distribute` | `ids[], axis: horizontal\|vertical` (<3 valid = no-op) | ✅ | — | `layout_binding_ops` |
 | `layout.applyAutoLayout` | `applyAutoLayout` | `frameId` | ✅ | — | `layout_binding_ops` |
@@ -51,7 +51,7 @@ stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
 | `session.drainEvents` | `drainEvents` | — | Q | queued events, oldest first (clears) | `bindings_react` |
 | `selection.contextMenu` | `contextMenu` | — | Q | applicable intents (host renders) | `bindings_react` |
 
-## Boolean operations (rectangles, exact)
+## Boolean operations (rectangles exact, paths via flatten + `i_overlay`)
 
 | Command ID | Wire op | Input | H | Result data | Test |
 |---|---|---|---|---|---|
@@ -61,8 +61,10 @@ stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
 | `boolean.exclude` | `booleanExclude` | `ids` (exactly two) | ✅ | `{affected, changed}` | `boolean_ops` |
 
 Arity violations are `invalidInput`, unknown/deleted ids `notFound`, locked or
-rotated inputs `invalidInput`, and non-rectangle inputs the stable
-`unsupported` code (path booleans are a follow-up behind a precision ADR).
+rotated inputs `invalidInput`. Closed-path inputs (path/freedraw/ellipse/
+rectangle outlines) run through flatten + `i_overlay` (ADR-0020) and return
+`BooleanResults::Paths`; holed results are the stable `unsupported` code,
+degenerate inputs `invalidInput`. Tests: `boolean_ops`, `boolean_model`.
 
 ## Plugin commands (dynamic dispatch)
 | Command ID | Wire op | Input | H | Result data | Test |
@@ -90,6 +92,7 @@ describe / can / dryRun`) stays roadmap M1-follow-up; the dispatch seam is
 | Command ID | Wire op | Input | H | Result data | Test |
 |---|---|---|---|---|---|
 | `io.importScene` | `importScene` | `scene{schemaVersion,elements,elementOrder}, tracked=false` | ✅ iff `tracked` | skipped count | `io_model` |
+| `io.importSvg` | `importSvg` | `svg` (string), `tracked=false` — `svg` feature only (`usvg` in `nary-io`; JS/wasm + native; Python facade defers) | ✅ iff `tracked` | `{imported, skipped}` | `svg_model`, `svg_protocol` |
 | `io.exportScene` | `exportScene` | — | Q | scene JSON string | `io_model` |
 | `asset.notifyChanged` | `notifyAssetsChanged` | — | — | bumps `asset_generation` | `bindings_react` |
 

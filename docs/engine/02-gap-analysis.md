@@ -62,7 +62,7 @@ should live.
 | Frame | ✅ | `frame.rs`, clip partition in render |
 | Group | ✅ | `group.rs`, innermost-first, nested-safe ungroup, drill-in |
 | Component/instance/variant | 🟡 | `components.rs`: define/resolve/overrides/cache/actions; no nesting beyond frame expansion, no variant system |
-| Boolean group | ❌ | No boolean path ops at all |
+| Boolean group | ✅ | Exact rectangle ops (M2) + closed-path ops via flatten + `i_overlay` (M8, ADR-0020); holed results explicit `unsupported` |
 | Mask/clipping | 🟡 | Frame `clip_content` partition only; no mask stack |
 | Layers order (z-index/fractional) | 🟡 | Explicit `order` vector (not fractional index); reorder ops ✅ |
 | Lock/hide | ✅ | `lock.rs`, `hidden` flag, filtered in cull/hit |
@@ -73,7 +73,7 @@ should live.
 
 | Capability | Status | Note |
 |---|---|---|
-| Rectangle (per-corner radius) | 🟡 | Single `roundness`, not per-corner |
+| Rectangle (per-corner radius) | ✅ | Per-corner `CornerRadii` + legacy single `roundness` (M8) |
 | Ellipse/circle/arc/ring | 🟡 | Ellipse ✅; arc/ring ❌ |
 | Line | ✅ | Relative points, stroke hit |
 | Arrow (arrowhead) | ✅ | Both ends, binding follow |
@@ -84,16 +84,16 @@ should live.
 | Text | 🟡 | Plain single-style; host measures |
 | Image | 🟡 | Reference + crop rect; host fetches/decodes/draws |
 | Video/embed | ❌ | — |
-| SVG nested | ❌ | No SVG import (`usvg` deferred to `nary-io`) |
+| SVG nested | ✅ | `io.importSvg` via `usvg` in `nary-io` (`svg` feature; Python facade defers) |
 
 **Style**
 
 | Capability | Status | Note |
 |---|---|---|
 | Fill solid | ✅ | — |
-| Gradient linear/radial/angular/diamond | 🟡 | Linear/radial stored; angular/diamond ❌; host rebuilds endpoints; `setStyle` gradient rejected (`unsupported`) |
+| Gradient linear/radial/angular/diamond | 🟡 | Linear/radial/angular stored; diamond ❌; host rebuilds endpoints; `setStyle` accepts gradient objects (M8) |
 | Image/pattern fill | ❌ | — |
-| Stroke width/cap/join/dash/align/per-side | 🟡 | Width + solid/dashed/dotted ✅; cap/join/align/per-side ❌ |
+| Stroke width/cap/join/dash/align/per-side | 🟡 | Width + solid/dashed/dotted + cap/join/align ✅ (M8); per-side ❌ |
 | Multiple fills/strokes | ❌ | Single each |
 | Effects (shadow/blur/bg-blur) | ❌ | `opacity` only |
 | Blend modes | ❌ | — |
@@ -121,7 +121,8 @@ paints nothing) · nudging ✅ · alt-drag duplicate ❌ (explicit `duplicate` o
 only) · align/distribute ✅ · tool = extensible state machine 🟡 (phase machine
 ✅, registry names-only — behavior hooks missing).
 
-**Operations**: boolean ops 🟡 (exact rectangle ops shipped M2; path ops need the `i_overlay` dependency decision) · outline
+**Operations**: boolean ops ✅ (exact rectangle ops M2; closed-path ops via
+`i_overlay` M8, ADR-0020) · outline
 stroke ❌ · flatten ❌ · offset ❌ · simplify ❌ · convert-to-path ❌ ·
 group/ungroup ✅ · z-order ✅ · copy/paste ✅ (internal + versioned/bare-array
 codec; OS bytes host-side) · transform matrix API 🟡 (`resize/rotate/move`
@@ -137,7 +138,7 @@ journal; `yrs`/`loro` deferred to design-only).
 multi-viewport ❌ · minimap-ready 🟡 (cull + bounds queries suffice, no
 dedicated op) · culling ✅.
 
-**I/O**: SVG ❌ · PNG/JPEG/WebP 🟡 (pure-math PNG plan; raster host-side; no
+**I/O**: SVG ✅ (`io.importSvg`, `svg` feature) · PNG/JPEG/WebP 🟡 (pure-math PNG plan; raster host-side; no
 JPEG/WebP) · PDF ❌ · JSON native ✅ · clipboard ✅ · asset manager 🟡 (sync
 store; fetch/decode/GC/dedup/quota host-side) · lazy/streaming ❌.
 

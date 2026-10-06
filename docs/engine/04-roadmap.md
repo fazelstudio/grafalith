@@ -168,6 +168,7 @@ already cover its surface; the crate is packaging, not capability).
 | M5 | Done (2026-10-05) |
 | M6 | Done (2026-10-05) |
 | M7 | Done (2026-10-06) |
+| M8 | Done (2026-10-06) |
 | M2–M6 | Planned, ordered, unblocked in sequence; each is independently shippable |
 
 ## M7 — Follow-up batch (2026-10-06)
@@ -205,3 +206,34 @@ Owner-ordered continuation. Shipped:
 Environment blockers (not code gaps): libfuzzer link on this Windows box;
 `cargo-audit` skipped as redundant (same rustsec DB as deny advisories,
 already green); Tauri IPC tests untouched (desktop app out of scope).
+
+## M8 — Precision batch: path boolean, SVG import, style fields (2026-10-06)
+
+Owner-approved continuation (approvals: `i_overlay`, `usvg`, `parley`,
+element fields, wasm-sandbox-design-now). Shipped:
+
+- **Path boolean** (ADR-0020): closed contours (path/freedraw/ellipse/
+  rectangle outlines) flatten to polygons and run through `i_overlay 9`
+  (`default-features = false`, vetted further per approval): union,
+  intersect, subtract, exclude return `BooleanResults::Paths`; holed
+  results stay the stable `unsupported` code, degenerate inputs
+  `invalidInput`. Rect fast path unchanged (`crates/nary-geometry/src/
+  boolean.rs`).
+- **SVG import**: `usvg`-based `nary-io` `svg` feature
+  (`crates/nary-io/src/svg.rs`: `svg_to_elements`,
+  `import_svg_str[_tracked]`) wired as the 79th wire op `importSvg`
+  (`Engine::import_svg`, `JsEngine::import_svg`; Python facade defers).
+  Generator table 78 → 79 with `--check` green again.
+- **Element style fields**: `StrokeCap` (butt/round/square), `StrokeJoin`
+  (miter/round/bevel), `StrokeAlign` (center/inside/outside),
+  per-corner `CornerRadii`, `GradientType::Angular` — all through
+  `Document` validate-then-store, `setStyle` patch + wire parsing with
+  explicit `invalidInput` on unknown strings, schema v1 round-trip with
+  old-JSON defaults, render DTO + golden updated (purely additive).
+- **Text spike**: `crates/nary-text` (`parley 0.11.1`, `TextLayout`,
+  `ParleyMeasurer`, 3 tests) — measurement seam proven, integration
+  deferred to a scoped milestone.
+- **WASM sandbox design** (`09-wasm-sandbox-design.md`, design only, no
+  code): threat model, closed capability list, fuel metering, module
+  loading/versioning, and the unblock condition (third-party
+  distribution + dedicated security review).
