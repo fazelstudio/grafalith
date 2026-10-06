@@ -1,4 +1,4 @@
-# @fazelstudio/nary-sdk — TypeScript extension SDK (M7)
+# @fazelstudio/nary-sdk — TypeScript extension SDK
 
 The primary extension-ecosystem surface (VSCode model): extensions are
 TypeScript modules with a manifest, activated by the host against a typed
@@ -12,7 +12,7 @@ formats JSON batches and parses results over the stable protocol.
   and `OverlayRegistry` (custom canvas layers).
 - `example/toolbar-extension.ts` — runnable toolbar + overlay scenario.
 
-## Boundary rule (ADR-0019)
+## Boundary rule
 
 TypeScript extensions contribute **UI, tools buttons, panels, canvas
 overlays, and automation**. New **node types** and history-integrated

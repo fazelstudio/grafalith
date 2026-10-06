@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   // Global ignores: build output, dependencies, generated files.
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/pkg/**', '**/target/**'],
   },
   // Base JS recommended rules (applies to all files).
   js.configs.recommended,

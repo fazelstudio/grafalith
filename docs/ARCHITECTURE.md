@@ -1,4 +1,13 @@
-# ARCHITECTURE — Fazelidraw
+# ARCHITECTURE — Nary
+
+> The Rust workspace (`crates/*`) is the single source of truth. The
+> conceptual decisions in this document (data-oriented elements, Map-based
+> scene, render as data, command-pattern history, spatial grid,
+> instance-scoped state) remain the contract — see `crates/README.md` for
+> the Rust module map. Where this document names TypeScript paths, read them
+> as "the equivalent Rust module". For host usage, see
+> `docs/guides/javascript.md`, `docs/guides/python.md`, and
+> `docs/guides/commands.md`.
 
 This document is the **technical contract**. Decisions here must not be changed by AI agents without explicit maintainer approval. If an AI agent needs to deviate from this document, they must **stop and ask**, not silently change the architecture.
 
@@ -7,7 +16,7 @@ This document is the **technical contract**. Decisions here must not be changed 
 ## 1. Design Principles
 
 1. **Data-oriented over object-oriented.** Elements are plain objects (interfaces), not classes with methods. Behavior (render, hitTest) lives in separate functions that take elements as parameters — not methods on the element itself. This makes elements 100% serializable (JSON.stringify works directly) and easy to diff for history.
-2. **Framework-agnostic core.** The `@fazelidraw/core` package must not import React/Vue/Svelte. UI (toolbar, property panel) lives in a separate layer that consumes the core through a public API.
+2. **Framework-agnostic core.** The `@fazelstudio/nary` package must not import React/Vue/Svelte. UI (toolbar, property panel) lives in a separate layer that consumes the core through a public API.
 3. **Single source of truth for the scene.** All elements live in one `Scene` store. No element state is duplicated in UI components.
 4. **Explicit over implicit.** No "magic" — every coordinate transformation, every cache invalidation must be explicit and traceable.
 
@@ -218,9 +227,9 @@ History is stored as a stack of `HistoryEntry[]`. Undo = apply `before` from the
 ## 7. Package Structure (Monorepo)
 
 ```
-fazelidraw/
+Nary/
   packages/
-    core/          # @fazelstudio/fazelidraw — pure engine, TypeScript, zero framework dependency
+    core/          # @fazelstudio/nary — pure engine, TypeScript, zero framework dependency
       src/
         scene/       # Scene store, element types
         render/      # Render pipeline, canvas layers
@@ -271,13 +280,13 @@ All customization is provided via a **config object passed during engine/compone
 
 ```typescript
 // CORRECT — config passed explicitly
-const engine = createFazelidraw({
+const engine = createNary({
   theme: myCustomTheme,
   shapeUtils: [myCustomShapeUtil],
 });
 
 // WRONG — don't do this
-FazelidrawTheme.primaryColor = '#ff0000'; // global mutation, race condition between instances
+NaryTheme.primaryColor = '#ff0000'; // global mutation, race condition between instances
 ```
 
 Reason: the engine must support **multiple instances on the same page** with different configurations (e.g., two side-by-side canvases with different themes) without affecting each other.
@@ -305,13 +314,13 @@ Built-in shapes (rectangle, ellipse, etc. from v1) are registered through the SA
 All visual values a developer might want to change (UI colors — NOT element drawing colors which already have `FillStyle` in §2.3 —, fonts, handle sizes, radii, etc.) are defined as tokens, not hardcoded in render code:
 
 ```typescript
-interface FazelidrawTheme {
+interface NaryTheme {
   colors: { background: string; selectionOutline: string; handleFill: string; /* ... */ };
   fonts: { default: string; /* available fonts in font picker */ };
   sizes: { handleSize: number; selectionOutlineWidth: number; /* ... */ };
 }
 
-const defaultTheme: FazelidrawTheme = { /* engine default values */ };
+const defaultTheme: NaryTheme = { /* engine default values */ };
 ```
 
 Render functions in `render-selection.ts` (from v1 Phase 3) and similar read from the `theme` resolved at that time (via context/parameter), not hardcoded constants.
@@ -321,7 +330,7 @@ Render functions in `render-selection.ts` (from v1 Phase 3) and similar read fro
 For UI components (toolbar, color picker, property panel) rendered by React in `packages/react` — NOT the core engine (core remains framework-agnostic per §1):
 
 ```typescript
-interface FazelidrawUIOverrides {
+interface NaryUIOverrides {
   components?: {
     ColorPicker?: React.ComponentType<ColorPickerProps>;
     Toolbar?: React.ComponentType<ToolbarProps>;
@@ -344,7 +353,7 @@ This layer addresses the need: **developers can build their own UI from scratch,
 
 ### 10.1 Why This is Different from §9 (Customization v2)
 
-§9 (Layers 1-3: Shape Registry, Theme, UI Overrides) assumes developers still use `FazelidrawEditor` from `packages/react` as the main framework, and replace parts of it via props. That's **composition within our framework**.
+§9 (Layers 1-3: Shape Registry, Theme, UI Overrides) assumes developers still use `NaryEditor` from `packages/react` as the main framework, and replace parts of it via props. That's **composition within our framework**.
 
 §10 is different: developers may **not use our framework at all**. They only need:
 1. A way to create an engine instance (Scene + all logic) without any DOM/React.
@@ -407,7 +416,7 @@ class Editor {
   unmount(): void;
 }
 
-function createEditor(config?: FazelidrawConfig): Editor; // same config as v2 (theme, shapes, etc.)
+function createEditor(config?: NaryConfig): Editor; // same config as v2 (theme, shapes, etc.)
 ```
 
 **Design principle for the methods above**: each method is a **thin wrapper** around functions that already exist in v1/v2 (`Scene.upsertElement`, `groupElements`, `alignLeft`, etc. from previous phases) — this phase does NOT rewrite logic, only exposes what already exists through one consistent contract. If an ability from a previous phase (e.g., `distributeHorizontal` from Phase 13) doesn't yet have a wrapper method in `Editor`, it must be added here — the list above is the minimum baseline, not the final complete list (audit all public functions from Phase 0-15 during implementation).
@@ -443,10 +452,5 @@ This is what distinguishes "can override components" (v2) from "full control" (v
 
 ### 10.5 Important Limitations
 
-- The Editor API does NOT replace `Scene`, `HistoryManager`, etc. that already exist — Editor is a **facade/wrapper**, not a new implementation. Phases 16-18 must not rewrite proven logic from Phases 0-15.
-- `packages/react` MUST be refactored (not rewritten from scratch) to internally use the same `Editor` API, proving this API is truly sufficient to build a full UI — if `packages/react` still needs direct access to internal Scene (not through Editor), that's a signal the API is incomplete and must be fixed, not left as-is.
-- The `mount()`/`unmount()` methods are still needed because core is still responsible for visual rendering (dual-canvas, §3) — "headless" here means "headless UI chrome" (toolbar, panel, etc.), NOT "headless rendering". If developers want to do their own visual rendering too (not just UI chrome), that's outside v3 scope — noted as a possible v4 if real needs arise.
-
----
-
-**Note for AI Agent**: This document is a contract. If instructions in phase documents (`docs/phases/*.md`) appear to conflict with this document, this document wins — report the conflict to the user, don't silently choose one side.
+- The Editor API does NOT replace `Scene`, `HistoryManager`, etc. that already exist — Editor is a **facade/wrapper**, not a new implementation.
+- The `mount()`/`unmount()` methods are still needed because core is still responsible for visual rendering (dual-canvas, §3) — "headless" here means "headless UI chrome" (toolbar, panel, etc.), NOT "headless rendering".

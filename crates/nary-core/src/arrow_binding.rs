@@ -230,8 +230,8 @@ pub fn update_bound_arrows(
     let bounds = target.bounds();
     let center = bounds.center();
 
-    // Phase 1: collect affected arrows (reads only; only matching arrows are
-    // cloned).
+    // Collect affected arrows first (reads only; only matching arrows are
+    // cloned) — storing waits until the document borrow ends.
     let mut pending: Vec<Element> = Vec::new();
     for element in ctx.doc().get_all_including_deleted() {
         let Element::Arrow(arrow) = element else {
@@ -285,7 +285,8 @@ pub fn update_bound_arrows(
         pending.push(next);
     }
 
-    // Phase 2: store (Document performs the authoritative version bump).
+    // Store the collected arrows (Document performs the authoritative
+    // version bump).
     let mut affected = Vec::with_capacity(pending.len());
     for next in pending {
         affected.push(next.id().clone());
@@ -317,7 +318,8 @@ pub fn update_bound_arrows_many(
     }
     let moved: HashSet<&ElementId> = moved_ids.iter().collect();
 
-    // Phase 1: collect affected arrows (reads only).
+    // Collect affected arrows first (reads only) — storing waits until
+    // the document borrow ends.
     let mut pending: Vec<Element> = Vec::new();
     for element in ctx.doc().get_all_including_deleted() {
         let Element::Arrow(arrow) = element else {
@@ -399,7 +401,8 @@ pub fn update_bound_arrows_many(
         pending.push(next);
     }
 
-    // Phase 2: store (Document performs the authoritative version bump).
+    // Store the collected arrows (Document performs the authoritative
+    // version bump).
     let mut affected = Vec::with_capacity(pending.len());
     for next in pending {
         affected.push(next.id().clone());

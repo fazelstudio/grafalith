@@ -1,7 +1,7 @@
 //! Command coverage: every [`BatchOp`](nary_bindings::protocol::BatchOp)
-//! parses from JSON, has a well-formed unique wire name (ADR-0016 naming
-//! linter), and dispatches through `apply_ops` without panicking (each
-//! yields exactly one per-op result, success or typed error).
+//! parses from JSON, has a well-formed unique wire name, and dispatches
+//! through `apply_ops` without panicking (each yields exactly one per-op
+//! result, success or typed error).
 
 use nary_bindings::protocol::{op_name, BatchOp};
 use nary_bindings::Engine;

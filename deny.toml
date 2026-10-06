@@ -1,4 +1,4 @@
-# cargo-deny configuration (M7 follow-up).
+# cargo-deny configuration.
 #
 # Scope: the ENGINE workspace (crates/nary-*). The desktop host
 # (apps/desktop, untracked Tauri scaffold) is excluded: it is a separate

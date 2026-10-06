@@ -6,14 +6,14 @@
 //! `packages/core/src/io/import-json.ts` (`migrateScene` version rule,
 //! per-element leniency).
 //!
-//! Design (ADR-0009): the schema lives here — not as serde derives on the
+//! Design: the schema lives here — not as serde derives on the domain —
 //! domain — so the wire format can version and migrate independently of the
 //! domain model while `nary-core` stays dependency-free. Element
 //! dispatch is manual on the `type` tag (unknown tags skip the element,
 //! mirroring the TS registry check) instead of a flattened tagged enum,
 //! keeping one conversion path in each direction.
 //!
-//! Strictness (module 08, lenient-version / strict-data): the envelope
+//! Strictness (lenient-version / strict-data): the envelope
 //! version is resolved leniently (`schemaVersion ?? version ?? 1`, exactly
 //! like TS `migrateScene`), while element data parses strictly into typed
 //! DTOs — anything mistyped skips the element instead of entering the
@@ -251,7 +251,7 @@ pub(crate) struct PathSegmentDto {
 // ---------------------------------------------------------------------------
 
 /// Mirror of TS `BaseElement`. `hidden`/`frameId` and the layout configs
-/// default for backward compatibility with older v1 exports (TS parity —
+/// default for backward compatibility with older exports (TS parity —
 /// `import-json.ts` fills `hidden = false`, `frameId = null` when absent).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -266,13 +266,13 @@ pub(crate) struct BaseDto {
     pub background_color: FillStyleDto,
     pub stroke_width: f64,
     pub stroke_style: StrokeStyleDto,
-    /// Cap style; absent in older v1 exports means butt (M8).
+    /// Cap style; absent in older exports means butt.
     #[serde(default)]
     pub stroke_cap: StrokeCapDto,
-    /// Join style; absent in older v1 exports means miter (M8).
+    /// Join style; absent in older exports means miter.
     #[serde(default)]
     pub stroke_join: StrokeJoinDto,
-    /// Stroke alignment; absent in older v1 exports means center (M8).
+    /// Stroke alignment; absent in older exports means center.
     #[serde(default)]
     pub stroke_align: StrokeAlignDto,
     pub fill_style: ElementFillStyleDto,
@@ -298,12 +298,12 @@ pub(crate) struct RectangleDto {
     #[serde(flatten)]
     pub base: BaseDto,
     pub roundness: Option<f64>,
-    /// Per-corner radii; absent in older v1 exports (M8).
+    /// Per-corner radii; absent in older exports.
     #[serde(default)]
     pub corners: Option<CornerRadiiDto>,
 }
 
-/// Per-corner radii, clockwise from top-left (M8).
+/// Per-corner radii, clockwise from top-left.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CornerRadiiDto {
@@ -513,8 +513,8 @@ fn fill_to_domain(value: &FillStyleDto) -> FillStyle {
 /// a solid fill, a fill object parses as [`FillStyleDto`]. Returns `None`
 /// for mistyped payloads (same leniency as element dispatch).
 ///
-/// Shared by file import and the `setStyle` fill-DTO phase so both paths
-/// validate identically — one parser, no drift.
+/// Shared by file import and `setStyle` so both paths validate identically
+/// — one parser, no drift.
 pub(crate) fn fill_from_value(value: &Value) -> Option<FillStyle> {
     match value {
         Value::String(color) => Some(FillStyle::Solid {

@@ -1,4 +1,4 @@
-//! Scale benchmarks: 1k / 10k / 100k / 1M scenes (M5).
+//! Scale benchmarks: 1k / 10k / 100k / 1M scenes.
 //!
 //! Read-only benches share one `OnceLock` document per size (built once per
 //! binary run); mutating benches rebuild per sample via `iter_batched`.

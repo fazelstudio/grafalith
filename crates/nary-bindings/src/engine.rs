@@ -1,33 +1,29 @@
-//! Deliberate host-boundary engine (ADR-0010, ADR-0011, modules 09 + 11).
+//! Deliberate host-boundary engine.
 //!
 //! [`Engine`] is the only stateful surface the bindings expose: an
 //! instance-scoped owner of the Rust [`Editor`](nary_core::editor::Editor),
-//! the [`Clipboard`], and the host-visible asset generation (ADR-0003 — no
-//! globals, so many engines coexist in one WASM module). It reuses the exact
+//! the [`Clipboard`], and the host-visible asset generation (no globals, so
+//! many engines coexist in one WASM module). It reuses the exact
 //! command/transaction/io machinery the Rust editor uses — no second
 //! implementation of any engine rule.
 //!
-//! Boundary rules enforced here:
-//!
-//! - every crossing is a JSON string typed in
-//!   [`protocol`](crate::protocol); Rust domain types never serialize
-//!   directly (render/session/event shapes live in
-//!   [`render_dto`](crate::render_dto));
-//! - [`Engine::apply_batch`] executes an op array in **one** crossing and
-//!   reports per-op outcomes; each op is individually atomic, the batch
-//!   itself is not a transaction (documented in the result shape, not
-//!   incidental). Query ops (`renderModel`, `contextMenu`, `drainEvents`,
-//!   `sessionState`) observe the state left by earlier ops in the same
-//!   batch, so one frame costs one crossing (module 09 batching rule);
-//! - element creation reuses the [`nary_io`] import pipeline through
-//!   a scratch document, so creation-time validation cannot drift from
-//!   file-import parity;
-//! - text commits use the deterministic [`FallbackMeasurer`](nary_core::text_session::FallbackMeasurer)
-//!   (0.6-factor sizing). The TS oracle measures with the canvas 2D
-//!   context; host-measured commits arrive in a later protocol version —
-//!   until then hosts needing pixel-exact boxes follow up with
-//!   `setBounds`. Pinned as an expected difference, not silent drift;
-//! - failures are JSON envelopes, never panics and never Rust internals.
+//! Boundary rules enforced here: every crossing is a JSON string typed in
+//! [`protocol`](crate::protocol) — Rust domain types never serialize
+//! directly (render/session/event shapes live in
+//! [`render_dto`](crate::render_dto)). [`Engine::apply_batch`] executes an
+//! op array in **one** crossing and reports per-op outcomes; each op is
+//! individually atomic while the batch itself is not a transaction
+//! (documented in the result shape, not incidental). Query ops
+//! (`renderModel`, `contextMenu`, `drainEvents`, `sessionState`) observe
+//! the state left by earlier ops in the same batch, so one frame costs one
+//! crossing. Element creation reuses the [`nary_io`] import pipeline through
+//! a scratch document, so creation-time validation cannot drift from
+//! file-import parity. Text commits use the deterministic
+//! [`FallbackMeasurer`](nary_core::text_session::FallbackMeasurer)
+//! (0.6-factor sizing): the TS oracle measures with the canvas 2D context,
+//! so hosts needing pixel-exact boxes follow up with `setBounds` (a pinned
+//! expected difference, not silent drift). Failures are JSON envelopes,
+//! never panics and never Rust internals.
 
 use std::collections::HashSet;
 
@@ -187,7 +183,7 @@ impl Engine {
         }
     }
 
-    /// Replaces document content from an SVG string (M8, `svg` feature).
+    /// Replaces document content from an SVG string (`svg` feature).
     ///
     /// Same atomicity contract as [`Engine::import_scene`]; shapes resolve
     /// to paths, text chunks to text, groups to group ids, and unsupported
@@ -969,7 +965,7 @@ impl Engine {
     }
 
     /// Creates one element through the scratch-document import pipeline so
-    /// creation-time validation is the file-import validation (ADR-0010).
+    /// creation-time validation is the file-import validation.
     fn op_create(&mut self, element: &Value) -> OpResult {
         let name = "create";
         let envelope = json!({
@@ -1008,8 +1004,8 @@ impl Engine {
     }
 
     /// Applies one rectangle boolean op: exactly two ids, one undoable
-    /// entry. Non-rectangle inputs surface the stable `unsupported` code
-    /// (path booleans are a follow-up); every other failure is typed.
+    /// entry. Non-rectangle inputs surface the stable `unsupported` code;
+    /// every other failure is typed.
     fn op_boolean(&mut self, op: &BatchOp, kind: BooleanOp, ids: &[String]) -> OpResult {
         let [first, second] = ids else {
             return err_result(
@@ -1056,8 +1052,8 @@ impl Engine {
     }
 
     /// Applies a style patch. Gradient `background` objects parse through
-    /// the shared io fill parser (same validation as file import, M4
-    /// fill-DTO phase); mistyped fills are explicit `invalidInput` errors.
+    /// the shared io fill parser (same validation as file import);
+    /// mistyped fills are explicit `invalidInput` errors.
     fn op_set_style(&mut self, ids: &[String], patch: &StylePatchJson) -> OpResult {
         let name = "setStyle";
         let domain = match parse_style_patch(patch) {
@@ -1093,7 +1089,7 @@ impl Engine {
 
     /// Applies host configuration: tool allow-list, theme override, snap
     /// config. Each present field validates before any write, so a bad
-    /// `configure` leaves the whole session untouched (Gate 5).
+    /// `configure` leaves the whole session untouched.
     fn op_configure(
         &mut self,
         op: &BatchOp,
@@ -1227,7 +1223,7 @@ enum LayerMove {
     Backward,
 }
 
-/// Parses a pointer-button name (touch counts as left, module 07).
+/// Parses a pointer-button name (touch counts as left).
 fn parse_button(button: &str) -> EngineResult<PointerButton> {
     match button {
         "left" => Ok(PointerButton::Left),
@@ -1317,7 +1313,7 @@ fn parse_crop_handle(handle: &str) -> EngineResult<nary_core::interaction::CropH
 ///
 /// Named keys follow the DOM `key` values (`"Delete"`, `"ArrowLeft"`, …);
 /// a single remaining character becomes [`Key::Char`]; anything else rides
-/// as [`Key::Other`] (logged, no behavior — module 07 host passthrough).
+/// as [`Key::Other`] (logged, no behavior — host passthrough).
 fn parse_key(key: &str) -> Key {
     match key {
         "Delete" => Key::Delete,
@@ -1339,7 +1335,7 @@ fn parse_key(key: &str) -> Key {
 }
 
 /// Converts a wire theme override to the domain override, rejecting
-/// non-finite numeric tokens before anything is applied (Gate 5).
+/// non-finite numeric tokens before anything is applied.
 fn parse_theme_override(json: &ThemeOverrideJson) -> EngineResult<ThemeOverride> {
     use nary_core::theme::{
         ThemeBorderRadiusOverride, ThemeColorsOverride, ThemeFontsOverride, ThemeSizesOverride,
@@ -1415,7 +1411,7 @@ fn parse_theme_override(json: &ThemeOverrideJson) -> EngineResult<ThemeOverride>
 }
 
 /// Merges a partial wire snap config over the current config, rejecting
-/// non-finite numerics before anything is applied (Gate 5).
+/// non-finite numerics before anything is applied.
 fn merge_snap_config(
     current: nary_core::geometry::snap::SnapConfig,
     json: &SnapConfigJson,

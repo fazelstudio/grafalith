@@ -5,25 +5,20 @@
 //! authoritative mutation path with clone-isolation; soft-delete;
 //! `onMutation` / `onAfterUpsert` fan-out; owned `SpatialGrid`).
 //!
-//! Phase 02 status: [`Document`] owns the element map, the explicit
-//! z-order vector, and the single version/nonce authority (module 05 —
-//! exactly one owner, no competing counters). Mutation goes through
-//! controlled APIs only; getters hand out shared references or owned
-//! clones, never mutable access to internal storage.
+//! [`Document`] owns the element map, the explicit z-order vector, and the
+//! single version/nonce authority (exactly one owner, no competing
+//! counters). Mutation goes through controlled APIs only; getters hand out
+//! shared references or owned clones, never mutable access to internal
+//! storage.
 //!
-//! Explicitly deferred (see the phase report):
-//!
-//! - mutation observers (`onMutation` / `onAfterUpsert`): the only
-//!   subscribers are history and arrow-binding follow logic, both later
-//!   phases (03 and 05). Adding fan-out now would be scaffolding without a
-//!   consumer.
-//! - spatial-index sync: [`Document`] owns a [`SpatialGrid`] derived cache
-//!   (TS `Scene.spatialGrid` parity, Phase 04 scope folded in here —
-//!   non-deleted elements indexed at their rotation-aware bounds, tombstones
-//!   evicted, `set_order` untouched since z-order moves no bounds).
-//! - JSON string encoding: [`DocumentSnapshot`] is the serialize-ready
-//!   shape (mirrors TS `SerializedScene`); string parse/print lands in the
-//!   Phase 06 io crate.
+//! Mutation observers (`onMutation` / `onAfterUpsert`) are intentionally
+//! absent: the only subscribers are history and arrow-binding follow logic,
+//! which call in directly — fan-out without a consumer would be dead
+//! scaffolding. The owned [`SpatialGrid`] derived cache indexes non-deleted
+//! elements at their rotation-aware bounds (tombstones evicted; `set_order`
+//! untouched since z-order moves no bounds). JSON string encoding lives in
+//! the io layer; [`DocumentSnapshot`] is the serialize-ready shape (mirrors
+//! TS `SerializedScene`).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::RwLock;
@@ -51,8 +46,8 @@ pub const LEGACY_VERSION: u32 = 1;
 /// full order vector (which still names tombstones, exactly as
 /// `Scene.getElementOrder` does). Transient state — selection, hover, tool,
 /// drag, caret — is excluded by construction: it never lives in the
-/// document (see [`crate::selection`]). The Phase 06 io layer derives
-/// `serde` string encoding on this shape.
+/// document (see [`crate::selection`]). The io layer derives `serde`
+/// string encoding on this shape.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocumentSnapshot {
     /// Envelope schema version.
@@ -76,11 +71,11 @@ pub struct ImportSummary {
 }
 
 /// Validated, repaired import plan: the pure middle of the staged import
-/// pipeline (module 08 — parse → validate → repair/migrate → construct
-/// candidate → validate candidate → commit).
+/// pipeline (parse, validate, repair/migrate, construct candidate, validate
+/// candidate, commit).
 ///
 /// [`Document::apply_snapshot`] commits a plan directly; history-tracked
-/// importers (the Phase 06 io layer) commit the same plan through a
+/// importers (the io layer) commit the same plan through a
 /// [`crate::history::HistoryManager`] transaction so the import is one
 /// undoable, atomic step. Both paths share this preparation, so their
 /// validation/repair semantics cannot drift.
@@ -209,15 +204,12 @@ impl Document {
     }
 
     /// Inserts or updates an element — the single authoritative mutation
-    /// path (TS `upsertElement` discipline):
-    ///
-    /// - the element is validated *before* touching state, so rejection
-    ///   leaves the document unchanged (Gate 5);
-    /// - a new id keeps its provided version and is appended to the order;
-    /// - an existing id gets `version = previous + 1` with a fresh nonce.
-    ///   Any caller-supplied version on an update is overwritten — callers
-    ///   must not pre-bump;
-    /// - the scene nonce bumps on every stored change.
+    /// path (TS `upsertElement` discipline): the element is validated
+    /// *before* touching state, so rejection leaves the document unchanged;
+    /// a new id keeps its provided version and is appended to the order; an
+    /// existing id gets `version = previous + 1` with a fresh nonce (any
+    /// caller-supplied version on an update is overwritten — callers must
+    /// not pre-bump); the scene nonce bumps on every stored change.
     ///
     /// Cross-element references are intentionally NOT checked here (paste
     /// and import build them incrementally); call [`Document::validate`]
@@ -275,7 +267,7 @@ impl Document {
     /// Hard-deletes an element: removed from the map and the order.
     ///
     /// History-support primitive (TS `hardDelete` exists so undoing a
-    /// creation removes the slot); its Phase 03 consumer applies it during
+    /// creation removes the slot); applied during
     /// undo/redo. Unlike TS — which bumps unconditionally — the nonce only
     /// moves when something was actually removed. The spatial index drops
     /// the id alongside (unknown ids are silent no-ops there too).
@@ -292,8 +284,8 @@ impl Document {
     /// Replaces the z-order vector.
     ///
     /// Every id must name a stored element (`InvariantViolation` /
-    /// `InvalidInput` otherwise — module 04 requires valid ordering
-    /// references; TS replaces blindly, which can strand the order).
+    /// `InvalidInput` otherwise — ordering references must stay valid; TS
+    /// replaces blindly, which can strand the order).
     /// Reordering moves no bounds, so the spatial index is left alone.
     pub fn set_order(&mut self, order: Vec<ElementId>) -> EngineResult<()> {
         for id in &order {
@@ -312,9 +304,9 @@ impl Document {
 
     /// Mints a fresh element id from the document's id source.
     ///
-    /// Single authority for fresh identity (module 05): create, paste, and
-    /// import paths all mint here so ids stay unique within the instance
-    /// without a process global (ADR-0003).
+    /// Single authority for fresh identity: create, paste, and import paths
+    /// all mint here so ids stay unique within the instance without a
+    /// process global.
     pub fn fresh_element_id(&mut self) -> ElementId {
         self.id_gen.new_element_id()
     }
@@ -327,9 +319,9 @@ impl Document {
 
     /// Mints a fresh version nonce from the document's id source.
     ///
-    /// Single authority for fresh identity (module 05): paste and import
-    /// paths mint here so pasted elements never share a nonce with their
-    /// source (which would defeat nonce-based change detection).
+    /// Single authority for fresh nonces: paste and import paths mint here
+    /// so pasted elements never share a nonce with their source (which
+    /// would defeat nonce-based change detection).
     pub fn fresh_nonce(&mut self) -> u32 {
         self.id_gen.new_nonce()
     }
@@ -369,7 +361,7 @@ impl Document {
         Ok(())
     }
 
-    /// Bumps the scene nonce (single authority — module 05).
+    /// Bumps the scene nonce (single authority).
     fn bump_nonce(&mut self) {
         self.scene_nonce = self.scene_nonce.saturating_add(1);
     }
@@ -381,13 +373,11 @@ impl Document {
         self.order_version = self.order_version.saturating_add(1);
     }
 
-    /// Whole-document invariant check (module 04):
-    ///
-    /// - every order entry names a stored element;
-    /// - every stored element is intrinsically valid;
-    /// - `frame_id`, arrow bindings, and text `container_id` name stored
-    ///   elements (dangling references are rejected here — import/snapshot
-    ///   application repairs them to `None` before commit, mirroring TS).
+    /// Whole-document invariant check: every order entry names a stored
+    /// element; every stored element is intrinsically valid; `frame_id`,
+    /// arrow bindings, and text `container_id` name stored elements
+    /// (dangling references are rejected here — import/snapshot application
+    /// repairs them to `None` before commit, mirroring TS).
     ///
     /// Group ids reference groups, not elements, so only non-emptiness is
     /// enforced (covered by element validation).
@@ -459,17 +449,14 @@ impl Document {
     }
 
     /// Validates a snapshot into an [`ImportPlan`] without touching document
-    /// state (pure pipeline middle — module 08):
-    ///
-    /// 1. envelope version must be the supported schema (lenient-version /
-    ///    strict-data: anything else is rejected);
-    /// 2. elements validate individually; invalid ones are skipped and
-    ///    counted (a non-empty snapshot with zero valid elements is
-    ///    rejected);
-    /// 3. dangling `frame_id`, arrow bindings, and text `container_id`
-    ///    are repaired to `None` against the admitted id set;
-    /// 4. the snapshot order is filtered to admitted ids with missing
-    ///    valid ids appended (forward-compat, TS parity).
+    /// state: the envelope version must be the supported schema
+    /// (lenient-version / strict-data: anything else is rejected); elements
+    /// validate individually, with invalid ones skipped and counted (a
+    /// non-empty snapshot with zero valid elements is rejected); dangling
+    /// `frame_id`, arrow bindings, and text `container_id` are repaired to
+    /// `None` against the admitted id set; the snapshot order is filtered to
+    /// admitted ids with missing valid ids appended (forward-compat, TS
+    /// parity).
     pub fn plan_snapshot(snapshot: &DocumentSnapshot) -> EngineResult<ImportPlan> {
         if snapshot.schema_version != SCHEMA_VERSION {
             return Err(EngineError::InvalidInput(format!(

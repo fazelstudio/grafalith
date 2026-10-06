@@ -1,13 +1,12 @@
-//! Typed engine errors (module 01 §F).
+//! Typed engine errors.
 //!
 //! Expected user/domain failures (invalid input, missing ids, violated
 //! invariants) are values, never panics. `panic!` is reserved for
 //! must-never-fail internal invariants and must never cross an FFI
-//! boundary. See `docs/architecture/ADR-0004-error-handling.md`.
+//! boundary.
 //!
-//! [`EngineError`] is `#[non_exhaustive]` because later phases (02–06) will
-//! add variants as domain logic lands; matching code must carry a wildcard
-//! arm from day one.
+//! [`EngineError`] is `#[non_exhaustive]` so new variants can be added as
+//! domain logic grows; matching code must carry a wildcard arm from day one.
 
 use std::fmt;
 

@@ -1,4 +1,4 @@
-//! SVG import tests (M8, `svg` feature): shapes resolve to paths, text
+//! SVG import tests (`svg` feature): shapes resolve to paths, text
 //! chunks to text, groups to `groupIds`, unsupported content counts as
 //! skips — never silent drops, never panics.
 

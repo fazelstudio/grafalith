@@ -1,4 +1,4 @@
-//! Custom UI button scenario in Rust (M6): a host builds its own toolbar
+//! Custom UI button scenario in Rust: a host builds its own toolbar
 //! with zero built-in UI and drives the engine purely through commands.
 //!
 //! Run: `cargo run -p nary-bindings --example custom_button`

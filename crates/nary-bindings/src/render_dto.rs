@@ -1,15 +1,14 @@
-//! Serializable host DTOs for the React/input/render boundary (ADR-0011).
+//! Serializable host DTOs for the React/input/render boundary.
 //!
 //! Every type here is the JSON shape a host (React adapter, Tauri view,
-//! tests) reads after an input or query op. No
-//! [`nary_core`](nary_core) domain struct serializes directly
-//! (ADR-0010 boundary rule): each DTO maps explicitly from its core
-//! counterpart, so core refactors never silently reshape the wire.
+//! tests) reads after an input or query op. No [`nary_core`](nary_core)
+//! domain struct serializes directly: each DTO maps explicitly from its
+//! core counterpart, so core refactors never silently reshape the wire.
 //!
 //! The host draws from these descriptions: [`RenderModelDto`] carries the
 //! document render plus the selection overlay and interaction hints, and
 //! [`SessionStateDto`] carries the session mirrors. Canvas/DOM/textareas
-//! stay host-owned (modules 02, 06, 07).
+//! stay host-owned.
 
 use nary_core::editor::Editor;
 use nary_core::editor::{
@@ -115,7 +114,7 @@ pub enum PaintDto {
         /// Color stops.
         stops: Vec<PaintStopDto>,
     },
-    /// Angular (conic) gradient sweeping around the entry center (M8).
+    /// Angular (conic) gradient sweeping around the entry center.
     Angular {
         /// Sweep start angle in degrees.
         angle: f64,
@@ -162,7 +161,7 @@ pub fn paint_dto(paint: &PaintDesc) -> PaintDto {
     }
 }
 
-/// Per-corner radii, clockwise from top-left (M8).
+/// Per-corner radii, clockwise from top-left.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CornerRadiiDto {
@@ -186,7 +185,7 @@ pub enum DrawDetailDto {
     Rectangle {
         /// Corner radius in scene units, or `None` (wire `null`) for sharp corners.
         roundness: Option<f64>,
-        /// Per-corner radii (`null` = uniform/`roundness` corners, M8).
+        /// Per-corner radii (`null` = uniform/`roundness` corners).
         corners: Option<CornerRadiiDto>,
     },
     /// Text content + font + alignment (the host measures with its 2D context).
@@ -398,18 +397,18 @@ pub struct DrawEntryDto {
     pub stroke_width: f64,
     /// Stroke dash pattern (`"solid"`, `"dashed"`, or `"dotted"`).
     pub stroke_style: String,
-    /// Stroke cap (`"butt"`, `"round"`, or `"square"` — M8).
+    /// Stroke cap (`"butt"`, `"round"`, or `"square"`).
     pub stroke_cap: String,
-    /// Stroke join (`"miter"`, `"round"`, or `"bevel"` — M8).
+    /// Stroke join (`"miter"`, `"round"`, or `"bevel"`).
     pub stroke_join: String,
-    /// Stroke alignment (`"inside"`, `"center"`, or `"outside"` — M8).
+    /// Stroke alignment (`"inside"`, `"center"`, or `"outside"`).
     pub stroke_align: String,
     /// Opacity on the 0–100 scale.
     pub opacity: f64,
     /// Per-kind payload.
     pub detail: DrawDetailDto,
     /// Absolute scene-space polyline for line/arrow/freedraw (absent for
-    /// all other kinds — Phase 12: the AABB alone cannot describe strokes).
+    /// all other kinds — the AABB alone cannot describe strokes).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub points: Option<Vec<[f64; 2]>>,
     /// Absolute scene-space path anchors for path elements (absent otherwise).
@@ -1022,7 +1021,7 @@ pub struct RenderModelDto {
 ///
 /// `ready_images` holds the asset ids whose pixels the host has cached;
 /// `config` carries the canvas size, grid hint, and asset generation the
-/// host bumped on async load completion (module 06 invalidation root).
+/// host bumped on async load completion.
 pub fn render_model_dto(
     editor: &Editor,
     config: &RenderConfig,

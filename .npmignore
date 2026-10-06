@@ -1,0 +1,69 @@
+# Files excluded from the package.
+
+# Engine source
+crates/
+Cargo.toml
+Cargo.lock
+
+# WASM output
+pkg/
+
+# Python artifacts
+dist/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.whl
+
+# Workspace members
+apps/
+examples/
+packages/
+plugins/
+public/
+scripts/
+generated/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Tooling configs
+node_modules/
+bun.lock
+tsconfig*.json
+eslint.config.mjs
+deny.toml
+.npmrc
+
+# Repository meta
+.github/
+.gitignore
+.gitattributes
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Build output
+target/
+coverage/
+*.tsbuildinfo
+*.tgz
+
+# Local environment and logs
+.env
+.env.local
+.env.*.local
+*.log
+
+# Scratch directories
+tmp/
+temp/

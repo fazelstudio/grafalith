@@ -1,0 +1,14 @@
+# Normalize line endings (checkout native per OS).
+* text=auto
+
+# Compiled/large binaries: never diff, never merge as text.
+*.wasm binary
+*.whl binary
+*.node binary
+
+# Generated protocol files are committed sources; mark so GitHub
+# collapses their diffs by default.
+generated/* linguist-generated
+
+# wasm-pack output is git-ignored; if ever force-added, treat as vendored.
+pkg/** linguist-vendored

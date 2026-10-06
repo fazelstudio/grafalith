@@ -1,18 +1,17 @@
 //! `nary-geometry`: pure 2D math for the Nary Rust engine.
 //!
-//! This crate owns **all reusable geometry** (module 06): vectors, points,
+//! This crate owns **all reusable geometry**: vectors, points,
 //! rectangles/bounds, segment distances, rotation, transforms, resize,
 //! handles, path flattening, hit-test primitives, viewport math, spatial
 //! hashing, and snapping math. It has **zero dependencies** on the document
 //! model, the editor, hosts (DOM/Canvas/React/Tauri), or serialization.
 //!
-//! Dependency direction (module 02): `nary-core` depends on this crate,
-//! never the reverse.
+//! Dependency direction: `nary-core` depends on this crate, never the
+//! reverse.
 //!
 //! ## Coordinate spaces
 //!
-//! Every operation declares its space where ambiguity is possible
-//! (module 06):
+//! Every operation declares its space where ambiguity is possible:
 //!
 //! ```text
 //! screen space          pixels, canvas origin (input events, handle radii)

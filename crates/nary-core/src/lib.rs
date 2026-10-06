@@ -8,41 +8,32 @@
 //! clipboard payload semantics, asset storage, theme tokens, and the
 //! canvas-mode config — plus the shared [`EngineError`] type.
 //!
-//! Hard boundaries (modules 01, 02):
+//! Hard boundaries: this crate depends only on `nary-geometry`
+//! (re-exported as [`geometry`]), and never on an editor session,
+//! renderer, DOM/Canvas, React, or Tauri — host adapters live outside this
+//! crate. All fallible operations return [`EngineResult`]; `panic!` is
+//! reserved for must-never-fail invariants and never crosses an FFI
+//! boundary.
 //!
-//! - Depends only on `nary-geometry` (re-exported as [`geometry`]).
-//! - Never depends on an editor session, renderer, DOM/Canvas, React, or
-//!   Tauri. Host adapters live outside this crate.
-//! - All fallible operations return [`EngineResult`]; `panic!` is reserved
-//!   for must-never-fail invariants and never crosses an FFI boundary
-//!   (see `docs/architecture/ADR-0004-error-handling.md`).
+//! Module map (flat files, grouped by responsibility): `element` and
+//! `document` form the domain; `command` and `history` the history layer;
+//! `editor`, `editor_state`, `selection`, `gesture`, `text_session`, and
+//! `interaction` the session; group, lock, z-order, style, frame,
+//! alignment, arrow binding, constraints, auto-layout, clipboard,
+//! components, assets, path editing, and boolean ops the operations;
+//! hit-testing, the render model, canvas mode, and theme the view; the
+//! shape/plugin/serializer modules the extension points.
 //!
-//! Module map (flat files, grouped by responsibility):
-//!
-//! - `domain`: [`element`], [`document`]
-//! - `history`: [`command`], [`history`]
-//! - `session`: [`editor`], [`editor_state`], [`selection`], [`gesture`],
-//!   [`text_session`], [`interaction`]
-//! - `ops`: [`group`], [`lock`], [`zorder`], [`style`], [`frame`],
-//!   [`alignment`], [`arrow_binding`], [`constraints`], [`auto_layout`],
-//!   [`clipboard`], [`components`], [`assets`], [`path_edit`],
-//!   [`boolean`], [`path_boolean`]
-//! - `view`: [`hit_test`], [`render_model`], [`canvas_mode`], [`theme`]
-//! - `ext`: [`shape_registry`], [`shape_extension`], [`plugin`],
-//!   [`command_extension`], [`serializer`]
-//!
-//! Design notes:
-//!
-//! - Read-only planning is pure (borrow `Document`, return pending next
-//!   states); mutation goes through [`command::Command`] so every intent is
-//!   one undoable, atomic step (two-phase validate-then-store).
-//! - `Document` owns its query accelerator: a `SpatialGrid`
-//!   synced on every mutation (tombstones evicted), backing viewport
-//!   culling (`RenderModel`) and host hit-testing (`query_spatial`).
-//!   Results stay identical to the linear scan with z-order preserved.
-//! - [`assets::AssetStore`] is synchronous and owned: async/blob fetching is
-//!   a host concern; core stores bytes-or-URL atoms and bumps an explicit
-//!   asset generation so render models stay deterministic.
+//! Design notes: read-only planning is pure (borrow `Document`, return
+//! pending next states) while mutation goes through [`command::Command`] so
+//! every intent is one undoable, atomic step (validate-then-store).
+//! `Document` owns its query accelerator: a `SpatialGrid` synced on every
+//! mutation (tombstones evicted), backing viewport culling (`RenderModel`)
+//! and host hit-testing (`query_spatial`) with results identical to the
+//! linear scan and z-order preserved. [`assets::AssetStore`] is synchronous
+//! and owned: async/blob fetching is a host concern; core stores
+//! bytes-or-URL atoms and bumps an explicit asset generation so render
+//! models stay deterministic.
 //!
 //! TypeScript parity: `packages/core/src/*` is the behavior oracle. Each
 //! module's docs name its TS source; intentional idiom deviations (single
@@ -52,7 +43,7 @@
 
 /// Document-domain geometry, re-exported so consumers use one path.
 ///
-/// Dependency direction (module 02): core → geometry, never the reverse.
+/// Dependency direction: core → geometry, never the reverse.
 pub use nary_geometry as geometry;
 
 /// Crate name, exposed so workspace wiring can be asserted in tests.

@@ -7,23 +7,21 @@
 //! `setStyle` batching, `resizeElement`/`rotateElement` guards), and
 //! `packages/core/src/scene/style-actions.ts` (bulk setters, opacity clamp).
 //!
-//! Design (see `docs/architecture/ADR-0007-command-history-model.md`):
-//! commands are intentional domain mutations executed against an explicit
-//! [`CommandContext`]. The context accumulates before/after deltas while the
+//! Design: commands are intentional domain mutations executed against an
+//! explicit [`CommandContext`]. The context accumulates before/after deltas while the
 //! command runs, so a multi-step command collapses into one history entry
 //! and a failing command rolls back to `before == after`. Inversion lives in
 //! the recorded [`HistoryEntry`] (exact snapshots, version-preserving), not
 //! in command re-execution — re-running `upsert` would bump versions and
 //! break the version discipline below.
 //!
-//! Version/nonce discipline (module 05, single owner is [`Document`]):
-//!
-//! - forward mutations go through [`CommandContext::upsert`] /
-//!   [`CommandContext::soft_delete`] / [`CommandContext::set_order`], which
-//!   delegate to [`Document`] — the authoritative version bumper;
-//! - inverse application (undo, redo, rollback) uses exact snapshot writes
-//!   that preserve `version`/`version_nonce` verbatim (TS `applyEntry`
-//!   fix-up parity), so undo/redo cycles never drift versions.
+//! Version/nonce discipline (single owner is [`Document`]): forward
+//! mutations go through [`CommandContext::upsert`] /
+//! [`CommandContext::soft_delete`] / [`CommandContext::set_order`], which
+//! delegate to [`Document`] — the authoritative version bumper; inverse
+//! application (undo, redo, rollback) uses exact snapshot writes that
+//! preserve `version`/`version_nonce` verbatim (TS `applyEntry` fix-up
+//! parity), so undo/redo cycles never drift versions.
 
 use std::collections::HashMap;
 
@@ -123,18 +121,16 @@ impl HistoryEntry {
     }
 
     /// Applies one side of the entry to the document with exact-restore
-    /// semantics (TS `applyEntry` parity):
+    /// semantics (TS `applyEntry` parity): a `None` side removes the element
+    /// entirely (undo of a creation); a `Some` side writes the snapshot back
+    /// verbatim — version and nonce preserved, never bumped; the order
+    /// snapshot (when present) is restored exactly, so undo of
+    /// create/delete/reorder never appends at the end.
     ///
-    /// - `None` side removes the element entirely (undo of a creation);
-    /// - `Some` side writes the snapshot back verbatim — version and nonce
-    ///   preserved, never bumped;
-    /// - the order snapshot (when present) is restored exactly, so undo of
-    ///   create/delete/reorder never appends at the end.
-    ///
-    /// Two-phase for atomicity (Gate 5): every snapshot on the applied side
-    /// is validated, and the resulting id set is checked against the order
-    /// snapshot, *before* anything is written. Validation failure leaves the
-    /// document untouched.
+    /// Validated before anything is written for atomicity: every snapshot on
+    /// the applied side is validated, and the resulting id set is checked
+    /// against the order snapshot. Validation failure leaves the document
+    /// untouched.
     pub(crate) fn apply(&self, doc: &mut Document, side: HistorySide) -> EngineResult<()> {
         for snapshot in self.side_snapshots(side) {
             snapshot.validate()?;
@@ -213,8 +209,8 @@ impl<'a> CommandContext<'a> {
         }
     }
 
-    /// Borrows the document for read-only validation (two-phase commands
-    /// inspect state here before storing anything).
+    /// Borrows the document for read-only validation (commands inspect
+    /// state here before storing anything).
     pub fn doc(&self) -> &Document {
         self.doc
     }
@@ -345,12 +341,11 @@ impl<'a> CommandContext<'a> {
 
 /// An intentional domain mutation.
 ///
-/// Implementations validate first (two-phase: inspect via
-/// `CommandContext::doc`, then store), so a failing command never leaves
-/// partial state — `CommandContext::rollback` restores the remainder for
-/// commands whose failure surfaces mid-application. Inversion is *not* part
-/// of this trait: undo/redo apply the recorded [`HistoryEntry`] snapshots
-/// exactly (ADR-0007).
+/// Implementations validate first (inspect via `CommandContext::doc`,
+/// then store), so a failing command never leaves partial state —
+/// `CommandContext::rollback` restores the remainder for commands whose
+/// failure surfaces mid-application. Inversion is *not* part of this
+/// trait: undo/redo apply the recorded [`HistoryEntry`] snapshots exactly.
 pub trait Command {
     /// Short human-readable name for debugging and tests.
     fn label(&self) -> &str;
@@ -367,7 +362,7 @@ pub trait Command {
 /// Every element is validated and checked for id collisions *before* the
 /// first store (atomicity): an invalid element or an id that already exists
 /// rejects the whole command with the document untouched. Callers mint fresh
-/// ids via [`Document::fresh_element_id`] (identity rule, module 01 §D).
+/// ids via [`Document::fresh_element_id`].
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CreateElements {
     /// Elements to insert. Must be non-empty and collision-free.
@@ -463,7 +458,8 @@ impl Command for DeleteElements {
 ///
 /// Guards (TS `Editor.moveElements` parity): the delta must be finite
 /// (rejected pre-touch), and unknown, deleted, or locked elements are
-/// skipped. Only `x`/`y` translate; arrow-binding follow-up is Phase 05.
+/// skipped. Only `x`/`y` translate; bound arrows follow through separate
+/// binding logic.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MoveElements {
     /// Ids to translate.
@@ -493,7 +489,7 @@ impl Command for MoveElements {
                 self.dx, self.dy
             )));
         }
-        // Phase 1: build and validate every next state before storing any.
+        // Build and validate every next state before storing any.
         let mut pending: Vec<(ElementId, Element)> = Vec::new();
         for id in &self.ids {
             let Some(element) = ctx.doc().get(id.as_str()) else {
@@ -509,7 +505,7 @@ impl Command for MoveElements {
             next.validate()?;
             pending.push((id.clone(), next));
         }
-        // Phase 2: store.
+        // Store the validated states.
         let mut affected = Vec::with_capacity(pending.len());
         for (id, next) in pending {
             ctx.upsert(next)?;
@@ -531,11 +527,11 @@ pub struct StylePatch {
     pub stroke_width: Option<f64>,
     /// New stroke dash pattern.
     pub stroke_style: Option<StrokeStyle>,
-    /// New stroke cap (M8).
+    /// New stroke cap.
     pub stroke_cap: Option<StrokeCap>,
-    /// New stroke join (M8).
+    /// New stroke join.
     pub stroke_join: Option<StrokeJoin>,
-    /// New stroke alignment (M8).
+    /// New stroke alignment.
     pub stroke_align: Option<StrokeAlign>,
     /// New opacity (clamped to 0–100 in the operation, TS
     /// `style-actions.ts` parity).
@@ -587,7 +583,7 @@ impl Command for SetStyle {
         if self.patch.is_empty() {
             return Ok(CommandOutcome::default());
         }
-        // Phase 1: build and validate every next state before storing any.
+        // Build and validate every next state before storing any.
         let mut pending: Vec<(ElementId, Element)> = Vec::new();
         for id in &self.ids {
             let Some(element) = ctx.doc().get(id.as_str()) else {
@@ -622,7 +618,7 @@ impl Command for SetStyle {
             next.validate()?;
             pending.push((id.clone(), next));
         }
-        // Phase 2: store.
+        // Store the validated states.
         let mut affected = Vec::with_capacity(pending.len());
         for (id, next) in pending {
             ctx.upsert(next)?;
@@ -664,7 +660,7 @@ impl Command for SetLocked {
     }
 
     fn execute(&mut self, ctx: &mut CommandContext) -> EngineResult<CommandOutcome> {
-        // Phase 1: build and validate every next state before storing any.
+        // Build and validate every next state before storing any.
         let mut pending: Vec<(ElementId, Element)> = Vec::new();
         for id in &self.ids {
             let Some(element) = ctx.doc().get(id.as_str()) else {
@@ -678,7 +674,7 @@ impl Command for SetLocked {
             next.validate()?;
             pending.push((id.clone(), next));
         }
-        // Phase 2: store.
+        // Store the validated states.
         let mut affected = Vec::with_capacity(pending.len());
         for (id, next) in pending {
             ctx.upsert(next)?;
@@ -723,7 +719,7 @@ impl Command for Reorder {
 }
 
 // ---------------------------------------------------------------------------
-// Resize / rotate commands (Phase 05: TransformHandler commit parity)
+// Resize / rotate commands.
 // ---------------------------------------------------------------------------
 
 /// Directly replaces an element's bounds (TS `Editor.resizeElement` parity:
@@ -1327,10 +1323,10 @@ impl Command for UngroupElements {
     }
 }
 
-/// Scales element content to follow a resized box (TS/// `applyProportionalContentScaling` parity: line/arrow/freedraw points,
+/// Scales element content to follow a resized box (TS
+/// `applyProportionalContentScaling` parity): line/arrow/freedraw points,
 /// path anchors + handles, and text size; images/frames keep box-only
-/// resize here — frame-constraint propagation is a follow-up, see the
-/// Phase-05 report).
+/// resize here.
 fn apply_content_scaling(element: &mut Element, orig_w: f64, orig_h: f64, new_w: f64, new_h: f64) {
     let scale_x = if orig_w > 0.0 { new_w / orig_w } else { 1.0 };
     let scale_y = if orig_h > 0.0 { new_h / orig_h } else { 1.0 };

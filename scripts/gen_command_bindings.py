@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Single source of truth for command signatures (M6, extended M8).
+"""Single source of truth for command signatures.
 
-The 79 wire ops (see docs/engine/05-command-reference.md and the
+The 79 wire ops (see docs/guides/commands.md and the
 `command_coverage` test, which pins the same count: 78 base + `importSvg`
 behind the `svg` feature) are declared ONCE here.
 From this table the script generates:

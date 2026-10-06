@@ -1,4 +1,4 @@
-//! `importSvg` protocol tests (M8, `svg` feature): SVG import over the
+//! `importSvg` protocol tests (`svg` feature): SVG import over the
 //! JSON boundary with tracked/untracked semantics and undo.
 
 #![cfg(feature = "svg")]

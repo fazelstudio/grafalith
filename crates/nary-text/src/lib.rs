@@ -1,10 +1,10 @@
-//! `nary-text`: parley-based text layout spike (M8, owner-approved).
+//! `nary-text`: parley-based text layout (experimental).
 //!
 //! Scope: measurement, line breaking, and caret mapping for canvas text
 //! boxes — the deterministic core keeps its `TextMeasurer` trait and plain
 //! text model; hosts opt into this crate to replace the `0.6`-factor
 //! fallback with shaped metrics. No shaping/layout code lands in
-//! `nary-core` (ADR-0017); this crate depends on core, never the reverse.
+//! `nary-core`; this crate depends on core, never the reverse.
 //!
 //! Font supply: system fonts via fontique (desktop/native). Font-less
 //! targets fall back to whatever the host registers — parley resolves

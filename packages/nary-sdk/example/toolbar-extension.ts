@@ -1,5 +1,5 @@
 /**
- * Toolbar extension example (M7): a custom UI built from scratch on the
+ * Toolbar extension example: a custom UI built from scratch on the
  * TypeScript SDK, running against the real wasm-pack `nodejs` artifact.
  *
  * Run after `bun run build:wasm:node`:

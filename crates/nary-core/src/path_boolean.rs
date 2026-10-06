@@ -1,4 +1,4 @@
-//! Polygon boolean operations on flattened paths (ADR-0020).
+//! Polygon boolean operations on flattened paths.
 //!
 //! Closed, unrotated path inputs become world-space contours through the
 //! same anchor math the hit-tester uses, flatten, and combine through
@@ -10,7 +10,7 @@
 //! coordinates finite and within ±3e150 (below i_overlay's f64 ceiling —
 //! its infallible API panics otherwise), `EvenOdd` fill rule, and no
 //! holes in results (single-contour `PathElement` cannot hold them —
-//! holed results are `Unsupported`, compound paths are the follow-up).
+//! holed results are `Unsupported`, compound paths are out of scope).
 
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;

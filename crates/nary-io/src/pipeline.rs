@@ -7,8 +7,8 @@
 //! order restoration), plus `packages/core/src/io/export-png.ts` (visible
 //! bounds, padding, scale, 4096 px pixel cap, hidden exclusion).
 //!
-//! Stage order (module 08) — parse → version → validate → repair →
-//! candidate → commit — with the document untouched until commit:
+//! Stage order — parse → version → validate → repair → candidate → commit
+//! — with the document untouched until commit:
 //!
 //! ```text
 //! &str
@@ -22,7 +22,7 @@
 //!   transaction ([`import_str_tracked`])
 //! ```
 //!
-//! Export never includes transient editor state (module 08): selection,
+//! Export never includes transient editor state: selection, hover, tool,
 //! hover, tool, drag, and caret live outside [`Document`](nary_core::document::Document)
 //! by construction, so the snapshot cannot leak them. PNG planning is pure
 //! math — canvas allocation and rasterization stay host-side.
@@ -250,8 +250,8 @@ pub fn import_str_tracked(
 /// fill, a fill object (`{"type":"solid"|"gradient", …}`) parses as the
 /// versioned schema DTO. Returns `None` for mistyped payloads.
 ///
-/// Shared by file import and the `setStyle` fill-DTO phase so both paths
-/// validate identically — one parser, no drift.
+/// Shared by file import and `setStyle` so both paths validate identically
+/// — one parser, no drift.
 pub fn parse_fill_style(value: &Value) -> Option<nary_core::element::FillStyle> {
     crate::schema::fill_from_value(value)
 }
@@ -292,7 +292,7 @@ impl Default for PngExportOptions {
 /// `background` (unless transparent), translates by `(padding -
 /// content_min)`, scales by `effective_scale`, and draws the visible
 /// non-hidden elements in z-order. Canvas creation, rasterization, and
-/// blob encoding stay host-side (module 02).
+/// blob encoding stay host-side.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PngExportPlan {
     /// Union of visible non-hidden element bounds in scene units.

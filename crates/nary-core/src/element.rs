@@ -4,28 +4,23 @@
 //! zone — `AGENTS.md` forbids changing it without explicit approval) plus
 //! per-type factory defaults in `packages/core/src/scene/create-element.ts`.
 //!
-//! Phase 02 status: field-for-field parity with the TS contract — `id`,
+//! Field-for-field parity with the TS contract: `id`, scene-space
 //! scene-space `x/y/width/height`, `rotation` (radians about the center),
 //! stroke/fill style, `opacity`, `seed`, `version` + `versionNonce`,
 //! `isDeleted`, `groupIds` (innermost-first), `locked`, `hidden`, `frameId`,
 //! `constraints`, `childLayoutSizing`, and per-type extras (points,
 //! bindings, text, pressures, crop, segments, component refs).
 //!
-//! Idiom notes (module 00 §4.3 — responsibility first, not mechanical
-//! translation):
-//!
-//! - Elements are plain data: `struct`s + one closed [`Element`] enum, never
-//!   classes. Behavior (bounds here; hit-test/render in Phase 04) is free
-//!   functions and methods that take elements, never inherent behavior on
-//!   the data — ARCHITECTURE §1.
-//! - The TS `Element` union is closed over ten built-in variants in Rust
-//!   (see ADR-0006). Custom shape *data* arrives with the extensible shape
-//!   system in Phase 09; the instance-scoped [`crate::shape_registry`] name
-//!   reservation exists already.
-//! - Mutation of a stored element goes through [`crate::document::Document`]
-//!   only. External code sees shared references; `base_mut` is
-//!   `pub(crate)` so operation modules can build the next version of an
-//!   element before handing it to `upsert`.
+//! Elements are plain data: `struct`s + one closed [`Element`] enum, never
+//! classes. Behavior (bounds here; hit-test/render elsewhere) is free
+//! functions that take elements, never inherent behavior on the data —
+//! ARCHITECTURE §1. The `Element` union is closed over ten built-in
+//! variants; custom shape *data* arrives through the extensible shape
+//! system, with name reservation in the instance-scoped
+//! [`crate::shape_registry`]. Mutation of a stored element goes through
+//! [`crate::document::Document`] only: external code sees shared references,
+//! and `base_mut` is `pub(crate)` so operation modules can build the next
+//! version of an element before handing it to `upsert`.
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -39,14 +34,11 @@ use crate::{EngineError, EngineResult};
 // Identity
 // ---------------------------------------------------------------------------
 
-/// Stable element identity (modules 01 §D, 04).
-///
-/// Rules, mirroring the TS engine:
-/// - never an array index — z-order lives in the document's explicit order
-///   vector, not in the id;
-/// - duplication and paste mint fresh ids (paste remap itself is Phase 06);
-/// - group ids share this type: they are stable identities in the same
-///   namespace family (never element ids, never indexes).
+/// Stable element identity, mirroring the TS engine: never an array index
+/// (z-order lives in the document's explicit order vector, not in the id);
+/// duplication and paste mint fresh ids; group ids share this type — stable
+/// identities in the same namespace family (never element ids, never
+/// indexes).
 ///
 /// `ElementId` is a plain wrapper: emptiness is rejected by element and
 /// document validation (mirroring TS import validation), not by
@@ -98,14 +90,14 @@ impl fmt::Display for ElementId {
 /// Source of fresh identities, nonces, and seeds.
 ///
 /// Injectable so tests are deterministic ([`CounterIdGenerator`]) while
-/// production hosts supply UUID-style sources at the binding layer
-/// (Phase 07). Owned by the [`crate::document::Document`] instance that
-/// consumes it — never a process global (ADR-0003).
+/// production hosts supply UUID-style sources at the binding layer. Owned
+/// by the [`crate::document::Document`] instance that consumes it — never a
+/// process global.
 ///
-/// `Send + Sync` is a hard bound (Phase 11): the Tauri host owns the engine
-/// behind managed state, which requires `Send + Sync + 'static`. The bound
-/// is free for all in-tree generators (plain-data counters) and for any
-/// future host generator built from owned state.
+/// `Send + Sync` is a hard bound: the Tauri host owns the engine behind
+/// managed state, which requires `Send + Sync + 'static`. The bound is free
+/// for all in-tree generators (plain-data counters) and for host generators
+/// built from owned state.
 pub trait IdGenerator: Send + Sync {
     /// Mints a fresh element id.
     fn new_element_id(&mut self) -> ElementId;
@@ -195,7 +187,7 @@ impl IdGenerator for CounterIdGenerator {
 }
 
 // ---------------------------------------------------------------------------
-// Style primitives (persistent style data — module 04)
+// Style primitives (persistent style data)
 // ---------------------------------------------------------------------------
 
 /// Stroke dash pattern. Persistent element data.
@@ -209,7 +201,7 @@ pub enum StrokeStyle {
     Dotted,
 }
 
-/// Stroke cap style (line endpoints). Canvas defaults apply (M8).
+/// Stroke cap style (line endpoints). Canvas defaults apply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StrokeCap {
     /// Flat cap (canvas and TS default).
@@ -221,7 +213,7 @@ pub enum StrokeCap {
     Square,
 }
 
-/// Stroke join style (polyline vertices). Canvas defaults apply (M8).
+/// Stroke join style (polyline vertices). Canvas defaults apply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StrokeJoin {
     /// Miter join (canvas and TS default).
@@ -233,7 +225,7 @@ pub enum StrokeJoin {
     Bevel,
 }
 
-/// Stroke alignment relative to the shape edge (M8). Paint-time instruction
+/// Stroke alignment relative to the shape edge. Paint-time instruction
 /// for hosts (like hatching): bounds and hit-testing stay fill-based, so
 /// alignment never silently rescales geometry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -265,7 +257,7 @@ pub enum GradientType {
     Linear,
     /// Radial gradient.
     Radial,
-    /// Angular (conic) gradient sweeping around the center (M8).
+    /// Angular (conic) gradient sweeping around the center.
     Angular,
 }
 
@@ -403,8 +395,7 @@ impl CropRegion {
 pub struct Binding {
     /// Bound target element id.
     pub element_id: ElementId,
-    /// Relative position along the target edge (wraps in `[0, 1)`; the wrap
-    /// math itself is Phase 05 binding logic).
+    /// Relative position along the target edge (wraps in `[0, 1)`).
     pub focus: f64,
     /// Gap distance from the target element.
     pub gap: f64,
@@ -455,8 +446,7 @@ impl PathSegment {
     }
 }
 
-/// Auto-layout main-axis direction (persistent frame config; the layout
-/// algorithm itself is Phase 05).
+/// Auto-layout main-axis direction (persistent frame config).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutDirection {
     /// Children flow horizontally.
@@ -515,8 +505,7 @@ pub struct FramePadding {
 
 /// Auto-layout configuration on a frame (TS `AutoLayoutConfig`). Pure
 /// persistent data; constraints on children are ignored while this is set
-/// (that rule is enforced by the Phase 05 layout pass, pinned by
-/// `auto-layout.test.ts`).
+/// (enforced by the layout pass).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AutoLayoutConfig {
     /// Flow direction (primary axis).
@@ -536,10 +525,9 @@ pub struct AutoLayoutConfig {
 /// JSON-like override value for instance patches.
 ///
 /// TS stores `overrides: Record<path, Partial<Element>>` — arbitrary
-/// per-property patches applied at resolve time (Phase 09). Without
-/// serialization in Phase 02 (serde lands in Phase 06), the faithful
-/// representation is this small value enum; numbers are validated finite
-/// so the no-NaN invariant holds through overrides too.
+/// per-property patches applied at resolve time. This small value enum
+/// stands in for untyped JSON (no serde on the element model); numbers are
+/// validated finite so the no-NaN invariant holds through overrides too.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PatchValue {
     /// Explicit null (clears a nullable property at resolve time).
@@ -611,11 +599,11 @@ pub struct BaseElement {
     pub stroke_width: f64,
     /// Stroke dash pattern.
     pub stroke_style: StrokeStyle,
-    /// Stroke cap style (M8).
+    /// Stroke cap style.
     pub stroke_cap: StrokeCap,
-    /// Stroke join style (M8).
+    /// Stroke join style.
     pub stroke_join: StrokeJoin,
-    /// Stroke alignment relative to the edge (M8, paint-time only).
+    /// Stroke alignment relative to the edge (paint-time only).
     pub stroke_align: StrokeAlign,
     /// Fill hatching variant.
     pub fill_style: ElementFillStyle,
@@ -635,7 +623,7 @@ pub struct BaseElement {
     /// Mutation guard (not a UI hint): locked elements are skipped by
     /// destructive paths.
     pub locked: bool,
-    /// Visibility flag (PNG export skips hidden elements; Phase 06).
+    /// Visibility flag (PNG export skips hidden elements).
     pub hidden: bool,
     /// Parent frame id, or `None` for a free element.
     pub frame_id: Option<ElementId>,
@@ -684,12 +672,12 @@ pub struct RectangleElement {
     pub base: BaseElement,
     /// Corner radius, or `None` for sharp corners.
     pub roundness: Option<f64>,
-    /// Per-corner radii (M8). Wins over `roundness` when present; `roundness`
+    /// Per-corner radii. Wins over `roundness` when present; `roundness`
     /// stays for backward compatibility with older files.
     pub corners: Option<CornerRadii>,
 }
 
-/// Per-corner radii in scene units, clockwise from top-left (M8).
+/// Per-corner radii in scene units, clockwise from top-left.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CornerRadii {
     /// Top-left corner radius.
@@ -810,14 +798,13 @@ pub struct FrameElement {
     /// document state — stored here as config).
     pub clip_content: bool,
     /// Auto-layout config; when set, the frame positions children
-    /// automatically (algorithm in Phase 05).
+    /// automatically.
     pub auto_layout: Option<AutoLayoutConfig>,
 }
 
 /// Image element. Holds an asset *reference* only — pixel data lives in the
-/// host `AssetStore` (Phase 06+); the async cache/pending-load/object-URL
-/// machinery from TS `shapes/image.ts` is a host concern and stays out of
-/// core (module 02 engine ownership).
+/// host `AssetStore`; the async cache/pending-load/object-URL machinery is
+/// a host concern and stays out of core.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImageElement {
     /// Shared fields.
@@ -846,7 +833,7 @@ pub struct PathElement {
 /// Live instance of a component master (TS `InstanceElement`).
 ///
 /// Children are NOT stored as scene elements; they resolve from the master
-/// at render/mutation time (Phase 09). Override keys are index paths into
+/// at render/mutation time. Override keys are index paths into
 /// the master's roots (`"0"`, `"1/0"`); identity fields (`id`, `type`) can
 /// never be overridden.
 #[derive(Debug, Clone, PartialEq)]
@@ -859,9 +846,7 @@ pub struct InstanceElement {
     pub overrides: HashMap<String, PatchValue>,
 }
 
-/// Custom shape element registered through the Phase 09 extensible shape
-/// system (ADR-0006: "Custom shape *data* arrives with the Phase 09
-/// extensible shape system").
+/// Custom shape element registered through the extensible shape system.
 ///
 /// The `type_name` is the plugin-registered discriminator (e.g. `"star"`,
 /// `"sticky-note"`). `data` carries the plugin-defined payload as a
@@ -879,8 +864,8 @@ pub struct CustomElement {
     pub data: HashMap<String, PatchValue>,
 }
 
-/// All built-in element types plus the Phase 09 custom-shape extension
-/// point (closed union — see ADR-0006).
+/// All built-in element types plus the custom-shape extension point
+/// (closed union).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     /// Rectangle shape.
@@ -903,7 +888,7 @@ pub enum Element {
     Path(PathElement),
     /// Component instance.
     Instance(InstanceElement),
-    /// Plugin-registered custom shape (Phase 09 extensible shape system).
+    /// Plugin-registered custom shape.
     Custom(CustomElement),
 }
 
@@ -953,7 +938,7 @@ impl Element {
     /// Returns the type discriminator string for this element.
     ///
     /// Built-in types return static strings; custom shapes return the
-    /// plugin-registered type name (Phase 09).
+    /// plugin-registered type name.
     pub fn element_type_name(&self) -> &str {
         match self {
             Self::Rectangle(_) => "rectangle",
@@ -1065,18 +1050,14 @@ impl Element {
     /// Axis-aligned scene-space bounds, rotation-aware.
     ///
     /// Ports the per-shape `get*Bounds` functions dispatched through TS
-    /// `getElementBounds`:
-    /// - rectangle/ellipse/text/image: box rotated about its center;
-    /// - frame: unrotated box (TS `getFrameBounds` ignores rotation —
-    ///   preserved quirk, see the report);
-    /// - line/arrow/freedraw: points AABB rotated about its center; empty
-    ///   point lists collapse to the origin point;
-    /// - path: anchors *and* control handles AABB, then rotated; empty
-    ///   segments collapse to the origin point;
-    /// - instance: raw unrotated box (TS has no `instance` shape
-    ///   registration, so `getElementBounds` falls back to the raw box);
-    /// - custom: raw unrotated box (the ShapeExtension trait provides
-    ///   custom bounds when registered; this is the fallback).
+    /// `getElementBounds`: rectangle/ellipse/text/image rotate the box about
+    /// its center; frame uses the unrotated box (TS `getFrameBounds` ignores
+    /// rotation — preserved quirk); line/arrow/freedraw rotate the points
+    /// AABB about its center, with empty point lists collapsing to the
+    /// origin point; path includes anchors *and* control handles in the AABB
+    /// before rotating, with empty segments collapsing to the origin point;
+    /// instance and custom use the raw unrotated box (the ShapeExtension
+    /// trait provides custom bounds when registered; this is the fallback).
     pub fn bounds(&self) -> Bounds {
         let base = self.base();
         match self {
@@ -1098,8 +1079,8 @@ impl Element {
 // Validation helpers
 // ---------------------------------------------------------------------------
 
-/// Rejects non-finite floats with a named error (module 04: no
-/// NaN/Infinity in persistent state).
+/// Rejects non-finite floats with a named error (no NaN/Infinity in
+/// persistent state).
 fn finite(value: f64, what: &str) -> EngineResult<()> {
     if value.is_finite() {
         Ok(())
@@ -1193,12 +1174,12 @@ fn path_bounds(base: &BaseElement, segments: &[PathSegment]) -> Bounds {
 // ---------------------------------------------------------------------------
 
 /// Text line-height multiplier (TS `LINE_HEIGHT_MULTIPLIER` in
-/// `shapes/text.ts`). Host text measurement (Phase 04) multiplies the font
-/// size by this; `TextElement::line_height` exposes the pure part now.
+/// `shapes/text.ts`). Host text measurement multiplies the font size by
+/// this; `TextElement::line_height` exposes the pure part.
 pub const TEXT_LINE_HEIGHT_MULTIPLIER: f64 = 1.25;
 
 /// Arrowhead triangle length in scene units (TS `ARROWHEAD_LENGTH`).
-/// Consumed by the Phase 04 arrowhead hit-test; pinned here as contract.
+/// Consumed by the arrowhead hit-test; pinned here as contract.
 pub const ARROWHEAD_LENGTH: f64 = 12.0;
 
 /// Arrowhead triangle width in scene units (TS `ARROWHEAD_WIDTH`).
@@ -1345,8 +1326,8 @@ pub fn create_path(gen: &mut impl IdGenerator) -> PathElement {
 ///
 /// TS `createInstance` additionally derives `x/y/width/height` from the
 /// master roots; that lookup needs the document and the component registry,
-/// so master-derived sizing lands with the Phase 09 component actions. The
-/// caller sets position and size explicitly until then.
+/// so master-derived sizing is left to the component actions. The caller
+/// sets position and size explicitly.
 pub fn create_instance(
     gen: &mut impl IdGenerator,
     component_id: impl Into<String>,

@@ -1,4 +1,4 @@
-// Custom UI button scenario in JS (M6): the same toolbar flow as the Rust
+// Custom UI button scenario in JS: the same toolbar flow as the Rust
 // example, driven through the real wasm-pack `nodejs` artifact.
 //
 // Run after `bun run build:wasm:node`:  node examples/custom-button/button.mjs

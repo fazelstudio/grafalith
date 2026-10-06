@@ -1,4 +1,4 @@
-//! Interchange scale benchmarks: import/export at 1k / 10k / 100k (M5).
+//! Interchange scale benchmarks: import/export at 1k / 10k / 100k.
 //!
 //! Scene payloads are built once per binary run through the real export
 //! path, so import benches measure parsing of representative documents.

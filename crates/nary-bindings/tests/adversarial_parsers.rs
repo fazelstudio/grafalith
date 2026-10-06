@@ -1,4 +1,4 @@
-//! Adversarial parser corpus (M5): hostile inputs must yield typed JSON
+//! Adversarial parser corpus: hostile inputs must yield typed JSON
 //! errors, never panics.
 //!
 //! This is the deterministic stand-in for `cargo-fuzz` (libfuzzer is

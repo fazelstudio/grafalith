@@ -1,22 +1,18 @@
-//! Shape extension boundary for plugin-registered custom shapes (Phase 09).
+//! Shape extension boundary for plugin-registered custom shapes.
 //!
-//! ADS-0006: "Custom shape *data* arrives with the Phase 09 extensible
-//! shape system; the instance-scoped `ShapeRegistry` already reserves
-//! custom type names."
+//! Custom shape *data* arrives through the extensible shape system; the
+//! instance-scoped `ShapeRegistry` reserves custom type names.
 //!
 //! This module defines the [`ShapeExtension`] trait — the behavior contract
 //! that plugin-registered custom shapes implement. The trait is object-safe
 //! so the registry can store `Box<dyn ShapeExtension>` and dispatch
 //! render/hit-test/bounds without knowing the concrete type.
 //!
-//! Design rules (module 10):
-//!
-//! - The trait is the *only* way custom shapes interact with core
-//!   internals — no mutable core state is exposed.
-//! - All methods return `Option` so the core can fall back to safe
-//!   defaults (raw box) when a plugin declines to answer.
-//! - The trait is `Send + Sync` so plugins can be shared across threads
-//!   in Tauri hosts.
+//! Design rules: the trait is the *only* way custom shapes interact with
+//! core internals (no mutable core state is exposed); all methods return
+//! `Option` so the core can fall back to safe defaults (raw box) when a
+//! plugin declines to answer; the trait is `Send + Sync` so plugins can be
+//! shared across threads in Tauri hosts.
 
 use crate::element::CustomElement;
 use crate::geometry::rect::Bounds;

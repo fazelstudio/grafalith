@@ -1,129 +1,334 @@
-# AGENTS.md — Instruksi untuk AI Coding Agent
+# AGENTS.md — Instructions for AI Coding Agents
 
-Dokumen ini WAJIB dibaca sebelum mengerjakan task apapun di repo ini. Jika ada instruksi task yang bertentangan dengan file ini, **file ini menang** — berhenti dan tanya user, jangan menebak.
+This document MUST be read before doing any task in this repository.
 
-## 1. Ringkasan Proyek
+If a task instruction contradicts this document or an established project constraint, do not guess or silently override the constraint. Stop and ask the user for a decision.
 
-Fazelidraw: canvas engine drawing (mirip Excalidraw/TLDraw), fokus ringan & efisien. TypeScript. Monorepo. Core engine di `packages/core` harus **zero framework dependency** (tidak boleh import React/Vue/dsb).
+## 1. Project
 
-## 2. Dokumen Wajib Dibaca Sebelum Kerja
+Nary is a lightweight and efficient canvas drawing engine similar to Excalidraw and TLDraw.
 
-1. `docs/PRD.md` — scope fitur, apa yang IN dan OUT.
-2. `docs/ARCHITECTURE.md` — kontrak teknis: struktur data, pola rendering, spatial index. **Tidak boleh disimpangi tanpa izin eksplisit.**
-3. `docs/phases/00-overview.md` — urutan fase kerja saat ini.
-4. Dokumen fase yang sedang dikerjakan (misal `docs/phases/02-shapes.md`) — scope spesifik & Definition of Done untuk task saat ini.
+The engine is a Rust workspace under `crates/*` and is distributed through:
 
-## 3. Scope per Sesi — ATURAN PALING PENTING
+* npm as `@fazelstudio/nary` using `wasm-pack`
+* PyPI as `nary` using `maturin`
 
-- **Kerjakan HANYA fase yang diminta user di sesi ini.** Jangan mengerjakan fase berikutnya "sekalian" meski terlihat berhubungan.
-- Jangan mengubah struktur data di `docs/ARCHITECTURE.md` §2 (interface elemen) kecuali user secara eksplisit minta itu.
-- Jangan menambah dependency baru ke `packages/core/package.json` kecuali sudah disebutkan di dokumen fase terkait.
-- Kalau task terasa butuh mengubah keputusan arsitektur yang sudah ditetapkan (misal: "sepertinya lebih gampang pakai Array daripada Map"), **STOP. Laporkan ke user, jangan langsung ubah.**
+The engine has zero framework dependencies. Engine crates must not import React, Vue, or other UI frameworks, and must not access the DOM or Canvas directly.
 
-## 4. Perintah Proyek
+Hosts such as the Tauri desktop application, browser applications, and custom UIs render the deterministic `RenderModel` produced by the engine.
 
-Package manager: **Bun**. Jangan pakai npm/yarn/pnpm — jangan generate `package-lock.json`/`pnpm-lock.yaml`, hanya `bun.lock`.
+## 2. Required Reading
+
+Before working on a task, read the documentation relevant to that task.
+
+### Always read
+
+* `docs/PRD.md` — feature scope and explicit in/out boundaries.
+* `docs/ARCHITECTURE.md` — technical contract, data structures, rendering patterns, and spatial index.
+* `crates/README.md` — crate map, dependency direction, design rules, and parity notes.
+
+### Read when relevant
+
+* `docs/guides/locale-guide.md` when touching desktop UI text or locales.
+* `docs/guides/comment-guidelines.md` when writing, reviewing, or rewriting source-code comments or documentation.
+
+Do not deviate from an established architecture decision without explicit user approval.
+
+## 3. Scope
+
+Work only on the task requested by the user in the current session.
+
+Do not:
+
+* Start another task because it appears related.
+* Fix unrelated problems discovered while working.
+* Refactor unrelated code.
+* Change established architecture decisions without approval.
+* Modify project documentation outside the requested scope.
+
+Documentation sync is part of the requested scope: every change to engine
+crates (`crates/*`) or hosts (`apps/*`, `packages/*`, `examples/*`) must
+also update the related documents in the same session, so information stays
+relevant, valid, and current instead of going stale. Code without its doc
+update is incomplete.
+
+If completing the requested task requires changing an established architecture decision, stop and ask the user before making that change.
+
+## 4. Architecture Constraints
+
+The following project constraints must be preserved.
+
+* Elements are plain data, not classes. Behavior such as rendering and hit testing is implemented separately from element data.
+* Elements are stored in scene coordinates, not screen coordinates. Coordinate conversion occurs at the rendering or input boundary.
+* Every element mutation goes through `Document`, which is the sole version/nonce authority.
+* Every user intent is represented by a `Command` executed through `HistoryManager`.
+* Each user operation must produce one undoable, atomic history entry.
+* Element mutation follows the established validate-then-store flow.
+* Delete is a soft delete using `isDeleted = true`; elements are not removed from the scene map.
+* `nary-core` must not depend on host bindings, renderers, DOM/Canvas APIs, React, or Tauri.
+* `nary-bindings` is the only crate that owns the JSON-string protocol.
+* `nary` and `nary-python` are thin wrappers around `nary-bindings`.
+* Host adapters such as Tauri commands, browser JavaScript, and Python integration remain outside the engine crates.
+
+Do not change the element interfaces defined in `docs/ARCHITECTURE.md` without explicit user approval.
+
+## 5. Repository Structure
+
+```text
+crates/
+  nary-geometry/  # Pure 2D math: point, bounds, transform, hit, path, spatial, snap, viewport
+  nary-core/      # Document domain and editor session
+  nary-io/        # Interchange: versioned JSON schema, import pipeline, clipboard codec, PNG descriptors
+  nary-bindings/  # Host boundary: JSON-string protocol, Engine facade, render/session DTOs
+  nary/           # npm distribution through wasm-pack
+  nary-python/    # PyPI distribution through maturin/PyO3
+  nary-sdk/       # Rust SDK facade for plugins and extensions
+  nary-text/      # Text measurement and shaping helpers
+
+apps/
+  desktop/        # Tauri demo application and reference host
+
+packages/
+  nary-sdk/       # TypeScript SDK: typed client, extension registry, overlays
+
+examples/
+  custom-button/  # One toolbar scenario on three hosts (Rust/JS/Python)
+  ext-sticker/    # Standalone plugin example (own workspace)
+
+scripts/
+  gen_command_bindings.py  # Single source for generated protocol bindings
+
+generated/
+  nary-commands.d.ts  # Generated TS bindings (checked by CI)
+  nary.pyi            # Generated Python stubs (checked by CI)
+
+docs/
+  PRD.md              # Product scope and explicit in/out boundaries
+  ARCHITECTURE.md     # Technical contract
+  README.md           # Documentation index
+  guides/             # Usage and contributor guides (js, python, desktop,
+                      # commands, extensions, comments, locales)
+```
+
+Dependency direction:
+
+```text
+nary / nary-python
+        ↓
+nary-bindings
+        ↓
+nary-io
+        ↓
+nary-core
+        ↓
+nary-geometry
+```
+
+The `workspace_wiring` test enforces this dependency direction.
+
+## 6. Code Conventions
+
+* Rust source is the engine source of truth.
+* Bun is used for the Tauri desktop application under `apps/desktop`.
+* Rust file names use `snake_case.rs`.
+* Rust types use `PascalCase`.
+* Rust functions, methods, and variables use `snake_case`.
+* TypeScript follows the repository's established TypeScript naming conventions.
+* Elements remain plain data; do not attach behavior such as rendering or hit testing to element types.
+* All element mutations go through `Document`.
+* All user intents go through `Command` and `HistoryManager`.
+* Deletion is implemented as a soft delete using `isDeleted`.
+* Public Rust items must have appropriate Rustdoc because workspace lints enforce `missing_docs`.
+
+Keep documentation concise and focused on behavior, contracts, constraints, and information useful to API consumers.
+
+For detailed source-code comment rules, follow:
+
+`docs/guides/comment-guidelines.md`
+
+## 7. Project Commands
+
+Canonical reference: `DEVELOPMENT.md` — the command list below is a quick
+summary; if they diverge, `DEVELOPMENT.md` wins.
+
+Run the commands relevant to the changes made.
+
+### Test
 
 ```bash
-# Install
-bun install
-
-# Dev (demo app)
-bun run --filter demo dev
-
-# Test (Bun punya test runner bawaan — pakai itu, jangan tambah Vitest/Jest kecuali dibahas dulu)
-bun test --filter core
-
-# Type check (WAJIB jalan bersih sebelum task dianggap selesai)
-bun run --filter core typecheck
-
-# Build core package
-bun run --filter core build
+cargo test --workspace
 ```
 
-Jika salah satu command di atas belum ada di `package.json` karena fase project belum sampai sana, buat dulu sesuai kebutuhan fase yang sedang dikerjakan — jangan skip begitu saja.
+### Lint
 
-**Catatan workspace**: Bun mendukung workspaces lewat field `"workspaces"` di root `package.json` (format sama seperti npm/yarn workspaces, BUKAN `pnpm-workspace.yaml`). Filter per-package pakai `bun run --filter <nama-package> <script>` (Bun ≥1.2) atau, kalau versi Bun yang dipakai belum mendukung `--filter`, jalankan langsung `cd packages/core && bun run <script>` sebagai fallback — cek versi Bun yang tersedia dulu sebelum memilih pendekatan.
+The workspace must pass Clippy without warnings:
 
-## 5. Struktur Repo & Batasan
-
-```
-packages/core/src/
-  scene/        # boleh diedit sesuai fase terkait
-  render/       # boleh diedit sesuai fase terkait
-  spatial/      # HANYA disentuh di Fase 7, kecuali diminta lain
-  history/      # HANYA disentuh di Fase 6
-  interaction/  # boleh diedit sesuai fase terkait
-  theme/         # v2 — HANYA disentuh mulai Fase 9
-  shapes/        # boleh diedit sesuai fase terkait; jadi registry publik mulai Fase 11
-  assets/         # v2 — HANYA disentuh di Fase 14
-  io/             # export/import — Fase 7 (v1), extended di Fase 15 (schema versioning)
-  editor/         # v3 — HANYA disentuh mulai Fase 16 (Editor class, event-emitter)
-  geometry/       # v4 — HANYA disentuh di Fase 21 (boolean ops, path math)
-  components/     # v4 — HANYA disentuh di Fase 22 (component registry, instance sync)
-packages/react/src/    # v2 — HANYA disentuh mulai Fase 10. Boleh depend ke React (beda dengan packages/core). Di-REFACTOR di Fase 18 untuk memakai Editor API.
-docs/           # JANGAN diedit oleh agent kecuali diminta eksplisit ("update dokumentasi")
-apps/demo/      # bebas diedit untuk keperluan testing manual fitur
-apps/demo-headless/  # v3 — HANYA dibuat di Fase 18, sebagai bukti UI custom independen
+```bash
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## 6. Konvensi Kode (yang tidak di-enforce linter)
+### Format
 
-- **Element = plain data, bukan class.** Behavior (render, hitTest) adalah fungsi terpisah `renderRectangle(ctx, element)`, bukan method `element.render()`. Lihat ARCHITECTURE.md §1.
-- **Semua elemen disimpan dalam scene coordinates**, bukan screen coordinates. Konversi hanya terjadi di titik render/input. Lihat ARCHITECTURE.md §3.5.
-- **Setiap mutasi elemen HARUS increment `version` dan generate `versionNonce` baru**, dan HARUS lewat method `Scene.upsertElement()` — jangan mutate object elemen secara langsung di luar Scene.
-- **Delete = soft delete** (`isDeleted = true`), bukan `Map.delete()`, kecuali di fase cleanup/garbage collection eksplisit.
-- Nama file: `kebab-case.ts`. Nama tipe/interface: `PascalCase`. Nama fungsi/variabel: `camelCase`.
-- Setiap fungsi publik di `packages/core` butuh JSDoc singkat (1-2 baris, apa yang dilakukan + parameter penting) — bukan esai.
+```bash
+cargo fmt --all
+cargo fmt --all -- --check
+```
 
-## 7. Contoh Pola yang Benar
+### Build
 
-```typescript
-// BENAR — element sebagai data, render terpisah
-interface RectangleElement extends BaseElement { type: 'rectangle' }
-function renderRectangle(ctx: CanvasRenderingContext2D, el: RectangleElement): void { /* ... */ }
+```bash
+cargo build --workspace
+```
 
-// SALAH — jangan begini
-class RectangleElement {
-  render(ctx: CanvasRenderingContext2D) { /* ... */ } // behavior menempel di data
+### npm / WASM artifact
+
+Requires `wasm-pack`:
+
+```bash
+bun run build:wasm
+```
+
+### PyPI artifact
+
+Requires `maturin`:
+
+```bash
+bun run build:python
+```
+
+### Desktop application
+
+```bash
+bun run tauri:dev
+```
+
+Use the desktop application for manual verification when the task affects behavior that can be meaningfully verified there.
+
+## 8. Architecture Examples
+
+The following patterns are representative of the repository's architecture.
+
+```rust
+// Correct: element data remains separate from behavior.
+pub struct RectangleElement {
+    pub base: BaseElement,
+    pub roundness: Option<f64>,
+}
+
+pub fn render_rectangle(
+    ctx: &mut RenderContext,
+    element: &RectangleElement,
+) {
+    // ...
 }
 ```
 
-```typescript
-// BENAR — mutasi lewat Scene, version di-bump otomatis
-scene.upsertElement({ ...element, x: newX, y: newY });
+Do not attach rendering behavior directly to the element:
 
-// SALAH — mutasi langsung
-element.x = newX; // version tidak ter-update, history rusak
+```rust
+// Wrong: behavior is attached to the data type.
+impl RectangleElement {
+    fn render(&self) {
+        // ...
+    }
+}
 ```
 
-## 8. Definition of Done (berlaku untuk semua task)
+Element mutations must go through `Document`:
 
-Sebelum melaporkan task selesai, agent harus:
-1. `bun run --filter core typecheck` lulus tanpa error.
-2. `bun test --filter core` lulus (kalau ada test untuk area yang disentuh).
-3. Fitur diuji manual di `apps/demo` (jelaskan langkah manual yang dilakukan/harus dilakukan user untuk verifikasi).
-4. Definition of Done spesifik di dokumen fase terkait (`docs/phases/0X-*.md`) terpenuhi — cek checklist di bagian akhir dokumen fase itu.
-5. Tidak ada perubahan di luar file yang relevan dengan fase (jangan "sambil beresin" file lain di luar scope).
+```rust
+// Correct.
+document.upsert(element)?;
+```
 
-## 9. Yang TIDAK Boleh Dilakukan Tanpa Izin Eksplisit
+Do not mutate element state directly when doing so bypasses the established versioning and history rules:
 
-- Menambah dependency besar (state management library, animation library, dsb) ke `packages/core`.
-- Mengubah interface `BaseElement` atau elemen spesifik di ARCHITECTURE.md — **termasuk menambah field baru** (misal `hidden`, `frameId`) meski terlihat kecil/aman. Laporkan dulu, tunggu konfirmasi.
-- Mengganti pendekatan dual-canvas dengan single-canvas atau sebaliknya.
-- Mengganti Map-based scene storage dengan Array.
-- Menghapus/mengubah dokumen di `docs/` kecuali diminta eksplisit ("update PRD", "update architecture doc").
-- Melompat ke fase yang belum diminta, meski secara teknis "lebih efisien dikerjakan sekalian".
-- **(v2)** Menambah dependency React/framework UI ke `packages/core` — komponen React HANYA boleh di `packages/react`.
-- **(v2)** Melakukan mutasi global untuk theme/config (lihat ARCHITECTURE.md §9.2) — semua customization lewat config object yang di-pass eksplisit.
-- **(v2)** Mengubah `Element` union type jadi bentuk terbuka/generic (untuk custom shape, Fase 11) tanpa melaporkan analisis trade-off dulu — ini keputusan arsitektur besar, bukan detail implementasi.
-- **(v3)** Menulis ulang logic Scene/History/dst yang sudah ada dari Fase 0-15 saat membangun `Editor` API (Fase 16) — Editor harus jadi pembungkus tipis, bukan implementasi baru. Kalau ditemukan bug di kode lama saat audit, laporkan dulu, jangan langsung diperbaiki dalam scope Fase 16-18.
-- **(v3)** Menambah dependency event/reactive library (RxJS, dst) untuk Event System (Fase 17) — implementasi pub-sub native saja.
-- **(v3)** Membiarkan `packages/react` (setelah Fase 18) tetap mengakses modul internal `packages/core` secara langsung alih-alih lewat `Editor` API — ini persis yang harus dihilangkan di Fase 18, bukan hal yang boleh dibiarkan "karena sudah jalan".
-- **(v4)** Menambah fitur baru (Fase 20-23) SEBELUM Fase 19 (Behavior Conformance) selesai — Fase 19 adalah fondasi wajib yang harus dikerjakan lebih dulu.
-- **(v4)** Menambah dependency library computational geometry (Fase 21, boolean ops) TANPA melaporkan dan mendapat konfirmasi dulu, lengkap dengan analisis ukuran bundle-nya.
-- **(v4)** Mengasumsikan/menebak behavior interaksi yang ambigu tanpa mengecek dulu bagaimana Figma/TLDraw menanganinya (lihat PRD §12 poin 2) — untuk kasus yang benar-benar tidak jelas setelah dicek, laporkan dan minta keputusan user, jangan menebak sendiri diam-diam.
+```rust
+// Wrong.
+element.x = new_x;
+```
 
-## 10. Kalau Ragu
+User intent must be represented as an undoable command:
 
-Jika instruksi user ambigu, atau kamu (agent) menemukan bahwa fase saat ini butuh keputusan yang tidak dibahas di ARCHITECTURE.md — **tulis pertanyaan singkat ke user, jangan berasumsi**. Satu asumsi salah di struktur data bisa merusak semua fase berikutnya.
+```rust
+// Correct: one user action produces one history entry.
+editor.move_elements(ids, dx, dy)?;
+```
+
+## 9. Definition of Done
+
+Before reporting a task as complete:
+
+1. Run the relevant formatter, linter, tests, and build checks.
+2. Update the related documents in the same session (code + docs ship
+   together): engine changes update `crates/README.md` and the relevant
+   `docs/guides/*`; host changes update the host README and the relevant
+   guide; contract changes update `docs/ARCHITECTURE.md` or `docs/PRD.md`;
+   new commands update `docs/guides/commands.md` and `generated/` via
+   `scripts/gen_command_bindings.py`. Leave no stale document behind.
+3. Verify that the implementation remains within the requested scope.
+4. Review the final diff for accidental or unrelated changes.
+5. Manually verify behavior in `apps/desktop` when the task affects behavior that requires desktop verification.
+6. Report any checks that could not be run and explain why.
+
+Do not claim a check passed unless it was actually run.
+
+## 10. Changes Requiring Explicit Approval
+
+Do not make the following changes without first reporting the issue and receiving user approval:
+
+* Add large dependencies to engine crates.
+* Add dependencies that affect WASM/native compatibility without justification.
+* Change `BaseElement` or other element interfaces defined by `docs/ARCHITECTURE.md`.
+* Add new fields to established element interfaces.
+* Replace the established dual-canvas architecture.
+* Replace Map-based scene storage with Array-based storage.
+* Change or delete documents under `docs/` unless explicitly requested.
+* Add React or other UI-framework dependencies to engine crates.
+* Introduce global mutation for theme or configuration.
+* Add computational-geometry dependencies without reporting the dependency and bundle-size impact.
+* Change an established architectural boundary documented in the repository.
+* Guess ambiguous interaction behavior when the behavior has not been established by the project's documentation or existing implementation.
+
+When an architecture change appears necessary, stop and ask the user before proceeding.
+
+## 11. Comments and Documentation
+
+Every code change ships with its documentation update. A document that
+describes changed behavior must be updated in the same session — never leave
+a relevant document outdated. If a guide, README, or contract no longer
+matches the implementation, the task is not done.
+
+Source-code comments must follow:
+
+`docs/guides/comment-guidelines.md`
+
+Desktop UI text and locales must follow:
+
+`docs/guides/locale-guide.md`
+
+The guidelines cover:
+
+* Comment purpose and content.
+* Clarity, concision, and consistency.
+* Self-contained comments.
+* API and module documentation.
+* TODO and FIXME comments.
+* Safety and correctness comments.
+* Restrictions on external references.
+* Restrictions on project-management information.
+* File and module descriptions.
+* When comments should be removed rather than rewritten.
+
+Do not duplicate the detailed comment rules in this file.
+
+## 12. When in Doubt
+
+If the user's instruction is ambiguous, or the task appears to require a decision not established by `docs/PRD.md`, `docs/ARCHITECTURE.md`, or the existing implementation:
+
+* Do not guess.
+* Do not silently choose an architecture.
+* Ask the user a concise question.
+* Explain the specific decision that needs to be made.
+
+One incorrect assumption about the engine's data model or architecture can affect the rest of the project.

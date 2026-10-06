@@ -2,38 +2,34 @@
 //! engine.
 //!
 //! This crate owns the versioned JSON schema, the staged import pipeline,
-//! the clipboard payload codec, and PNG export descriptors — the Phase 06
-//! scope (`docs/modules/08-io-serialization-and-clipboard.md`). It depends
-//! on `nary-core` for the domain and on `serde`/`serde_json` for the
-//! string layer; `nary-core` itself stays dependency-free (ADR-0005).
+//! the clipboard payload codec, and PNG export descriptors. It depends on
+//! `nary-core` for the domain and on `serde`/`serde_json` for the string
+//! layer; `nary-core` itself stays dependency-free.
 //!
-//! Hard boundaries (modules 01, 02, 08):
+//! Hard boundaries: this crate depends on `nary-core` only (plus
+//! `serde`/`serde_json`), and never touches files, the OS clipboard, the
+//! DOM/Canvas, React, or Tauri — host adapters own all of those; this crate
+//! hands them strings and pure descriptors. Schema evolution lives here
+//! (versioned DTOs in [`schema`](crate::schema) are not public API), so the
+//! wire format can migrate without touching the domain.
 //!
-//! - Depends on `nary-core` only (plus `serde`/`serde_json`).
-//! - Never touches files, the OS clipboard, the DOM/Canvas, React, or
-//!   Tauri. Host adapters own all of those; this crate hands them strings
-//!   and pure descriptors.
-//! - Schema evolution lives here (versioned DTOs in [`schema`](crate::schema)
-//!   are not public API), so the wire format can migrate without touching
-//!   the domain.
+//! ## Dependency justification
 //!
-//! ## Dependency justification (ADR-0005)
-//!
-//! - `serde` 1 (MIT/Apache-2.0, `derive` feature): the schema DTO mechanism;
-//!   pure Rust, `wasm32-unknown-unknown` compatible, no OS dependencies.
-//! - `serde_json` 1 (MIT/Apache-2.0): the JSON string layer for
-//!   import/export/clipboard payloads; pure Rust, WASM compatible.
-//! - `nary-core` (path): the domain (document, elements, history,
-//!   clipboard buffer, geometry).
+//! `serde` 1 (MIT/Apache-2.0, `derive` feature) is the schema DTO
+//! mechanism — pure Rust, `wasm32-unknown-unknown` compatible, no OS
+//! dependencies. `serde_json` 1 (MIT/Apache-2.0) is the JSON string layer
+//! for import/export/clipboard payloads — pure Rust, WASM compatible.
+//! `nary-core` (path) is the domain (document, elements, history, clipboard
+//! buffer, geometry).
 //!
 //! No async runtime, no CLI, no filesystem access.
 
 pub mod clipboard_codec;
 pub mod pipeline;
-/// Versioned JSON schema (v1 DTOs, envelope rules, element dispatch).
+/// Versioned JSON schema (DTOs, envelope rules, element dispatch).
 /// Crate-internal: the wire shape is pinned by fixture tests, not by API.
 pub(crate) mod schema;
-/// SVG import through `usvg` (host-gated `svg` feature, M8).
+/// SVG import through `usvg` (host-gated `svg` feature).
 #[cfg(feature = "svg")]
 mod svg;
 

@@ -9,24 +9,23 @@
 //! `packages/core/src/interaction/selection.ts` (`hitTest` top-wins,
 //! `queryElementsInBounds`, `boundsOverlap` inclusive-touch).
 //!
-//! The pure math lives in `nary-geometry` (`segment`, `hit`,
-//! `path`, `rotation`, `transform`); this module binds it to [`Element`]
-//! (module 06: one bounds function and one hit function per shape, shared
-//! by interaction and rendering — no duplicated geometry).
+//! The pure math lives in `nary-geometry` (`segment`, `hit`, `path`,
+//! `rotation`, `transform`); this module binds it to [`Element`] — one
+//! bounds function and one hit function per shape, shared by interaction
+//! and rendering (no duplicated geometry).
 //!
 //! ## Preserved distinctions
 //!
-//! - Freedraw hit-tests the **raw chords** while rendering draws smoothed
-//!   quadratic midpoints (known TS render-vs-hit quirk, documented in
-//!   `shapes/freedraw.ts` — preserved so pinned vertex-hit behavior holds).
-//! - Frames ignore rotation in both bounds and hit (TS `getFrameBounds` /
-//!   `hitTestFrame` gap — preserved, see the Phase-02 report).
-//! - Instances hit the raw unrotated box (TS has no `instance` shape
-//!   registration, so dispatch falls back to the raw box — preserved).
-//! - Line/arrow/freedraw/path inverse-rotate about the **rotated-bounds
-//!   center** (exactly what TS `getLineBounds`-style calls return at both
-//!   the render and hit sites, so both agree vertex-for-vertex; for
-//!   centrally-symmetric point sets this equals the local-box center).
+//! Freedraw hit-tests the **raw chords** while rendering draws smoothed
+//! quadratic midpoints (known TS render-vs-hit quirk, preserved so pinned
+//! vertex-hit behavior holds). Frames ignore rotation in both bounds and
+//! hit (preserved TS `getFrameBounds` / `hitTestFrame` gap). Instances hit
+//! the raw unrotated box (TS has no `instance` shape registration, so
+//! dispatch falls back to the raw box). Line/arrow/freedraw/path
+//! inverse-rotate about the **rotated-bounds center** (exactly what TS
+//! `getLineBounds`-style calls return at both the render and hit sites, so
+//! both agree vertex-for-vertex; for centrally-symmetric point sets this
+//! equals the local-box center).
 
 use crate::document::Document;
 use crate::element::{Element, ElementId};
@@ -45,7 +44,7 @@ use crate::geometry::transform::stroke_hit_threshold;
 /// Hit-tests a world-space point against one element.
 ///
 /// Ports TS `hitTestElement` with the registry already resolved (the Rust
-/// `Element` union is closed — ADR-0006): every known type dispatches to
+/// `Element` union is closed): every known type dispatches to its shape
 /// its shape rule; unknown/future shapes cannot occur, so the TS raw-box
 /// fallback survives only as the documented `Instance` rule below.
 pub fn hit_test_element(element: &Element, px: f64, py: f64) -> bool {
@@ -206,7 +205,7 @@ pub fn hit_test_element(element: &Element, px: f64, py: f64) -> bool {
         }
         Element::Custom(el) => {
             // Custom shapes hit-test through their ShapeExtension when
-            // registered; fallback is the raw box (Phase 09).
+            // registered; fallback is the raw box.
             let base = &el.base;
             px >= base.x && px <= base.x + base.width && py >= base.y && py <= base.y + base.height
         }
@@ -262,11 +261,10 @@ impl Default for HitTestFilter {
 /// Topmost element under a world-space point, or `None`.
 ///
 /// Ports TS `SelectionManager.hitTest` ordering: candidates walk
-/// back-to-front (last in z-order wins — "if an object is visually on
-/// top, hit testing selects it", module 06) with the
-/// [`HitTestFilter::selection`] skips. Group-aware expansion (click a
-/// member → outermost group) is editor-layer logic (Phase 05); this
-/// returns the hit element itself, deterministically.
+/// back-to-front (last in z-order wins — "if an object is visually on top,
+/// hit testing selects it") with the [`HitTestFilter::selection`] skips.
+/// Group-aware expansion (click a member → outermost group) is editor-layer
+/// logic; this returns the hit element itself, deterministically.
 ///
 /// Linear scan (exact reference implementation). For large scenes prefer
 /// [`hit_test_top_indexed`], which routes through the document's spatial
@@ -363,8 +361,8 @@ pub fn hit_test_top_indexed(
 /// Ports TS `queryElementsInBounds` minus the grid: deleted and hidden
 /// elements are excluded, overlap is [`Bounds::intersects`]
 /// (inclusive-touch, pinned by `selection.test.ts`). Results come back in
-/// z-order for determinism (module 01-E) — an EXPECTED DIFFERENCE from
-/// the TS grid-cell order, with identical membership.
+/// z-order for determinism — unlike the TS grid-cell order, with identical
+/// membership.
 pub fn query_in_bounds(document: &Document, bounds: &Bounds) -> Vec<ElementId> {
     let mut result = Vec::new();
     for id in document.order() {

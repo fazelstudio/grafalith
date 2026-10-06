@@ -1,0 +1,129 @@
+/**
+ * Semantic token CSS variables. Components consume `var(--*)` only;
+ * raw colors, spacing, radii, shadows, and motion values live here.
+ * `data-theme="light" | "dark"` on <html> selects the token set.
+ */
+
+:root,
+:root[data-theme='light'] {
+  --bg-base: #ffffff;
+  --bg-elevated: #f5f5f4;
+  --bg-subtle: #ececea;
+  --fg-primary: #1a1a1a;
+  --fg-secondary: #4a4a45;
+  --fg-muted: #73736e;
+  --border-subtle: #e2e2df;
+  --border-strong: #c9c9c4;
+  --accent: #2f6fed;
+  --accent-fg: #ffffff;
+  --destructive: #c9362b;
+  --success: #1f7a3d;
+  --warning: #9a6700;
+  --focus-ring: #2f6fed;
+  --selection: rgba(47, 111, 237, 0.14);
+  --canvas-bg: #f0efec;
+  --canvas-grid: #e0dfda;
+  --canvas-guide: #e5484d;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+  --space-xxxl: 48px;
+
+  --font-display: 600 24px/1.25 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-section: 600 15px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 400 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body-small: 400 12px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-label: 500 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-compact: 500 11px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-code: 400 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-medium: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-strong: 0 4px 16px rgba(0, 0, 0, 0.18);
+
+  --motion-fast: 120ms ease;
+  --motion-standard: 180ms ease;
+  --motion-panel: 220ms ease;
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 40px;
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg-base: #1c1c1a;
+  --bg-elevated: #262624;
+  --bg-subtle: #323230;
+  --fg-primary: #f2f1ec;
+  --fg-secondary: #c9c8c1;
+  --fg-muted: #9a998f;
+  --border-subtle: #35352f;
+  --border-strong: #4d4d45;
+  --accent: #5b8def;
+  --accent-fg: #0f1526;
+  --destructive: #e5484d;
+  --success: #46a758;
+  --warning: #e8a100;
+  --focus-ring: #5b8def;
+  --selection: rgba(91, 141, 239, 0.22);
+  --canvas-bg: #141412;
+  --canvas-grid: #26261f;
+  --canvas-guide: #e5484d;
+
+  color-scheme: dark;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--fg-primary);
+  font: var(--font-body);
+}
+
+/* Visible keyboard focus everywhere; mouse clicks keep their clean look. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

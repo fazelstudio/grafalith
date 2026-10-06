@@ -1,12 +1,13 @@
-//! Phase-04 integration: geometry + hit-testing + rendering model.
+//! Geometry integration: bounds, hit-testing, and render-model math.
 //!
-//! Ports the TS behavior contracts (no test weakened — tolerances here are
+//! Ports the TS behavior contracts (no test weakened - tolerances here are
 //! equal or tighter than the TS originals):
 //!
 //! - `shapes/shapes.test.ts` (rect/ellipse/line/freedraw/path bounds + hit)
 //! - `shapes/text.test.ts` (measure + hit + bounds)
 //! - `interaction/transform.test.ts` (move/resize/rotate + preview + cancel
-//!   semantics; the pure-math pins live here, gesture wiring stays Phase 05)
+//!   semantics; the pure-math pins live here, gesture wiring is covered
+//!   by the interaction suite)
 //! - `interaction/selection.test.ts` (overlap, queries, top-wins)
 //! - `interaction/snap.test.ts` + remediation zoom-independence pin
 //! - `spatial/spatial-grid.test.ts` membership rules (index primitive

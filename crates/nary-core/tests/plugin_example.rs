@@ -1,9 +1,5 @@
 //! Minimal example extension: registers a custom shape + tool through
 //! the plugin API without mutating core internals.
-//!
-//! This is the Phase 09 exit-criteria proof: "A minimal example
-//! extension can register through the intended API without mutating
-//! core internals."
 
 use nary_core::element::{BaseElement, CustomElement, Element, ElementId, PatchValue};
 use nary_core::plugin::{Plugin, PluginContext, PluginMetadata, PluginRegistry};

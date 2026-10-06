@@ -25,7 +25,7 @@ use nary_bindings::Engine;
 /// Instances are independent (no shared globals): create one per
 /// document view. All methods are synchronous; batch mutations through
 /// [`apply_batch`](JsEngine::apply_batch) instead of looping single-op
-/// crossings (module 09 batching rule).
+/// crossings (one crossing per batch).
 #[wasm_bindgen]
 pub struct JsEngine {
     inner: Engine,
@@ -81,7 +81,7 @@ impl JsEngine {
         }
     }
 
-    /// Replaces document content from an SVG string (M8, `svg` feature).
+    /// Replaces document content from an SVG string (`svg` feature).
     /// Returns `{"imported","skipped"}` or an error envelope string.
     #[cfg(feature = "svg")]
     pub fn import_svg(&mut self, svg: &str, tracked: bool) -> String {

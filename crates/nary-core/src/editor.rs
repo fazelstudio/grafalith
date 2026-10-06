@@ -9,17 +9,17 @@
 //! `packages/core/src/interaction/selection.ts` (group-aware click,
 //! rubber-band, `deleteSelected` frame release, `nudgeSelected`).
 //!
-//! Phase-05 status: this shell is now the full host-neutral interaction
-//! runtime. Pointer/keyboard/text/wheel flows arrive as normalized
-//! [`InputEvent`]s (module 07 — DOM/browser translation stays host-side)
-//! and run through a deterministic phase machine
-//! ([`EditorPointerPhase`]) with the TS threshold, selection, group,
-//! locked-guard, snap-hook, and cancel semantics. Every persistent mutation
-//! still routes through [`HistoryManager`] commands (one gesture = one
-//! entry); transient state (phase, pending collapse, group drill-in, text
-//! session, snap guides) never enters the document.
+//! This shell is the full host-neutral interaction runtime. Pointer,
+//! keyboard, text, and wheel flows arrive as normalized [`InputEvent`]s
+//! (DOM/browser translation stays host-side) and run through a
+//! deterministic phase machine ([`EditorPointerPhase`]) with the TS
+//! threshold, selection, group, locked-guard, snap-hook, and cancel
+//! semantics. Every persistent mutation still routes through
+//! [`HistoryManager`] commands (one gesture = one entry); transient state
+//! (phase, pending collapse, group drill-in, text session, snap guides)
+//! never enters the document.
 //!
-//! Events are notifications, never a second source of truth (module 05):
+//! Events are notifications, never a second source of truth:
 //! [`EditorEvent`] values are pushed onto a drainable queue — no listener
 //! callbacks, so no hidden mutation path.
 
@@ -143,8 +143,8 @@ pub enum KeyAction {
     Redone(bool),
     /// Escape chain ran.
     EscapeHandled(EscapeOutcome),
-    /// Intent decided but not executed here (clipboard payloads are
-    /// Phase 06 — the host routes these once the payload layer exists).
+    /// Intent decided but not executed here (clipboard payloads — the host
+    /// routes these).
     UnhandledIntent(KeyIntent),
     /// Key belongs elsewhere (text fields, IME, unbound).
     Ignored,
@@ -230,9 +230,9 @@ impl Editor {
 
     /// Mutably borrows the document for host-boundary command execution.
     ///
-    /// Phase-08 seam: the bindings `Engine` owns one `Editor` and routes
-    /// its document ops through the same [`HistoryManager`] machinery the
-    /// editor uses, so the two cannot diverge into parallel documents.
+    /// The bindings `Engine` owns one `Editor` and routes its document ops
+    /// through the same [`HistoryManager`] machinery the editor uses, so the
+    /// two cannot diverge into parallel documents.
     pub fn document_mut(&mut self) -> &mut Document {
         &mut self.doc
     }
@@ -270,7 +270,7 @@ impl Editor {
     /// Per-move streaming stays in [`Editor::pan_by_screen`]/[`Editor::zoom_by`]/
     /// [`Editor::apply_wheel`]; this setter is the explicit-state path for
     /// host-owned viewport restores and tests. Non-finite components are a
-    /// typed error (module 01 §F); zoom is clamped to the TS `0.1–10` range.
+    /// typed error; zoom is clamped to the TS `0.1–10` range.
     pub fn set_viewport(&mut self, viewport: Viewport) -> EngineResult<()> {
         if !viewport.scroll_x.is_finite()
             || !viewport.scroll_y.is_finite()
@@ -533,10 +533,10 @@ impl Editor {
     /// Executes one command against the owned document + history, emitting
     /// mutation notifications when it changed anything.
     ///
-    /// Phase-08 seam: the bindings `Engine` owns one `Editor` and routes
-    /// its document ops through this method, so boundary mutations share
-    /// the exact history/event path the pointer machine uses (one entry
-    /// per op, `DocumentChanged` + `HistoryChanged` only when `changed`).
+    /// The bindings `Engine` owns one `Editor` and routes its document ops
+    /// through this method, so boundary mutations share the exact
+    /// history/event path the pointer machine uses (one entry per op,
+    /// `DocumentChanged` + `HistoryChanged` only when `changed`).
     pub fn execute_command<C: Command>(&mut self, command: C) -> EngineResult<CommandOutcome> {
         let outcome = self.history.execute(&mut self.doc, command)?;
         self.after_mutation(&outcome);
@@ -1153,7 +1153,7 @@ impl Editor {
     }
 
     /// Context-menu intents for the current selection (core decides, host
-    /// renders — module 07).
+    /// renders).
     pub fn context_menu(&self) -> Vec<ContextMenuIntent> {
         context_menu_intents(&self.doc, self.state.selection.ids())
     }
@@ -1315,7 +1315,7 @@ impl Editor {
         Ok(())
     }
 
-    // -- normalized pointer dispatch (module 07) --------------------------
+    // -- normalized pointer dispatch ----------------------------------
 
     /// Processes a pointer press in screen pixels (host translates DOM
     /// coordinates; double-click detection stays host-side and arrives as
@@ -1973,9 +1973,9 @@ impl Editor {
     // -- normalized keyboard dispatch -------------------------------------
 
     /// Maps a key press to its intent and executes the core-owned intents.
-    /// Clipboard intents surface as [`KeyAction::UnhandledIntent`] (payload
-    /// layer is Phase 06); field/IME-owned keys arrive as
-    /// [`KeyAction::Ignored`] because the host never forwards them.
+    /// Clipboard intents surface as [`KeyAction::UnhandledIntent`];
+    /// field/IME-owned keys arrive as [`KeyAction::Ignored`] because the
+    /// host never forwards them.
     pub fn handle_key(&mut self, key: Key, modifiers: Modifiers) -> EngineResult<KeyAction> {
         let editing = self.text_session.is_some();
         let Some(intent) = key_to_intent(&key, &modifiers, editing) else {
@@ -2096,8 +2096,8 @@ impl Editor {
     }
 
     /// Inserts plain text at the caret. Errors when no session is active
-    /// (host protocol violation — Gate 5 explicitness over silent drops);
-    /// returns `false` without changing anything mid-composition.
+    /// (explicitness over silent drops); returns `false` without changing
+    /// anything mid-composition.
     pub fn text_insert(&mut self, text: &str) -> EngineResult<bool> {
         let Some(session) = self.text_session.as_mut() else {
             return Err(crate::EngineError::InvalidInput(
@@ -2479,10 +2479,10 @@ impl Editor {
         Ok(redone)
     }
 
-    // -- internals --------------------------------------------------------
+    // Private helpers
 
-    /// Press-time selection for a hit id (TS `pointerdown` click parity:
-    /// group-aware, additive toggle, exact-match keep, deferred collapse).
+    /// Press-time selection for a hit id (group-aware, additive toggle,
+    /// exact-match keep, deferred collapse).
     fn press_select(&mut self, hit_id: &ElementId, additive: bool) {
         if self.editing_group_id.is_some() {
             if additive {

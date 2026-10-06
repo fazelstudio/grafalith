@@ -8,23 +8,23 @@
 //! handle, rubber band), and `render/viewport.ts` culling via
 //! `getViewportBounds`.
 //!
-//! Design (module 02 §5, module 06): core produces **data**, hosts draw.
-//! [`RenderModel::build`] is deterministic from
-//! `(document, viewport, config)` — transient overlays stay separate:
+//! Design: core produces **data**, hosts draw. [`RenderModel::build`] is
+//! deterministic from `(document, viewport, config)` — transient overlays
+//! stay separate:
 //!
 //! ```text
 //! document render     RenderModel { base, frames }   (this module)
 //! selection overlay   SelectionOverlay                (this module)
-//! interaction overlay host-owned (snap guides, previews — Phase 05)
-//! text editing overlay host-owned (textarea + caret — Phase 05)
+//! interaction overlay host-owned (snap guides, previews)
+//! text editing overlay host-owned (textarea + caret)
 //! ```
 //!
 //! No canvas, DOM, `requestAnimationFrame`, or image bytes here. Async
 //! assets resolve through an explicit path: the host passes availability
 //! (`is_image_ready`) and bumps [`RenderConfig::asset_generation`] when a
-//! load completes — the generation is the invalidation root (module 06:
-//! no accidental React rerenders). Image cache/pending-load/object-URL
-//! machinery stays a host concern.
+//! load completes — the generation is the invalidation root (no accidental
+//! host rerenders). Image cache/pending-load/object-URL machinery stays a
+//! host concern.
 
 use crate::document::Document;
 use crate::element::{
@@ -76,7 +76,7 @@ pub enum PaintDesc {
         /// Color stops.
         stops: Vec<PaintStop>,
     },
-    /// Angular (conic) gradient sweeping around the entry center (M8).
+    /// Angular (conic) gradient sweeping around the entry center.
     Angular {
         /// Sweep start angle in degrees.
         angle: f64,
@@ -143,9 +143,9 @@ pub enum DrawKind {
     Image,
     /// Bezier path.
     Path,
-    /// Component instance placeholder (resolved in Phase 09).
+    /// Component instance placeholder (resolved at render time).
     Instance,
-    /// Plugin-registered custom shape (Phase 09 extensible shape system).
+    /// Plugin-registered custom shape.
     Custom,
 }
 
@@ -244,7 +244,7 @@ pub struct AbsoluteSegment {
 /// rides along so the host applies the same center rotation TS does.
 /// `points`/`segments` carry absolute scene coordinates for the
 /// point-based kinds (line/arrow/freedraw/path) so committed strokes render
-/// as true polylines — the AABB alone cannot describe them (Phase 12).
+/// as true polylines — the AABB alone cannot describe them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DrawEntry {
     /// Stable element id.
@@ -268,11 +268,11 @@ pub struct DrawEntry {
     pub stroke_width: f64,
     /// Stroke dash pattern (`"solid"`, `"dashed"`, or `"dotted"` — TS parity).
     pub stroke_style: String,
-    /// Stroke cap (`"butt"`, `"round"`, or `"square"` — M8).
+    /// Stroke cap (`"butt"`, `"round"`, or `"square"`).
     pub stroke_cap: String,
-    /// Stroke join (`"miter"`, `"round"`, or `"bevel"` — M8).
+    /// Stroke join (`"miter"`, `"round"`, or `"bevel"`).
     pub stroke_join: String,
-    /// Stroke alignment (`"inside"`, `"center"`, or `"outside"` — M8,
+    /// Stroke alignment (`"inside"`, `"center"`, or `"outside"` —
     /// paint-time instruction for hosts).
     pub stroke_align: String,
     /// Opacity on the 0–100 scale.
@@ -469,10 +469,10 @@ fn absolute_segments(element: &Element) -> Option<Vec<AbsoluteSegment>> {
 
 /// Render configuration: canvas size, grid hint, asset generation.
 ///
-/// `asset_generation` is the explicit invalidation root for async assets
-/// (module 06): the host bumps it when an image/font load completes and
-/// rebuilds the model. Two models built from equal
-/// `(document, viewport, config)` are identical — determinism pin.
+/// `asset_generation` is the explicit invalidation root for async assets:
+/// the host bumps it when an image/font load completes and rebuilds the
+/// model. Two models built from equal `(document, viewport, config)` are
+/// identical — determinism pin.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderConfig {
     /// Canvas width in screen pixels.
@@ -740,8 +740,8 @@ impl SelectionOverlay {
 
 /// Host text-measurement capability (TS `measureText` took a canvas ctx).
 ///
-/// The engine never touches canvas text APIs (module 02 ownership):
-/// hosts implement this with their 2D context, tests with a stub.
+/// The engine never touches canvas text APIs: hosts implement this with
+/// their 2D context, tests with a stub.
 pub trait TextMeasurer {
     /// Width of one line in scene units for `font_size`/`family`.
     fn measure_line_width(&self, line: &str, font_size: f64, family: &str) -> f64;
@@ -825,8 +825,8 @@ mod tests {
         assert!(json.contains("45"));
     }
 
-    // std-only JSON-shaped assertion (no serde until Phase 06): the desc
-    // is plain data with no canvas handles — Debug form carries values.
+    // std-only JSON-shaped assertion (no serde here): the desc is plain
+    // data with no canvas handles — Debug form carries values.
     fn serde_like_round_trip(paint: &PaintDesc) -> String {
         format!("{paint:?}")
     }

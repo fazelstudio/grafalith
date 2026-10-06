@@ -13,17 +13,14 @@
 //! for the precision contract — exact on flattened polygons, holed results
 //! unsupported).
 //!
-//! Scope rules (explicit, never silent):
-//!
-//! - unknown or deleted ids are `NotFound`;
-//! - locked inputs are `InvalidInput` (locked elements never participate in
-//!   destructive ops);
-//! - rotated inputs are `InvalidInput` (unrotate first — results cannot
-//!   faithfully cover rotated inputs, and silent AABB approximation would
-//!   violate the explicit-over-implicit rule);
-//! - open paths are `InvalidInput` (only closed paths combine);
-//! - other element types are `Unsupported`: path coverage beyond closed
-//!   paths (and holed results) is follow-up work, recorded in ADR-0020.
+//! Scope rules (explicit, never silent): unknown or deleted ids are
+//! `NotFound`; locked inputs are `InvalidInput` because locked elements
+//! never participate in destructive ops; rotated inputs are `InvalidInput`
+//! because results cannot faithfully cover rotated inputs (unrotate first —
+//! silent AABB approximation would violate the explicit-over-implicit rule);
+//! open paths are `InvalidInput` (only closed paths combine); other element
+//! types are `Unsupported` (path coverage beyond closed paths, and holed
+//! results, are follow-up work).
 
 use crate::document::Document;
 use crate::element::{BaseElement, Element, ElementId, PathElement, PathSegment, RectangleElement};

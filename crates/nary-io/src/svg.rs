@@ -1,4 +1,4 @@
-//! SVG import through `usvg` (M8, owner-approved, host-gated).
+//! SVG import through `usvg` (host-gated).
 //!
 //! Available only with the `svg` Cargo feature so default builds pay
 //! nothing. Converts an SVG document into scene elements: every supported
@@ -7,20 +7,16 @@
 //! SVG groups become our `groupIds` (innermost first, matching the scene
 //! convention).
 //!
-//! Approximations (explicit, documented — full fidelity needs follow-ups):
-//!
-//! - beziers keep their control points exactly (our path model is cubic);
-//!   `QuadTo` converts exactly to cubic form;
-//! - gradients map to our linear/radial model by direction and stops;
-//!   gradient transforms beyond the endpoint vector, spreads, patterns,
-//!   masks, clip paths, filters, and images count as skips;
-//! - stroke maps width + dash presence (solid vs dashed); cap/join/dash
-//!   detail waits for the M8d stroke fields;
-//! - text maps one chunk to one element (first span wins for the string,
-//!   chunk position wins for placement); per-span styling is dropped;
-//! - element ids mint from a local counter (`svg-1`, …); like file import,
-//!   this path *replaces* document content, so counter collisions with
-//!   cleared content cannot happen.
+//! Approximations (explicit, documented): beziers keep their control points
+//! exactly (our path model is cubic) and `QuadTo` converts exactly to cubic
+//! form; gradients map to our linear/radial model by direction and stops,
+//! while gradient transforms beyond the endpoint vector, spreads, patterns,
+//! masks, clip paths, filters, and images count as skips; stroke maps width
+//! + dash presence only (solid vs dashed); text maps one chunk to one
+//! element (first span wins for the string, chunk position wins for
+//! placement) with per-span styling dropped; element ids mint from a local
+//! counter (`svg-1`, …), and like file import this path *replaces* document
+//! content, so counter collisions with cleared content cannot happen.
 
 use nary_core::document::{Document, ImportSummary, SCHEMA_VERSION};
 use nary_core::element::{

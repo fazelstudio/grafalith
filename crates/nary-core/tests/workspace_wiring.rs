@@ -1,11 +1,11 @@
-//! Phase 01 workspace wiring test: proves the module-02 dependency
-//! direction (bindings → editor → domain → geometry) starts correctly:
+//! Workspace wiring test: proves the dependency direction
+//! (bindings → editor → domain → geometry) starts correctly:
 //! `nary-core` depends on `nary-geometry`, never the reverse,
 //! and both crates expose a stable identity.
 //!
-//! M5 extension: the full inter-crate DAG is asserted from the manifests
+//! The full inter-crate DAG is asserted from the manifests
 //! themselves (no `cargo tree` needed), so a layering violation fails the
-//! suite. Only `[dependencies]` is checked — dev harnesses (criterion,
+//! suite. Only `[dependencies]` is checked - dev harnesses (criterion,
 //! proptest) may use anything. Host crates (`apps/*`) are outside the
 //! engine DAG by design.
 

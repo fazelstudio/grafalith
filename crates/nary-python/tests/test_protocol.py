@@ -1,4 +1,4 @@
-"""Python integration tests over the real PyPI wheel (M7).
+"""Python integration tests over the real PyPI wheel.
 
 Stdlib unittest only (no pytest dependency): run against an installed
 `nary` wheel with `python -m unittest discover -s crates/nary-python/tests`.

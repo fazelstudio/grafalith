@@ -1,0 +1,28 @@
+.titlebar-controls {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  align-self: stretch;
+}
+
+.titlebar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  min-height: 48px;
+  border: none;
+  background: transparent;
+  color: var(--fg-secondary);
+}
+
+.titlebar-button:hover,
+.titlebar-button.is-hovered {
+  background: var(--bg-subtle);
+  color: var(--fg-primary);
+}
+
+.titlebar-button--close:hover {
+  background: #e81123;
+  color: #ffffff;
+}

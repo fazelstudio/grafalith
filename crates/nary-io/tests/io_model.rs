@@ -1,5 +1,4 @@
-//! Phase 06 integration tests: serialization, import/export, and clipboard
-//! interchange.
+//! Serialization integration tests: import/export and clipboard interchange.
 //!
 //! TS oracles: `packages/core/src/io/io.test.ts` (envelope shape,
 //! round-trips, clear-on-import, skips, rejections, deleted exclusion) and
@@ -303,7 +302,7 @@ fn ts_all_types_fixture_round_trips_with_references_intact() {
     }
     if let Element::Text(text) = doc.get("text-1").unwrap() {
         assert_eq!(text.container_id.as_ref().unwrap().as_str(), "rect-1");
-        // Whitespace significant through the whole pipeline (ADR-0008).
+        // Whitespace significant through the whole pipeline.
         assert_eq!(text.text, "  padded\n\nsecond  ");
     } else {
         panic!("expected text");

@@ -1,5 +1,5 @@
 //! Frame-poll benchmark: repeated identical `renderModel` crossings on a
-//! 5k scene (M5 follow-up). The first poll rebuilds; the rest are cache
+//! 5k scene. The first poll rebuilds; the rest are cache
 //! hits (clone + serialize, no rebuild).
 
 //! Criterion's generated harness has no docs; the bench binary is not API.

@@ -1,4 +1,4 @@
-//! `ext-sticker`: an out-of-workspace Nary plugin (M6).
+//! `ext-sticker`: an out-of-workspace Nary plugin.
 //!
 //! A third-party crate that adds a node type (`example.sticker`), a tool
 //! (`example.sticker`), and a command (`example.sticker.create`) without
@@ -18,7 +18,7 @@ use nary_core::plugin::{Plugin, PluginContext, PluginMetadata};
 use nary_core::render_model::DrawEntry;
 use nary_core::EngineResult;
 
-/// Discriminator for sticker elements (namespaced per ADR-0016).
+/// Discriminator for sticker elements (namespaced to this plugin).
 pub const STICKER_TYPE: &str = "example.sticker";
 
 /// Tool id for the sticker tool (host-owned draw behavior).
@@ -89,7 +89,7 @@ impl nary_core::shape_extension::ShapeExtension for StickerShape {
 
     fn render_desc(&self, _element: &CustomElement) -> Option<DrawEntry> {
         // Hosts draw stickers from the `Custom{type_name, data}` entry the
-        // render model already carries — no engine raster here (ADR-0017).
+        // render model already carries — no engine raster here.
         None
     }
 

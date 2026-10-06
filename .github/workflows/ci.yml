@@ -33,6 +33,9 @@ jobs:
       - name: Check generated bindings
         run: python3 scripts/gen_command_bindings.py --check
 
+      - name: Verify docs
+        run: python3 scripts/verify-docs.py
+
   desktop:
     runs-on: windows-latest
 
@@ -50,6 +53,9 @@ jobs:
 
       - name: Type check desktop
         run: bun run --filter @fazelstudio/desktop typecheck
+
+      - name: Verify locales
+        run: bun run --filter @fazelstudio/desktop i18n:verify
 
       - name: Install wasm-pack
         uses: jetli/wasm-pack-action@v2

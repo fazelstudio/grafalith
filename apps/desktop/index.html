@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nary Desktop</title>
+    <style>
+      html {
+        background: #ffffff;
+      }
+      html[data-theme='dark'] {
+        background: #1c1c1a;
+      }
+    </style>
+    <script>
+      try {
+        var storedTheme = null;
+        try {
+          storedTheme = localStorage.getItem('opennary:theme');
+        } catch (storageError) {}
+        var useDark =
+          storedTheme === 'dark' ||
+          (storedTheme !== 'light' &&
+            storedTheme !== 'dark' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = useDark ? 'dark' : 'light';
+        try {
+          document.documentElement.style.colorScheme = useDark ? 'dark' : 'light';
+        } catch (schemeError) {}
+        var storedLocale = null;
+        try {
+          storedLocale = localStorage.getItem('opennary:locale');
+        } catch (localeError) {}
+        if (storedLocale === 'en' || storedLocale === 'id') {
+          document.documentElement.lang = storedLocale;
+        }
+      } catch (error) {}
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

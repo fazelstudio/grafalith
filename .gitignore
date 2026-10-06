@@ -1,48 +1,56 @@
-# Dependencies
+# Installed packages
 node_modules/
 
-# Build output (per-package)
+# Rust build output
+target/
+# Cargo.lock stays tracked.
+
+# WASM build output
+pkg/
+
+# Python build artifacts
 dist/
+__pycache__/
+*.py[cod]
+*.whl
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+coverage.xml
+htmlcov/
+
+# TypeScript build output
 *.tsbuildinfo
 
-# IDE
+# Test coverage reports
+coverage/
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Log files
+*.log
+
+# Scratch directories
+tmp/
+temp/
+
+# Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Logs
-*.log
-npm-debug.log*
-
-# Temp
-tmp/
-temp/
-
-# Test coverage
-coverage/
-
-# Benchmark / profiling artifacts
-*.bench.ts
-packages/core/src/spatial/render-profile.ts
-packages/core/src/spatial/benchmark.ts
-
-# Rust workspace (Phase 01+)
-target/
-# NOTE: Cargo.lock is intentionally committed (deterministic builds).
-
-# AI Agent planning docs (not for public repo)
-docs/phases/
-docs/prompt/
+# Working notes
 docs/modules/
-docs/reports/

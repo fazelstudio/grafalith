@@ -1,4 +1,4 @@
-//! JSON-string protocol for the host boundary (ADR-0010, module 09).
+//! JSON-string protocol for the host boundary.
 //!
 //! Every value crossing the JS/Rust boundary is a JSON string described
 //! here. The protocol is versioned ([`PROTOCOL_VERSION`]); hosts must
@@ -13,7 +13,7 @@ use serde_json::Value;
 use nary_core::EngineError;
 
 /// Protocol version. Bump only with an explicit breaking-change note in
-/// the TS mirror and the phase report.
+/// the TS mirror.
 pub const PROTOCOL_VERSION: u32 = 1;
 
 /// One intent inside an [`apply_batch`](crate::Engine::apply_batch) array.
@@ -148,7 +148,7 @@ pub enum BatchOp {
         #[serde(default)]
         tracked: bool,
     },
-    /// Replace document content from an SVG string (M8, `svg` feature).
+    /// Replace document content from an SVG string (`svg` feature).
     /// Same atomicity and tracked semantics as `importScene`.
     #[cfg(feature = "svg")]
     ImportSvg {
@@ -201,7 +201,7 @@ pub enum BatchOp {
     /// Pointer stream aborted (touch interruption, browser gesture).
     PointerCancel,
     /// Key pressed (never forwarded for IME-composing or field-owned keys —
-    /// the host owns focus guards; see module 07).
+    /// the host owns focus guards).
     KeyDown {
         /// Host `KeyboardEvent.key` value (`"Delete"`, `"a"`, …).
         key: String,
@@ -239,8 +239,8 @@ pub enum BatchOp {
     },
     /// Delete the char before the caret (Backspace inside the session).
     /// Errors without an active session; no-op at the start or
-    /// mid-composition (Phase 12: `keyDown` never reaches the draft while
-    /// editing, so hosts forward Backspace explicitly here).
+    /// mid-composition (`keyDown` never reaches the draft while editing, so
+    /// hosts forward Backspace explicitly here).
     TextBackspace,
     /// Delete the char after the caret (Delete inside the session).
     /// Errors without an active session; no-op at the end or
@@ -468,7 +468,7 @@ pub enum BatchOp {
     },
     /// Tell the engine async asset availability changed (image/font load
     /// completed). Bumps the asset generation — the explicit invalidation
-    /// root hosts include in the next `renderModel` query (module 06).
+    /// root hosts include in the next `renderModel` query.
     NotifyAssetsChanged,
     /// Build the deterministic render model for the host canvas
     /// (returned in `data`; document render + selection overlay +
@@ -479,7 +479,7 @@ pub enum BatchOp {
         query: RenderQueryJson,
     },
     /// Ask core which context-menu intents apply to the current selection
-    /// (returned in `data`; the host renders the menu — module 07).
+    /// (returned in `data`; the host renders the menu).
     ContextMenu,
     /// Drain queued normalized engine events, oldest first (returned in
     /// `data`; the queue clears — React subscribes by draining per frame).
@@ -705,12 +705,11 @@ pub struct RenderQueryJson {
     pub ready_images: Vec<String>,
 }
 
-/// Scalar style patch (v1).
+/// Scalar style patch.
 ///
 /// Covers the scalar fields plus `background` fills: a plain-string
 /// `background` sets a solid fill, a fill object parses through the shared
-/// io fill parser (M4 fill-DTO phase — no duplicated parser, ADR-0010 note
-/// retired).
+/// io fill parser (no duplicated parser).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StylePatchJson {
@@ -720,11 +719,11 @@ pub struct StylePatchJson {
     pub stroke_width: Option<f64>,
     /// New dash pattern (`"solid"`, `"dashed"`, `"dotted"`).
     pub stroke_style: Option<String>,
-    /// New stroke cap (`"butt"`, `"round"`, `"square"` — M8).
+    /// New stroke cap (`"butt"`, `"round"`, or `"square"`).
     pub stroke_cap: Option<String>,
-    /// New stroke join (`"miter"`, `"round"`, `"bevel"` — M8).
+    /// New stroke join (`"miter"`, `"round"`, or `"bevel"`).
     pub stroke_join: Option<String>,
-    /// New stroke alignment (`"inside"`, `"center"`, `"outside"` — M8).
+    /// New stroke alignment (`"inside"`, `"center"`, or `"outside"`).
     pub stroke_align: Option<String>,
     /// New opacity (`0–100`, clamped like TS).
     pub opacity: Option<f64>,
@@ -876,9 +875,8 @@ pub struct ErrorEnvelope {
 /// Whitelisted engine snapshot for hosts (render-loop dirty checks,
 /// toolbar undo/redo state, selection/tool/viewport/session mirrors).
 ///
-/// Deliberately small: hosts batch mutations through
-/// `apply_batch` and read this — there is no per-element getter loop
-/// (module 09 anti-pattern).
+/// Deliberately small: hosts batch mutations through `apply_batch` and read
+/// this — there is no per-element getter loop.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineStatus {

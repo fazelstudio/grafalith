@@ -1,4 +1,4 @@
-"""Custom UI button scenario in Python (M6): the same toolbar flow as the
+"""Custom UI button scenario in Python: the same toolbar flow as the
 Rust/JS examples, driven through the real PyPI `nary` package.
 
 Run after installing the built wheel (see README):  python button.py

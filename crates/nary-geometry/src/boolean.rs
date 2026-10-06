@@ -4,10 +4,8 @@
 //! intersection, difference, union, and symmetric difference. Every result
 //! is an exact, pairwise-disjoint cover — no approximation, no sampling.
 //!
-//! Scope note: full path boolean ops (bezier union/subtract) are a
-//! follow-up behind a precision ADR (`i_overlay` is the top candidate;
-//! see `docs/engine/01-research.md`). The rectangle domain is exact with
-//! zero dependencies, which is why it lands first: it covers the common
+//! Scope note: bezier union/subtract over curves is out of scope. The
+//! rectangle domain is exact with zero dependencies and covers the common
 //! design-tool case (rect-on-rect booleans) without new crates.
 
 use crate::rect::Bounds;

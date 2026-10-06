@@ -1,0 +1,62 @@
+import {
+  loadEditorWorkspace as loadWorkspace,
+  saveEditorWorkspace as saveWorkspace,
+  type EditorWorkspace,
+} from './editorWorkspace';
+import {
+  loadLocale as loadStoredLocale,
+  saveLocale as saveStoredLocale,
+} from './preferences';
+import type { Locale } from '../../app/i18n/locales';
+import type { ThemeMode } from '../../app/theme/tokens';
+import { loadThemeMode as loadStoredTheme, saveThemeMode as saveStoredTheme } from './preferences';
+
+function updateWorkspace(patch: Partial<EditorWorkspace>): EditorWorkspace {
+  const next = { ...loadWorkspace(), ...patch };
+  saveWorkspace(next);
+  return next;
+}
+
+/**
+ * PreferenceService: typed access to user settings persisted independently
+ * from project documents. Theme, locale, and editor workspace each live
+ * under their own storage key — never inside a project file and never in
+ * one giant blob — so wiping a project cannot lose settings and changing
+ * settings cannot dirty a document.
+ */
+export const preferenceService = {
+  getTheme(): ThemeMode {
+    return loadStoredTheme();
+  },
+  setTheme(mode: ThemeMode): void {
+    saveStoredTheme(mode);
+  },
+  getLocale(): Locale {
+    return loadStoredLocale();
+  },
+  setLocale(locale: Locale): void {
+    saveStoredLocale(locale);
+  },
+  getWorkspace(): EditorWorkspace {
+    return loadWorkspace();
+  },
+  setWorkspace(workspace: EditorWorkspace): void {
+    saveWorkspace(workspace);
+  },
+  /** Whether the empty-canvas getting-started hint may show. */
+  getShowCanvasHint(): boolean {
+    return !loadWorkspace().hintDismissed;
+  },
+  setShowCanvasHint(show: boolean): void {
+    updateWorkspace({ hintDismissed: !show });
+  },
+  /** Whether reopening a project restores its last canvas position. */
+  getRestoreViewport(): boolean {
+    return loadWorkspace().restoreViewport;
+  },
+  setRestoreViewport(restore: boolean): void {
+    updateWorkspace({ restoreViewport: restore });
+  },
+};
+
+export type { EditorWorkspace, Locale, ThemeMode };
