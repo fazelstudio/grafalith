@@ -1,0 +1,18 @@
+[package]
+name = "nary-py"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Python (PyO3/maturin) distribution of the Nary Rust engine: instance-scoped editor, JSON batch protocol, clipboard and PNG-plan helpers. Published to PyPI as `nary`."
+
+[lib]
+name = "_nary"
+crate-type = ["cdylib"]
+
+[dependencies]
+nary-bindings = { path = "../nary-bindings" }
+pyo3 = { version = "0.22", features = ["extension-module"] }
+serde_json = "1"
+
+[lints]
+workspace = true
