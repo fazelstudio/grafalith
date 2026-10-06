@@ -18,6 +18,16 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
 
+      - name: Cache fuzz corpus
+        uses: actions/cache@v4
+        with:
+          path: |
+            crates/nary-io/fuzz/corpus/import_scene
+            crates/nary-io/fuzz/corpus/clipboard
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-
+
       - name: Fuzz scene import (short run)
         working-directory: crates/nary-io/fuzz
         run: cargo +nightly fuzz run import_scene -- -max_total_time=120
