@@ -1,0 +1,12 @@
+[package]
+name = "nary-sdk"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Public plugin SDK facade for the Nary Rust engine: re-exports the extension traits and registry so third-party crates never touch engine internals."
+
+[dependencies]
+nary-core = { version = "0.1.0", path = "../nary-core" }
+
+[lints]
+workspace = true
