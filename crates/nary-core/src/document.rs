@@ -26,6 +26,7 @@
 //!   Phase 06 io crate.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::RwLock;
 
 use crate::element::{CounterIdGenerator, Element, ElementId, IdGenerator};
 use crate::geometry::spatial::SpatialGrid;
@@ -128,6 +129,14 @@ pub struct Document {
     id_gen: Box<dyn IdGenerator + Send + Sync>,
     /// Derived bounds index (non-deleted elements only).
     spatial: SpatialGrid,
+    /// Order version: bumped exactly when `order` changes shape, so the
+    /// lazily-built rank cache below can tell freshness cheaply.
+    order_version: u64,
+    /// Lazily-built id → z-order rank map (`RwLock` because queries borrow
+    /// `&self` while staying `Send + Sync` for hosts; rebuilt on first
+    /// query after an order change, then reused — the hit-test fast path.
+    /// Never a source of truth: `order` is).
+    order_ranks: RwLock<Option<(u64, HashMap<ElementId, usize>)>>,
 }
 
 impl Document {
@@ -144,6 +153,8 @@ impl Document {
             scene_nonce: 0,
             id_gen,
             spatial: SpatialGrid::with_default_cell_size(),
+            order_version: 0,
+            order_ranks: RwLock::new(None),
         }
     }
 
@@ -230,6 +241,7 @@ impl Document {
             let bounds = element.bounds();
             let is_deleted = element.base().is_deleted;
             self.order.push(id.clone());
+            self.bump_order_version();
             self.elements.insert(id.clone(), element);
             self.sync_grid_entry(id.as_str(), is_deleted, &bounds);
         }
@@ -270,6 +282,7 @@ impl Document {
     pub fn hard_delete(&mut self, id: &str) -> EngineResult<()> {
         if self.elements.remove(id).is_some() {
             self.order.retain(|order_id| order_id.as_str() != id);
+            self.bump_order_version();
             self.spatial.remove(id);
             self.bump_nonce();
         }
@@ -292,6 +305,7 @@ impl Document {
             }
         }
         self.order = order;
+        self.bump_order_version();
         self.bump_nonce();
         Ok(())
     }
@@ -358,6 +372,13 @@ impl Document {
     /// Bumps the scene nonce (single authority — module 05).
     fn bump_nonce(&mut self) {
         self.scene_nonce = self.scene_nonce.saturating_add(1);
+    }
+
+    /// Marks the z-order as reshaped (append/remove/replace): the lazily
+    /// built rank cache rebuilds on the next ranked query. Only order
+    /// shape bumps this — content edits bump the nonce, not the version.
+    fn bump_order_version(&mut self) {
+        self.order_version = self.order_version.saturating_add(1);
     }
 
     /// Whole-document invariant check (module 04):
@@ -627,6 +648,43 @@ impl Document {
                 }
             })
             .collect()
+    }
+
+    /// Spatial candidates sorted back-to-front (top-first) by z-order rank.
+    ///
+    /// The rank map builds lazily on the first query after an order change
+    /// and is then reused, so repeated hit-tests cost `O(candidates log
+    /// candidates)` instead of an O(n) order walk per query. Tombstone and
+    /// unknown ids are filtered exactly like [`Document::query_spatial`].
+    pub fn ranked_candidates(&self, bounds: &Bounds) -> Vec<ElementId> {
+        // Poison-tolerant: a poisoned lock means another thread panicked
+        // mid-rebuild; the map rebuilds from `order` (source of truth) and
+        // stays correct, so carry on instead of panicking library code.
+        fn poison_ok<T>(error: std::sync::PoisonError<T>) -> T {
+            error.into_inner()
+        }
+        let version = self.order_version;
+        let fresh = self
+            .order_ranks
+            .read()
+            .map(|guard| guard.as_ref().is_some_and(|(cached, _)| *cached == version))
+            .unwrap_or(false);
+        if !fresh {
+            let mut map = HashMap::with_capacity(self.order.len());
+            for (rank, id) in self.order.iter().enumerate() {
+                map.insert(id.clone(), rank);
+            }
+            *self.order_ranks.write().unwrap_or_else(poison_ok) = Some((version, map));
+        }
+        let guard = self.order_ranks.read().unwrap_or_else(poison_ok);
+        let map = &guard.as_ref().expect("rank cache built above").1;
+        let mut ranked: Vec<(usize, ElementId)> = self
+            .query_spatial(bounds)
+            .into_iter()
+            .filter_map(|id| map.get(&id).map(|&rank| (rank, id)))
+            .collect();
+        ranked.sort_by_key(|(rank, _)| std::cmp::Reverse(*rank));
+        ranked.into_iter().map(|(_, id)| id).collect()
     }
 
     /// Unrotated `x/y/width/height` box of an element, or `None` when the
@@ -921,5 +979,64 @@ mod tests {
             "rotation-aware bounds expand beyond the raw box: {rotated:?}"
         );
         assert!(doc.raw_bounds("unknown").is_none());
+    }
+}
+
+#[cfg(test)]
+mod rank_cache_tests {
+    use super::*;
+    use crate::element::{create_rectangle, Element};
+
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn document_stays_send_and_sync_for_hosts() {
+        // The rank cache must not cost hosts thread-sharability.
+        assert_send_sync::<Document>();
+    }
+
+    fn probe_all() -> Bounds {
+        // Tight probe: a huge box would span millions of grid cells.
+        Bounds::new(-10.0, -10.0, 100.0, 100.0)
+    }
+
+    fn ranked_ids(doc: &Document) -> Vec<String> {
+        doc.ranked_candidates(&probe_all())
+            .iter()
+            .map(|id| id.as_str().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn ranked_candidates_follow_order_mutations() {
+        let mut gen = CounterIdGenerator::new();
+        let mut doc = Document::new();
+        for (id, x) in [("a", 0.0), ("b", 20.0), ("c", 40.0)] {
+            let mut rect = create_rectangle(&mut gen);
+            rect.base.id = ElementId::of(id);
+            rect.base.x = x;
+            rect.base.y = 0.0;
+            rect.base.width = 10.0;
+            rect.base.height = 10.0;
+            doc.upsert(Element::Rectangle(rect)).unwrap();
+        }
+        // Top-first: last inserted wins.
+        assert_eq!(ranked_ids(&doc), vec!["c", "b", "a"]);
+        // Reorder invalidates the cache.
+        doc.set_order(vec![
+            ElementId::of("c"),
+            ElementId::of("a"),
+            ElementId::of("b"),
+        ])
+        .unwrap();
+        assert_eq!(ranked_ids(&doc), vec!["b", "a", "c"]);
+        // Hard delete drops the id from ranks.
+        doc.hard_delete("a").unwrap();
+        assert_eq!(ranked_ids(&doc), vec!["b", "c"]);
+        // Content-only edits keep ranks without rebuilding.
+        let mut moved = doc.get("b").unwrap().clone();
+        moved.base_mut().x = 60.0;
+        doc.upsert(moved).unwrap();
+        assert_eq!(ranked_ids(&doc), vec!["b", "c"]);
     }
 }

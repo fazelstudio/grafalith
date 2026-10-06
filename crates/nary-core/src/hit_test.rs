@@ -315,13 +315,14 @@ pub fn hit_test_all(
 /// Topmost element under a world-space point via the document's spatial
 /// index, or `None`.
 ///
-/// Same contract as [`hit_test_top`]: candidates come from
-/// [`Document::query_spatial`] over the degenerate point bounds, then walk
-/// back-to-front with the same [`HitTestFilter`] skips and exact
-/// [`hit_test_element`] checks. The grid never yields false negatives, so
-/// membership matches the linear scan exactly — only the candidate set is
-/// smaller. Non-finite points hit nothing (mirrors the linear scan, whose
-/// comparisons are all false there, and keeps degenerate grid probes out).
+/// Same contract as [`hit_test_top`]: candidates come from the grid,
+/// pre-sorted back-to-front by z-order rank
+/// ([`Document::ranked_candidates`]), then the first exact
+/// [`hit_test_element`] hit wins after the [`HitTestFilter`] skips. The
+/// grid never yields false negatives, so membership matches the linear scan
+/// exactly — only the candidate set is smaller. Non-finite points hit
+/// nothing (mirrors the linear scan, whose comparisons are all false there,
+/// and keeps degenerate grid probes out).
 pub fn hit_test_top_indexed(
     document: &Document,
     px: f64,
@@ -332,12 +333,7 @@ pub fn hit_test_top_indexed(
         return None;
     }
     let probe = Bounds::point(px, py);
-    let candidates: std::collections::HashSet<ElementId> =
-        document.query_spatial(&probe).into_iter().collect();
-    for id in document.order().iter().rev() {
-        if !candidates.contains(id) {
-            continue;
-        }
+    for id in document.ranked_candidates(&probe) {
         let Some(element) = document.get(id.as_str()) else {
             continue;
         };
@@ -352,7 +348,7 @@ pub fn hit_test_top_indexed(
             continue;
         }
         if hit_test_element(element, px, py) {
-            return Some(id.clone());
+            return Some(id);
         }
     }
     None
@@ -389,20 +385,15 @@ pub fn query_in_bounds(document: &Document, bounds: &Bounds) -> Vec<ElementId> {
 /// index, in z-order.
 ///
 /// Same contract as [`query_in_bounds`]: deleted and hidden elements are
-/// excluded, overlap is inclusive-touch. The grid pre-filter feeds the same
-/// exact checks, so membership matches the linear scan — only the candidate
-/// set is smaller. Non-finite bounds match nothing.
+/// excluded, overlap is inclusive-touch. Ranked candidates
+/// ([`Document::ranked_candidates`]) arrive front-to-back, so the filter
+/// below reverses into z-order. Non-finite bounds match nothing.
 pub fn query_in_bounds_indexed(document: &Document, bounds: &Bounds) -> Vec<ElementId> {
     if !bounds.is_finite() {
         return Vec::new();
     }
-    let candidates: std::collections::HashSet<ElementId> =
-        document.query_spatial(bounds).into_iter().collect();
     let mut result = Vec::new();
-    for id in document.order() {
-        if !candidates.contains(&id) {
-            continue;
-        }
+    for id in document.ranked_candidates(bounds).into_iter().rev() {
         let Some(element) = document.get(id.as_str()) else {
             continue;
         };
