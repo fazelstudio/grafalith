@@ -1,0 +1,27 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Fuzz scene import (short run)
+        working-directory: crates/nary-io/fuzz
+        run: cargo +nightly fuzz run import_scene -- -max_total_time=120
+
+      - name: Fuzz clipboard codec (short run)
+        working-directory: crates/nary-io/fuzz
+        run: cargo +nightly fuzz run clipboard -- -max_total_time=60

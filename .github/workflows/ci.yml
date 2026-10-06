@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -47,6 +52,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Install dependencies
         run: bun install
@@ -58,7 +65,7 @@ jobs:
         run: bun run --filter @fazelstudio/desktop i18n:verify
 
       - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v2
+        run: cargo install wasm-pack --version 0.13.1 --locked
 
       - name: Build wasm (node target)
         run: bun run build:wasm:node
@@ -109,23 +116,3 @@ jobs:
           whl=$(ls target/wheels/*.whl dist/*.whl 2>/dev/null | head -1)
           pip install "$whl"
           python -m unittest discover -s crates/nary-python/tests -v
-
-  fuzz:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz
-
-      - name: Fuzz scene import (short run)
-        working-directory: crates/nary-io/fuzz
-        run: cargo +nightly fuzz run import_scene -- -max_total_time=120
-
-      - name: Fuzz clipboard codec (short run)
-        working-directory: crates/nary-io/fuzz
-        run: cargo +nightly fuzz run clipboard -- -max_total_time=60

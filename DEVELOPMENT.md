@@ -59,6 +59,19 @@ bun run verify:docs   # no stale links, guides indexed
 bun run verify:bindings  # generated bindings match scripts/gen_command_bindings.py
 ```
 
+## Fuzzing (optional, nightly only)
+
+Short libFuzzer runs over hostile parser inputs. Not part of the PR gate —
+CI runs them weekly via `fuzz.yml` (also manually from the Actions tab).
+Deterministic equivalents run in every `cargo test` (`adversarial_parsers`).
+
+```bash
+cargo install cargo-fuzz
+cd crates/nary-io/fuzz
+cargo +nightly fuzz run import_scene -- -max_total_time=120
+cargo +nightly fuzz run clipboard -- -max_total_time=60
+```
+
 ## Artifacts
 
 ### npm / WASM (`@fazelstudio/nary`)
