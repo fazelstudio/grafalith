@@ -167,4 +167,41 @@ already cover its surface; the crate is packaging, not capability).
 | M4 | Done (2026-10-05) |
 | M5 | Done (2026-10-05) |
 | M6 | Done (2026-10-05) |
+| M7 | Done (2026-10-06) |
 | M2–M6 | Planned, ordered, unblocked in sequence; each is independently shippable |
+
+## M7 — Follow-up batch (2026-10-06)
+
+Owner-ordered continuation. Shipped:
+
+- **Position index**: `Document` keeps a lazily-built id → z-order rank map
+  (`RwLock`, `Send + Sync` preserved, poison-tolerant) with version-stamped
+  invalidation on order-shape changes only. Hit-test and marquee route
+  through `ranked_candidates` (candidates pre-sorted, no O(n) walk):
+  hit-test 1k/10k/100k/1M now flat at ~6–9 µs (was 99 µs / 1.0 ms /
+  14.8 ms / 176 ms). Parity proofs unchanged and green.
+- **Render cache**: one-entry `RenderCache` on `Engine` keyed by every
+  `renderModel` input (nonce, asset generation, viewport, canvas/grid,
+  ready images, selection, guides, full text-session state) with hit/miss
+  counters: 5k poll 15.2 ms miss → 3.9 ms hit (~4×; serialization remains
+  in both paths). Stale-frame safety pinned by invalidation tests.
+- **Security gate**: pyo3 0.22 → 0.29 migration (kills RUSTSEC-2025-0020 and
+  RUSTSEC-2026-0177; `BoundObject`/`Py<PyAny>`/`cast`/`try_iter` idioms,
+  `auto-initialize` for tests), `deny.toml` policy with green
+  `cargo deny check` (engine scope; desktop host excluded with rationale).
+- **Extension ecosystem** (ADR-0019): thin Rust `nary-sdk` facade +
+  primary TypeScript SDK (`packages/nary-sdk`: generated protocol types,
+  typed client, extension/overlay registries, runnable toolbar example vs
+  the real wasm build).
+- **Measurements**: wasm-opt v133 `-Oz` on the shipped wasm: 1303 → 1149 KB
+  raw, gzip 374 → 371 KB (negligible — already dense); optimized module
+  re-ran the JS demo green. The <150 KB PRD target needs a structural
+  diet, recorded as follow-up, not chased here.
+- **Fuzz**: `cargo-fuzz` 0.13.2 + nightly installed; local runs blocked by
+  the machine'"'"'s broken MinGW dlltool (getrandom build script) — targets,
+  corpus seeds, and CI wiring stand as the deliverable with the
+  deterministic corpus as the verified layer.
+
+Environment blockers (not code gaps): libfuzzer link on this Windows box;
+`cargo-audit` skipped as redundant (same rustsec DB as deny advisories,
+already green); Tauri IPC tests untouched (desktop app out of scope).

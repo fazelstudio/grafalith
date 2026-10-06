@@ -93,6 +93,7 @@ for read tiers. Full command in repo: `cargo bench -p nary-core --bench scale`
 | Operation | 1k | 10k | 100k | 1M |
 |---|---|---|---|---|
 | Hit-test top (indexed) | 99µs | 1.0ms | 14.8ms | 176ms |
+| Hit-test top (position index, M7) | 7µs | 6µs | 8µs | 9µs |
 | Render model (full build) | 1.1ms | 26ms | 302ms | — (not benched: allocation) |
 | Marquee query (indexed, 10k² probe) | — | 10.4ms | 54.7ms | 188ms |
 | Mass move (all + arrows + 1 entry) | 11ms | 160ms | — | — |
@@ -111,24 +112,46 @@ Two benchmark-driven fixes landed in M5 (optimize only on data):
    (116×)** after adding `update_bound_arrows_many` (single scan, same
    endpoint math, same one-entry semantics).
 
-Evidenced follow-ups (not implemented): full render at 10k costs 26ms
-(over the 16ms frame budget → tile/scene caching, M3 note); indexed
-hit-test is still an O(n) order walk (5ms budget holds to ~30k elements →
-position index); 1M mutating paths unmeasured (setup dominates).
+Evidenced follow-ups closed in M7: position index (row above — flat across
+scales, `Send + Sync` preserved via `RwLock`); one-entry render cache on
+`Engine` (5k frame poll 15.2 ms miss → 3.9 ms hit, ~4×; serialization
+remains in both paths; stale-frame safety pinned by invalidation tests).
+Remaining: 1M mutating paths unmeasured (setup dominates); tile-level
+incremental render (full 10k build still 26 ms — cache covers polling,
+not first paint).
 
-## 3. Known limits (updated M5)
+### 2.6 Distribution sizes (2026-10-06, measured)
+
+- `nary_bg.wasm` (wasm-pack, `wasm-opt=false`): 1303 KB raw / 374 KB gzip.
+- Same module through wasm-opt v133 `-Oz`: 1149 KB raw / 371 KB gzip
+  (negligible — already dense); `-O3` identical. The optimized module
+  re-ran the JS demo green.
+- Conclusion: the <150 KB gzipped PRD target is unreachable by optimizer
+  flags; it needs a structural diet (feature-gated codecs, split DTO
+  surface, leaner serde monomorphization). Recorded, not chased here.
+- PyPI wheel (CPython 3.11, release): 0.63 MB.
+
+## 3. Known limits (updated M7)
 
 - Criterion harness + LCG/proptest properties + adversarial corpus + DAG
-  wiring test land in M5; stored baselines are this document's §2.5 table
-  (criterion's machine-local baselines live under `target/`, uncommitted).
-  No CI regression gate yet (follow-up: `critcmp` or bencher jobs).
+  wiring test land in M5/M7; stored baselines are this document's §2.5–§2.6
+  tables (criterion's machine-local baselines live under `target/`,
+  uncommitted). No CI regression gate yet (follow-up: `critcmp` or
+  bencher jobs).
 - No release-profile lab numbers beyond `cargo bench` (optimized); no
   machine-pinned lab; 1M mutating paths unmeasured.
-- `cargo-fuzz` libfuzzer unavailable on the stable-only toolchain here —
-  deterministic adversarial corpus (`adversarial_parsers.rs`) stands in,
-  wired as future fuzz targets.
-- `cargo-deny` / `cargo-audit` / `cargo-semver-checks` unavailable here —
-  recorded as CI follow-up (master allows "bila tersedia").
+- `cargo-fuzz` local runs blocked by this box's broken MinGW dlltool
+  (getrandom build script under MSVC nightly) — targets, corpus seeds,
+  and a CI job stand as the deliverable; the deterministic corpus is the
+  locally-verified layer.
+- `cargo deny check` green (engine scope; desktop host excluded with
+  rationale). `cargo-audit` skipped as redundant — same rustsec DB as the
+  deny advisories gate, already green.
+- Property testing found one real boundary (proptest shrinking to
+  `cx=1.27e308, rot=-1.6e16`): rotation round-trips hold to 1e-9 inside
+  scene-size domains; beyond ~1e300, `px - cx` itself overflows to inf
+  (pure float behavior, never a panic — downstream finite guards at
+  storage/input boundaries treat inf as miss/invalid, as designed).
 - Property testing found one real boundary (proptest shrinking to
   `cx=1.27e308, rot=-1.6e16`): rotation round-trips hold to 1e-9 inside
   scene-size domains; beyond ~1e300, `px - cx` itself overflows to inf

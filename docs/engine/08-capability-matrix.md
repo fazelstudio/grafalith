@@ -17,6 +17,9 @@ command; no capability is internal-only.
 | Out-of-workspace SDK example | `plugin.execute` (`example.sticker.create`) | `ext-sticker` (3, own workspace) | ✅ |
 | Custom-button demos (Rust/JS/Python) | `tool.activate`, pointer ops, `session.state`, `view.renderModel` | runnable examples vs real artifacts | ✅ |
 | Generated `.d.ts`/`.pyi` parity | all 78 wire ops | generator `--check` (CI) + `tsc` + protocol cross-check | ✅ |
+| TypeScript SDK (client + registry) | all 78 wire ops via `batch()` + typed helpers | `tsc --noEmit` + runnable bun example vs real wasm | ✅ |
+| Rust SDK facade | plugin traits + registry (re-export) | `sdk_surface` (1) | ✅ |
+| Dependency security gate | advisories + bans + licenses + sources | `cargo deny check` green (deny.toml, engine scope) | ✅ (pyo3 0.29 upgrade killed 2 RUSTSEC) |
 | Lock/hide | `node.setLocked`, `node.create/update` | `document_model` | ✅ |
 | Z-order | `node.reorder`, `node.bringToFront/SendToBack/BringForward/SendBackward` | `parity_model`, `bindings_react` | ✅ |
 | Schema v1 + repair + clipboard codec | `io.importScene/exportScene`, `clipboard.*` | `io_model` (21, TS goldens) | 🟡 (v1 only; M4) |

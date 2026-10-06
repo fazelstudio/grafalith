@@ -143,3 +143,27 @@ direct field mutation).
 - `generated/nary-commands.d.ts` + `generated/nary.pyi` — produced by
   `scripts/gen_command_bindings.py` from the single 78-op table
   (cross-checked against `protocol.rs`; CI runs `--check`).
+
+## 6. TypeScript SDK: the primary extension surface (M7, ADR-0019)
+
+`packages/nary-sdk` is where the VSCode-like ecosystem lives: extension
+manifests, activation/disposal, tool contributions, and overlay renderers
+over a typed engine client. It drives the real engine (wasm) through the
+same JSON protocol — no engine changes, no second wasm module.
+
+- `src/protocol.generated.ts` — 78-op vocabulary, generated from the same
+  `COMMANDS` table as the other bindings (CI `--check`).
+- `src/client.ts` — `EngineClient`: typed helpers plus the raw `batch()`
+  escape hatch for full-protocol access.
+- `src/extension.ts` — `ExtensionRegistry` (register → activate → dispose,
+  duplicate/unknown ids are loud errors) and `OverlayRegistry` (custom
+  canvas layers over render-model snapshots).
+- `example/toolbar-extension.ts` — runnable toolbar + overlay scenario
+  (bun + real wasm artifact, green).
+
+Boundary rule: TypeScript extensions contribute UI, tools, panels,
+overlays, and automation. New node types and history-integrated commands
+stay Rust (`crates/nary-sdk`, `examples/ext-sticker`) because `Custom`
+payloads and `CommandExtension` never cross the JSON boundary — a technical
+constraint, not a preference (a Rust-only SDK shipped via wasm would only
+re-format JSON with glue overhead and a duplicated serde).
