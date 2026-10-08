@@ -2,6 +2,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  scrollbar-gutter: stable;
   padding: 22px 28px 48px;
   display: flex;
   flex-direction: column;

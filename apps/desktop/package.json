@@ -2,7 +2,7 @@
   "name": "@fazelstudio/desktop",
   "private": true,
   "version": "0.1.0",
-  "description": "Nary desktop demo — Tauri + React reference host for the Nary canvas engine.",
+  "description": "OpenNary desktop demo — Tauri + React reference host for the OpenNary canvas engine.",
   "type": "module",
   "scripts": {
     "dev": "vite",

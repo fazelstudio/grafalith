@@ -1,14 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import { projectTemplateRegistry } from './templateRegistry';
+import { projectKindRegistry, templateForKind } from './projectKinds';
 import { filterProjects } from './search';
 import { validateProjectName } from './projectNames';
 import { deriveHomeListState, toProjectOpenError } from '../home/homeState';
-import type { ProjectSummary } from '../../platform/projects/types';
+import { normalizeProjectKind } from '../../platform/projects/types';
+import type { ProjectKind, ProjectSummary } from '../../platform/projects/types';
 
-function summary(name: string): ProjectSummary {
+function summary(name: string, kind: ProjectKind = 'design'): ProjectSummary {
   return {
     id: `p-${name}`,
     name,
+    kind,
     createdAtMs: 1,
     updatedAtMs: 2,
     schemaVersion: 1,
@@ -30,6 +33,19 @@ describe('project template registry', () => {
     const parsed = JSON.parse(scene) as Record<string, unknown>;
     expect(parsed.elements).toEqual([]);
     expect(parsed.elementOrder).toEqual([]);
+  });
+
+  test('every editor kind has a template resolving to its kind', () => {
+    for (const entry of projectKindRegistry.all()) {
+      const template = templateForKind(entry.id as ProjectKind);
+      expect(template.kind).toBe(entry.id);
+    }
+  });
+
+  test('unknown kinds normalize to design instead of crashing', () => {
+    expect(normalizeProjectKind(undefined)).toBe('design');
+    expect(normalizeProjectKind('spreadsheet')).toBe('design');
+    expect(normalizeProjectKind('whiteboard')).toBe('whiteboard');
   });
 });
 

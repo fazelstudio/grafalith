@@ -1,5 +1,4 @@
 import type { DrawEntryDto, Engine } from '../../../hooks/useEngine';
-import { parseBatchResult } from '../../../hooks/useEngine';
 import type { CommandResult } from '../../../registries';
 
 /** Control template a field renders through (no bespoke JSX per property). */
@@ -17,12 +16,14 @@ export type InspectorControlType =
 export const MIXED = Symbol('mixed');
 export type Mixed = typeof MIXED;
 
-/** Context a field reads from and writes through (engine-backed only). */
+/** Context a field reads from and writes through (command-backed only). */
 export interface InspectorFieldContext {
   entries: DrawEntryDto[];
   selection: readonly string[];
   sendBatch: (ops: unknown[]) => Promise<string>;
   engine: Engine;
+  /** Write path: one inspector command per op (bounds, rotation, style). */
+  commit: (commandId: string, op: string, ops: unknown[]) => Promise<CommandResult>;
 }
 
 export type FieldValue = string | number | boolean | Mixed;
@@ -84,26 +85,23 @@ function solidFillColor(entry: DrawEntryDto): string | null {
   return null;
 }
 
+/** Op name to the inspector command owning it (one intent per write). */
+const INSPECTOR_COMMANDS: Readonly<Record<string, string>> = {
+  setBounds: 'inspector.setBounds',
+  setRotation: 'inspector.setRotation',
+  setStyle: 'inspector.setStyle',
+};
+
 async function runWriteOp(
   ctx: InspectorFieldContext,
   op: string,
   ops: unknown[],
 ): Promise<CommandResult> {
-  try {
-    const raw = await ctx.sendBatch(ops);
-    const parsed = parseBatchResult(raw);
-    const failure = parsed.results.find((entry) => entry.op === op && !entry.ok);
-    if (failure) {
-      return { status: 'engineError', code: failure.code ?? 'engineError', message: failure.message ?? `op "${op}" failed` };
-    }
-    return { status: 'ok' };
-  } catch (error) {
-    return {
-      status: 'engineError',
-      code: 'transportError',
-      message: error instanceof Error ? error.message : String(error),
-    };
+  const commandId = INSPECTOR_COMMANDS[op];
+  if (!commandId) {
+    return { status: 'validationError', message: `Unknown inspector op "${op}"` };
   }
+  return ctx.commit(commandId, op, ops);
 }
 
 function finiteNumber(value: unknown): number | undefined {

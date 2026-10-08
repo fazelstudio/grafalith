@@ -32,6 +32,9 @@ describe('theme system', () => {
       for (const color of Object.values(tokens.colors)) {
         expect(color.length).toBeGreaterThan(0);
       }
+      for (const color of Object.values(tokens.canvasOverlay)) {
+        expect(color.length).toBeGreaterThan(0);
+      }
       expect(Object.keys(tokens.spacing).length).toBeGreaterThan(0);
       expect(Object.keys(tokens.typography).length).toBeGreaterThan(0);
       expect(Object.keys(tokens.radii).length).toBeGreaterThan(0);

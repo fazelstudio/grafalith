@@ -3,11 +3,11 @@ name = "ext-sticker"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Out-of-workspace Nary plugin example: a sticker node type with its own tool and command. No engine sources modified."
+description = "Out-of-workspace OpenNary extension example: a sticker node type with its own tool and command. No engine sources modified."
 
 # Standalone workspace: this crate consumes the engine like an external
 # user would, never as a workspace member.
 [workspace]
 
 [dependencies]
-nary-core = { version = "0.1.0", path = "../../crates/nary-core" }
+opennary-core = { version = "0.1.0", path = "../../crates/opennary-core" }

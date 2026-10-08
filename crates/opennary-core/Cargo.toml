@@ -1,0 +1,23 @@
+[package]
+name = "opennary-core"
+version = "0.1.0"
+edition = "2021"
+description = "Document domain for the OpenNary Rust engine: elements, document store, history, registries. Framework-agnostic; depends only on opennary-geometry."
+license = "MIT"
+
+[dependencies]
+opennary-geometry = { version = "0.1.0", path = "../opennary-geometry" }
+# Polygon boolean ops: pure Rust, WASM-safe, empty default features.
+i_overlay = { version = "9", default-features = false }
+
+# Benchmark and property harnesses for local runs.
+[dev-dependencies]
+criterion = "0.5"
+proptest = "1"
+
+[[bench]]
+name = "scale"
+harness = false
+
+[lints]
+workspace = true

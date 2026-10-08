@@ -3,12 +3,12 @@
 //! hit-test behavior through the dispatch helpers.
 
 use ext_sticker::{
-    StickerPlugin, StickerShape, STICKER_CREATE_COMMAND, STICKER_TOOL, STICKER_TYPE,
+    StickerExtension, StickerShape, STICKER_CREATE_COMMAND, STICKER_TOOL, STICKER_TYPE,
 };
-use nary_core::editor::Editor;
-use nary_core::element::{CustomElement, Element};
-use nary_core::interaction::ToolId;
-use nary_core::shape_extension::{dispatch_bounds, dispatch_hit_test};
+use opennary_core::editor::Editor;
+use opennary_core::element::{CustomElement, Element};
+use opennary_core::interaction::ToolId;
+use opennary_core::shape_extension::{dispatch_bounds, dispatch_hit_test};
 
 fn sticker_custom(editor: &Editor) -> CustomElement {
     let live = editor.document().get_all();
@@ -20,30 +20,30 @@ fn sticker_custom(editor: &Editor) -> CustomElement {
 }
 
 #[test]
-fn external_plugin_registers_tool_shape_and_command() {
+fn external_extension_registers_tool_shape_and_command() {
     let mut editor = Editor::new();
     editor
-        .register_plugin(Box::new(StickerPlugin::new()))
-        .expect("compatible plugin registers");
+        .register_extension(Box::new(StickerExtension::new()))
+        .expect("compatible extension registers");
     assert!(editor
         .tool_registry()
         .contains(&ToolId::Custom(STICKER_TOOL.to_string())));
     assert_eq!(
-        editor.plugin_command_ids(),
+        editor.extension_command_ids(),
         vec![STICKER_CREATE_COMMAND.to_string()]
     );
-    assert_eq!(editor.plugin_registry().shapes().len(), 1);
-    assert_eq!(editor.plugin_registry().shapes()[0].0, STICKER_TYPE);
+    assert_eq!(editor.extension_registry().shapes().len(), 1);
+    assert_eq!(editor.extension_registry().shapes()[0].0, STICKER_TYPE);
 }
 
 #[test]
 fn external_command_creates_and_undoes_one_entry() {
     let mut editor = Editor::new();
     editor
-        .register_plugin(Box::new(StickerPlugin::new()))
-        .expect("compatible plugin registers");
+        .register_extension(Box::new(StickerExtension::new()))
+        .expect("compatible extension registers");
     let outcome = editor
-        .execute_plugin_command(STICKER_CREATE_COMMAND)
+        .execute_extension_command(STICKER_CREATE_COMMAND)
         .expect("sticker command runs");
     assert!(outcome.changed);
     let custom = sticker_custom(&editor);
@@ -59,10 +59,10 @@ fn external_command_creates_and_undoes_one_entry() {
 fn external_shape_has_circle_hit_behavior() {
     let mut editor = Editor::new();
     editor
-        .register_plugin(Box::new(StickerPlugin::new()))
-        .expect("compatible plugin registers");
+        .register_extension(Box::new(StickerExtension::new()))
+        .expect("compatible extension registers");
     editor
-        .execute_plugin_command(STICKER_CREATE_COMMAND)
+        .execute_extension_command(STICKER_CREATE_COMMAND)
         .expect("sticker command runs");
     // Sticker sits at (100, 100), 120x120: center hits, the box corner
     // (inside the AABB, outside the circle) misses.

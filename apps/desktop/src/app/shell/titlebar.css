@@ -23,6 +23,6 @@
 }
 
 .titlebar-button--close:hover {
-  background: #e81123;
-  color: #ffffff;
+  background: var(--window-close);
+  color: var(--window-close-fg);
 }

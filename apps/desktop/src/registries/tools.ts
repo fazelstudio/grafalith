@@ -10,6 +10,7 @@ export type ToolGroup = 'selection' | 'shapes' | 'connectors' | 'draw' | 'text';
 
 /** Persistent interaction mode (tools are modes, commands are discrete actions). */
 export type ToolMode = 'persistent';
+export type ToolBarPlacement = 'primary' | 'more';
 
 /** Declarative description of one drawing tool. */
 export interface ToolDefinition extends Descriptor {
@@ -27,6 +28,10 @@ export interface ToolDefinition extends Descriptor {
   engineTool: string;
   /** Engine capability requirement (documents why a tool is or isn't registered). */
   capability?: string;
+  /** Whether the tool is promoted to the compact editor toolbar. */
+  toolbarPlacement: ToolBarPlacement;
+  /** Shared icon identifier resolved by the host icon registry. */
+  icon: string;
 }
 
 /**
@@ -48,6 +53,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Select and move elements',
     engineTool: 'select',
     capability: 'engine ToolId::Select',
+    toolbarPlacement: 'primary',
+    icon: 'select',
   },
   {
     id: 'rectangle',
@@ -60,6 +67,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Draw a rectangle',
     engineTool: 'rectangle',
     capability: 'engine ToolId::Draw(rectangle)',
+    toolbarPlacement: 'primary',
+    icon: 'rectangle',
   },
   {
     id: 'ellipse',
@@ -72,6 +81,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Draw an ellipse',
     engineTool: 'ellipse',
     capability: 'engine ToolId::Draw(ellipse)',
+    toolbarPlacement: 'primary',
+    icon: 'ellipse',
   },
   {
     id: 'frame',
@@ -84,6 +95,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Draw a frame',
     engineTool: 'frame',
     capability: 'engine ToolId::Draw(frame)',
+    toolbarPlacement: 'primary',
+    icon: 'frame',
   },
   {
     id: 'line',
@@ -96,6 +109,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Draw a line',
     engineTool: 'line',
     capability: 'engine ToolId::Draw(line)',
+    toolbarPlacement: 'primary',
+    icon: 'line',
   },
   {
     id: 'arrow',
@@ -108,6 +123,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Draw an arrow',
     engineTool: 'arrow',
     capability: 'engine ToolId::Draw(arrow)',
+    toolbarPlacement: 'primary',
+    icon: 'arrow',
   },
   {
     id: 'text',
@@ -120,6 +137,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Create or edit text',
     engineTool: 'text',
     capability: 'engine ToolId::Text',
+    toolbarPlacement: 'primary',
+    icon: 'text',
   },
   {
     id: 'freedraw',
@@ -132,6 +151,8 @@ const TOOLS: readonly ToolDefinition[] = [
     defaultDescription: 'Draw freehand',
     engineTool: 'freedraw',
     capability: 'engine ToolId::Draw(freedraw)',
+    toolbarPlacement: 'more',
+    icon: 'freedraw',
   },
 ];
 

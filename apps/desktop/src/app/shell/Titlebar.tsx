@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/resources';
 import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
+import { executeAppCommand, type AppCommandContext } from '../../registries/appCommands';
 import { CloseIcon, MaximizeIcon, MinusIcon, RestoreIcon } from '../../ui/icons';
+import { Tooltip } from '../../ui/primitives/tooltip';
 import './titlebar.css';
 
 /** Custom window controls for the undecorated main window. Hidden outside Tauri. */
@@ -51,51 +53,61 @@ export function Titlebar() {
 
   if (!enabled) return null;
 
-  const run = async (action: 'minimize' | 'toggle' | 'close') => {
-    try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      const { toggleMaximizeRestore } = await import('../../platform/window/windowGeometry');
-      const win = getCurrentWindow();
-      if (action === 'minimize') await win.minimize();
-      else if (action === 'toggle') await toggleMaximizeRestore(win);
-      else await win.close();
-    } catch {
-      // Permission denied or browser preview: controls stay visible but inert.
-    }
+  // Window chrome runs through the shared host commands so palette rows,
+  // buttons, and future extensions share one execution path.
+  const appContext: AppCommandContext = {
+    windowAction: async (action) => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        const { toggleMaximizeRestore } = await import('../../platform/window/windowGeometry');
+        const win = getCurrentWindow();
+        if (action === 'minimize') await win.minimize();
+        else if (action === 'maximizeRestore') await toggleMaximizeRestore(win);
+        else await win.close();
+      } catch {
+        // Permission denied or browser preview: controls stay visible but inert.
+      }
+    },
   };
+
+  const run = (id: 'window.minimize' | 'window.toggleMaximize' | 'window.close') =>
+    void executeAppCommand(id, appContext);
 
   const toggleLabel = maximized ? t('common.actions.restore') : t('common.actions.maximize');
 
   return (
     <div className="titlebar-controls" role="group" aria-label={t('common.appName')}>
-      <button
-        type="button"
-        className="titlebar-button"
-        aria-label={t('common.actions.minimize')}
-        title={t('common.actions.minimize')}
-        onClick={() => void run('minimize')}
-      >
-        <MinusIcon size={14} />
-      </button>
-      <button
-        type="button"
-        className="titlebar-button"
-        id="restore-btn"
-        aria-label={toggleLabel}
-        title={toggleLabel}
-        onClick={() => void run('toggle')}
-      >
-        {maximized ? <RestoreIcon size={14} /> : <MaximizeIcon size={14} />}
-      </button>
-      <button
-        type="button"
-        className="titlebar-button titlebar-button--close"
-        aria-label={t('common.actions.close')}
-        title={t('common.actions.close')}
-        onClick={() => void run('close')}
-      >
-        <CloseIcon size={14} />
-      </button>
+      <Tooltip content={t('common.actions.minimize')} placement="bottom">
+        <button
+          type="button"
+          className="titlebar-button"
+          aria-label={t('common.actions.minimize')}
+          onClick={() => run('window.minimize')}
+        >
+          <MinusIcon size={14} />
+        </button>
+      </Tooltip>
+      <Tooltip content={toggleLabel} placement="bottom">
+        <button
+          type="button"
+          className="titlebar-button"
+          id="restore-btn"
+          aria-label={toggleLabel}
+          onClick={() => run('window.toggleMaximize')}
+        >
+          {maximized ? <RestoreIcon size={14} /> : <MaximizeIcon size={14} />}
+        </button>
+      </Tooltip>
+      <Tooltip content={t('common.actions.close')} placement="bottom">
+        <button
+          type="button"
+          className="titlebar-button titlebar-button--close"
+          aria-label={t('common.actions.close')}
+          onClick={() => run('window.close')}
+        >
+          <CloseIcon size={14} />
+        </button>
+      </Tooltip>
     </div>
   );
 }

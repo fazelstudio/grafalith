@@ -172,6 +172,8 @@ export interface Engine {
   ready: boolean;
   /** True when the Tauri transport failed; the editor reports this honestly. */
   failed: boolean;
+  /** Original initialization rejection for actionable diagnostics. */
+  failure: unknown;
   sendBatch: (ops: unknown[]) => Promise<string>;
   getStatus: () => Promise<EngineStatus>;
   /** One crossing for the whole frame: renderModel + sessionState (CSS px!). */
@@ -184,6 +186,7 @@ export interface Engine {
 
 export function useEngine(): Engine {
   const [lifecycle, setLifecycle] = useState<'pending' | 'ready' | 'failed'>('pending');
+  const [failure, setFailure] = useState<unknown>(null);
   const engineRef = useRef<Engine | null>(null);
 
   useEffect(() => {
@@ -192,8 +195,11 @@ export function useEngine(): Engine {
       () => {
         if (!cancelled) setLifecycle('ready');
       },
-      () => {
-        if (!cancelled) setLifecycle('failed');
+      (error: unknown) => {
+        if (!cancelled) {
+          setFailure(error);
+          setLifecycle('failed');
+        }
       },
     );
     return () => {
@@ -264,13 +270,14 @@ export function useEngine(): Engine {
   }, []);
 
   const importScene = useCallback(async (json: string, tracked: boolean): Promise<string> => {
-    return invoke('import_scene', { scene_json: json, tracked });
+    return invoke('import_scene', { sceneJson: json, tracked });
   }, []);
 
   if (!engineRef.current) {
     engineRef.current = {
       ready: false,
       failed: false,
+      failure: null,
       sendBatch,
       getStatus,
       getFrame,
@@ -283,6 +290,7 @@ export function useEngine(): Engine {
 
   engineRef.current.ready = lifecycle === 'ready';
   engineRef.current.failed = lifecycle === 'failed';
+  engineRef.current.failure = failure;
 
   return engineRef.current;
 }

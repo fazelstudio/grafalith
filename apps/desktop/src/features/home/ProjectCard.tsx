@@ -1,7 +1,9 @@
 import { useI18n } from '../../app/i18n/resources';
-import type { ProjectSummary } from '../../platform/projects/types';
-import { ProjectsIcon, StarIcon } from '../../ui/icons';
+import { normalizeProjectKind, type ProjectSummary } from '../../platform/projects/types';
+import { projectKindLabelKey } from '../projects/projectKinds';
+import { StarIcon } from '../../ui/icons';
 import { formatProjectDate } from './formatDate';
+import { ProjectThumbnail } from './ProjectThumbnail';
 
 interface ProjectCardProps {
   project: ProjectSummary;
@@ -40,6 +42,11 @@ export function ProjectCard({ project, selected, busy, onOpen, onMenu, onRename 
     }
   }
 
+  function onCardClick(event: React.MouseEvent<HTMLElement>): void {
+    if ((event.target as HTMLElement).closest('button')) return;
+    onOpen();
+  }
+
   const stamp = project.lastOpenedAtMs ?? project.updatedAtMs;
 
   return (
@@ -48,14 +55,17 @@ export function ProjectCard({ project, selected, busy, onOpen, onMenu, onRename 
       tabIndex={0}
       data-project-id={project.id}
       aria-label={project.name}
-      onDoubleClick={onOpen}
+      onClick={onCardClick}
       onKeyDown={onKeyDown}
       onContextMenu={openMenuAt}
     >
       <div className="project-card__preview" aria-hidden="true">
-        <span className="project-card__preview-sheet">
-          <ProjectsIcon size={22} />
-        </span>
+        {project.documentExists ? (
+          <ProjectThumbnail
+            projectId={project.id}
+            label={t('projects.previewLabel', { name: project.name })}
+          />
+        ) : null}
       </div>
       {project.favoriteAtMs !== undefined ? (
         <span className="project-card__favorite" aria-hidden="true">
@@ -67,9 +77,9 @@ export function ProjectCard({ project, selected, busy, onOpen, onMenu, onRename 
         className="project-card__main"
         onClick={onOpen}
         disabled={busy}
-        title={t('projects.actions.open')}
       >
         <span className="project-card__name">{project.name}</span>
+        <span className="project-card__kind">{t(projectKindLabelKey(normalizeProjectKind(project.kind)))}</span>
         <span className="project-card__meta">
           {t('projects.list.updatedAt', { date: formatProjectDate(stamp, locale) })}
         </span>

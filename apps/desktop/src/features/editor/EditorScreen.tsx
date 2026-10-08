@@ -4,11 +4,31 @@ import { useI18n } from '../../app/i18n/resources';
 import { notifyBootDataReady } from '../../app/boot';
 import { Button, EmptyState, LoadingState } from '../../ui/primitives/controls';
 import { Dialog } from '../../ui/primitives/overlays';
-import { toolRegistry, executeCommand, type CommandContext, type ViewActions } from '../../registries';
+import {
+  toolRegistry,
+  executeCommand,
+  executeAppCommand,
+  executeUnifiedRow,
+  type AppCommandContext,
+  type CommandContext,
+  type UnifiedPaletteRow,
+  type ViewActions,
+} from '../../registries';
 import { commandResultMessage } from './engineGaps';
 import { normalizeSelection } from './selection';
 import { useEditorShortcuts } from './shortcuts/useEditorShortcuts';
-import { CommandPalette } from './palette/CommandPalette';
+import { TitlebarQuickSwitcher } from './quickswitcher/QuickSwitcher';
+import { CreateProjectDialog } from '../home/ProjectDialogs';
+import { SettingsModal } from '../settings/SettingsModal';
+import { getProjectStore } from '../../platform/projects/projectService';
+import { getExtensionHost } from '../../platform/extensions/extensionHost';
+import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
+import {
+  normalizeProjectKind,
+  parseProjectError,
+  type ProjectKind,
+} from '../../platform/projects/types';
+import { projectKindHintKey, templateForKind } from '../projects/projectKinds';
 import { Canvas } from './Canvas';
 import { EditorTopBar } from './EditorTopBar';
 import { EditorToolbar } from './EditorToolbar';
@@ -17,16 +37,20 @@ import { PanelHost } from './panels/PanelHost';
 import { useProjectPersistence } from './useProjectPersistence';
 import { useProjectSession } from './useProjectSession';
 import { useToast } from '../../app/shell/ToastProvider';
-import {
-  type EditorWorkspace,
-} from '../../platform/preferences/editorWorkspace';
 import { preferenceService } from '../../platform/preferences/preferenceService';
+import type { EditorWorkspace } from '../../platform/preferences/editorWorkspace';
 import type { ViewportState } from '../../render/coords';
+import { SettingsIcon } from '../../ui/icons';
+import { Tooltip } from '../../ui/primitives/tooltip';
+import { DesignEditor } from './editors/DesignEditor';
+import { WhiteboardEditor } from './editors/WhiteboardEditor';
+import { DiagramEditor } from './editors/DiagramEditor';
 import './editor.css';
 
 interface EditorScreenProps {
   projectId: string;
   onBackToHome: () => void;
+  onOpenProject: (id: string) => void;
 }
 
 function totalEntries(frame: FrameSnapshot): number {
@@ -61,14 +85,11 @@ function sameViewport(a: ViewportState, b: ViewportState): boolean {
 }
 
 /**
- * Design-editor workspace: top bar, registry-driven toolbar, canvas
- * viewport with engine-owned state, docked panels, and status line. The
- * engine owns document, selection, and viewport; React mirrors them for
- * chrome and panels through the shared frame snapshot. All user intents
- * flow through one command registry; shortcuts, menus, palette, toolbar,
- * and context menu share that source.
+ * Editor orchestrator: session, persistence, commands, and window identity.
+ * Layout itself lives in `EditorShell` (one master template); the project
+ * kind only selects which thin kind editor wraps that shell.
  */
-export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
+export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorScreenProps) {
   const engine = useEngine();
   const { t } = useI18n();
   const { notify } = useToast();
@@ -77,26 +98,99 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
   const [rendererFailed, setRendererFailed] = useState(false);
   const [canvasKey, setCanvasKey] = useState(0);
   const [protocolVersion, setProtocolVersion] = useState<number | null>(null);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState<{ open: boolean; initialQuery: string }>({
+    open: false,
+    initialQuery: '',
+  });
+  const [createKind, setCreateKind] = useState<ProjectKind | null>(null);
+  const [createPending, setCreatePending] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const restoredRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const extensionInputRef = useRef<HTMLInputElement>(null);
+  const extensionPickResolve = useRef<((file: File | undefined) => void) | null>(null);
   const { session, retry } = useProjectSession(engine, projectId);
   const sessionKind = session.kind;
   useEffect(() => {
     // Settled session (ready or failed) means first content is ready to show.
     if (sessionKind !== 'opening') notifyBootDataReady();
   }, [sessionKind]);
-  const { saveState, saveNow, flushForClose, recovery, restoreRecovery, discardRecovery } =
-    useProjectPersistence(engine, projectId, session.kind === 'ready');
+  useEffect(() => {
+    // Project entry never waits for extensions: pause their queue while the
+    // project opens, then resume and drain once the session is ready.
+    const host = getExtensionHost();
+    host.setNotifier((message, options) => notify(message, options));
+    host.enqueueStartupActivation();
+    if (sessionKind === 'opening') {
+      host.pauseExtensions();
+    } else if (sessionKind === 'ready') {
+      host.resumeExtensions();
+      void host.drainStartupQueue();
+    }
+  }, [sessionKind, notify]);
+
+  const lastSelectionRef = useRef<string>('');
+  useEffect(() => {
+    // Fan selection changes out to active extension workspaces.
+    if (session.kind !== 'ready' || !frame) return;
+    const key = frame.session.selection.join('\0');
+    if (key !== lastSelectionRef.current) {
+      lastSelectionRef.current = key;
+      getExtensionHost().emitSelection(frame.session.selection);
+    }
+  }, [frame, session.kind]);
+
+  useEffect(() => {
+    if (session.kind === 'ready') getExtensionHost().emitDocument(projectId);
+  }, [session.kind, projectId]);
+  const { saveState, saveNow, flushForClose } = useProjectPersistence(
+    engine,
+    projectId,
+    session.kind === 'ready',
+  );
+  const dirty = saveState.kind !== 'saved';
+  const projectKind: ProjectKind =
+    session.kind === 'ready' ? normalizeProjectKind(session.projectKind) : 'design';
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const activeTool = workspace.activeTool;
-  const openPanels = workspace.openPanels;
 
   useEffect(() => {
     preferenceService.setWorkspace(workspace);
   }, [workspace]);
+
+  // Window identity follows the localized app name ("<name>[*] - OpenNary")
+  // while a project is open so the OS frame matches the titlebar capsule,
+  // including the dirty marker.
+  const appName = t('common.appName');
+  useEffect(() => {
+    if (session.kind !== 'ready') return;
+    const title = `${session.name}${dirty ? '*' : ''} - ${appName}`;
+    document.title = title;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!isTauriRuntime()) return;
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        if (!cancelled) await getCurrentWindow().setTitle(title);
+      } catch {
+        // Browser preview or missing permission: document title still applies.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      document.title = appName;
+    };
+  }, [session, dirty, appName]);
+
+  useEffect(() => {
+    if (session.kind !== 'ready') return;
+    setWorkspace((previous) =>
+      previous.activeTool === 'select' ? previous : { ...previous, activeTool: 'select' },
+    );
+  }, [projectId, session.kind]);
 
   useEffect(() => {
     if (!engine.ready) return;
@@ -124,7 +218,6 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
       void engine.sendBatch([{ op: 'setViewport', ...saved }]);
     }
     // Intentionally one-shot per document; later viewports persist below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, engine, projectId]);
 
   // Persist viewport movement for this document as the engine reports it.
@@ -156,21 +249,22 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
     setWorkspace((prev) => (prev.activeTool === tool ? prev : { ...prev, activeTool: tool }));
   }, []);
 
-  const handleTogglePanel = useCallback((id: string) => {
-    setWorkspace((prev) => ({
-      ...prev,
-      openPanels: prev.openPanels.includes(id)
-        ? prev.openPanels.filter((open) => open !== id)
-        : [...prev.openPanels, id],
-    }));
-  }, []);
-
   const dismissHint = useCallback(() => {
     setWorkspace((prev) => ({ ...prev, hintDismissed: true }));
   }, []);
 
-  const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const openLayers = useCallback(
+    () => setQuickOpen({ open: true, initialQuery: '' }),
+    [],
+  );
+  const openCommands = useCallback(
+    () => setQuickOpen({ open: true, initialQuery: '>' }),
+    [],
+  );
+  const closeQuick = useCallback(
+    () => setQuickOpen((current) => (current.open ? { ...current, open: false } : current)),
+    [],
+  );
 
   const [viewActions, setViewActions] = useState<ViewActions | null>(null);
   const handleViewActionsReady = useCallback((actions: ViewActions | null) => {
@@ -183,7 +277,7 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'nary-scene.json';
+    link.download = 'opennary-scene.json';
     link.click();
     URL.revokeObjectURL(url);
   }, [engine]);
@@ -224,19 +318,19 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
       documentIds: allDocumentIds(frame),
       view: viewActions ?? undefined,
       files: session.kind === 'ready' ? { exportScene: handleExportScene, importScene: handleImportScene } : undefined,
-      ui: { openPalette },
+      ui: { openPalette: openCommands },
     };
-  }, [engine, frame, activeTool, session.kind, handleExportScene, handleImportScene, openPalette, viewActions]);
+  }, [engine, frame, activeTool, session.kind, handleExportScene, handleImportScene, openCommands, viewActions]);
 
   useEditorShortcuts({
     context: commandContext,
-    paletteOpen,
+    paletteOpen: quickOpen.open,
     onToolChange: handleToolChange,
     notify,
     t,
   });
 
-  // Project save stays outside the command registry (persistence lifecycle,
+  // Manual save stays outside the command registry (persistence lifecycle,
   // not an engine intent) but uses one window listener instead of scattered
   // per-component handlers. It works from inputs too.
   useEffect(() => {
@@ -250,9 +344,9 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [saveNow]);
 
-  const handlePaletteExecute = useCallback(
+  const handleQuickExecute = useCallback(
     async (id: string) => {
-      setPaletteOpen(false);
+      setQuickOpen((current) => ({ ...current, open: false }));
       const result = await executeCommand(id, commandContext);
       const message = commandResultMessage(id, result, t);
       if (message) notify(message);
@@ -272,25 +366,84 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
             ? current.filter((id) => id !== normalizedIds[0])
             : [...current, normalizedIds[0]]
           : normalizedIds;
-      void engine.sendBatch([{ op: 'select', ids: next }]);
+      const snapshot = frame;
+      const selection = normalizeSelection(snapshot?.session.selection ?? [], live);
+      const documentIds = snapshot ? allDocumentIds(snapshot) : [];
+      const viewport = snapshot?.session.viewport ?? { scrollX: 0, scrollY: 0, zoom: 1 };
+      void executeCommand('selectIds', {
+        engine,
+        sendBatch: engine.sendBatch,
+        selection,
+        canUndo: snapshot?.session.canUndo ?? false,
+        canRedo: snapshot?.session.canRedo ?? false,
+        activeTool,
+        viewport,
+        textEditingId: snapshot?.session.textEditing?.id ?? null,
+        documentIds,
+        targetIds: next,
+      });
     },
-    [engine, frame],
+    [engine, frame, activeTool],
   );
 
-  const saveLabel =
-    saveState.kind === 'saved'
-      ? t('editor.project.saved')
-      : saveState.kind === 'saving'
-        ? t('editor.project.saving')
-        : saveState.kind === 'save-failed'
-          ? t('editor.project.saveFailed')
-          : saveState.kind === 'recovering'
-            ? t('editor.project.recovering')
-            : t('editor.project.unsavedChanges');
+  const handleQuickSelect = useCallback(
+    (id: string) => {
+      setQuickOpen((current) => ({ ...current, open: false }));
+      handleSelect([id], false);
+    },
+    [handleSelect],
+  );
+
+  // File menu host actions: project creation reuses the home name dialog so
+  // validation stays identical; duplication copies the open project store entry.
+  const handleNewProject = useCallback((kind: ProjectKind) => {
+    setCreateError(null);
+    setCreatePending(false);
+    setCreateKind(kind);
+  }, []);
+
+  const confirmNewProject = useCallback(
+    async (name: string) => {
+      if (createPending || createKind === null) return;
+      setCreatePending(true);
+      setCreateError(null);
+      try {
+        const template = templateForKind(createKind);
+        const created = await getProjectStore().create(name, template.buildScene(), template.kind);
+        notify(t('projects.notifications.created', { name: created.name }));
+        setCreateKind(null);
+        onOpenProject(created.id);
+      } catch (raw) {
+        const error = parseProjectError(raw);
+        setCreateError(
+          error.code === 'invalid-name'
+            ? t(error.messageKey, { details: error.details ?? '' })
+            : t('projects.errors.createFailed'),
+        );
+      } finally {
+        setCreatePending(false);
+      }
+    },
+    [createPending, createKind, notify, onOpenProject, t],
+  );
+
+  const handleDuplicateProject = useCallback(async () => {
+    try {
+      const copy = await getProjectStore().duplicate(projectId);
+      notify(t('projects.notifications.duplicated', { name: copy.name }));
+      onOpenProject(copy.id);
+    } catch (raw) {
+      const error = parseProjectError(raw);
+      notify(
+        error.details !== undefined
+          ? t(error.messageKey, { details: error.details })
+          : t(error.messageKey),
+      );
+    }
+  }, [notify, onOpenProject, projectId, t]);
 
   // Explicit close lifecycle: saved closes at once, saving waits for the
-  // in-flight write, dirty asks to save first, and save-failed preserves
-  // the recovery snapshot instead of discarding it silently.
+  // in-flight write, dirty asks to save first.
   const requestClose = useCallback(() => {
     if (saveState.kind === 'saved') {
       onBackToHome();
@@ -313,29 +466,127 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
   }, [flushForClose, onBackToHome]);
 
   const confirmDiscardAndClose = useCallback(() => {
-    // A failed save keeps its recovery snapshot so the next open can still
-    // offer the unsaved work back; a plain dirty discard clears it.
-    if (saveState.kind !== 'save-failed') discardRecovery();
     setCloseDialogOpen(false);
     onBackToHome();
-  }, [discardRecovery, onBackToHome, saveState.kind]);
+  }, [onBackToHome]);
 
-  const handleRestoreRecovery = useCallback(async () => {
-    const ok = await restoreRecovery();
-    if (!ok) notify(t('editor.project.saveFailed'));
-  }, [notify, restoreRecovery, t]);
+  // Single host command context for menubar File rows, status bar actions,
+  // and the activity rail. Store-backed project ops reuse the same project
+  // store calls as home so both surfaces share one execution path.
+  const appContext: AppCommandContext = useMemo(
+    () => ({
+      navigate: (path: string) => {
+        if (path === '#/') requestClose();
+      },
+      newProject: (kind: string) => handleNewProject(kind as ProjectKind),
+      saveProject: () => saveNow(),
+      duplicateProject: () => handleDuplicateProject(),
+      requestClose,
+      openPanels: workspace.openPanels,
+      togglePanel: (id: string) =>
+        setWorkspace((prev) => ({
+          ...prev,
+          openPanels: prev.openPanels.includes(id)
+            ? prev.openPanels.filter((open) => open !== id)
+            : [...prev.openPanels, id],
+        })),
+      openDialog: (id) => {
+        if (id === 'settings') setSettingsOpen(true);
+        else if (id === 'quickSwitcher') openCommands();
+      },
+      notify,
+      activateTool: (id: string) => handleToolChange(id),
+      runViewCommand: (id: string) => handleQuickExecute(id),
+      pickExtensionFile: () =>
+        new Promise<File | undefined>((resolve) => {
+          extensionPickResolve.current = resolve;
+          extensionInputRef.current?.click();
+          // A dismissed dialog never resolves the click; backstop it.
+          setTimeout(() => {
+            if (extensionPickResolve.current) {
+              extensionPickResolve.current = null;
+              resolve(undefined);
+            }
+          }, 60000);
+        }),
+      installExtensionBytes: async (bytes: Uint8Array) => getExtensionHost().installFromBytes(bytes),
+    }),
+    [
+      requestClose,
+      handleNewProject,
+      saveNow,
+      handleDuplicateProject,
+      workspace.openPanels,
+      notify,
+      handleToolChange,
+      openCommands,
+      handleQuickExecute,
+    ],
+  );
 
-  // Desktop reliability: attempt a save when the page hides while dirty
-  // instead of relying on unload alone.
+  const handleExecuteAppCommand = useCallback(
+    async (id: string, patch?: Partial<AppCommandContext>) => {
+      const result = await executeAppCommand(id, patch ? { ...appContext, ...patch } : appContext);
+      if (result.status === 'disabled') {
+        notify(t('editor.errors.commandFailed', { message: id }));
+      }
+    },
+    [appContext, notify, t],
+  );
+
+  const handleQuickExecuteUnified = useCallback(
+    async (row: UnifiedPaletteRow) => {
+      setQuickOpen((current) => ({ ...current, open: false }));
+      const outcome = await executeUnifiedRow(row, commandContext, appContext);
+      if (!outcome.ok) {
+        notify(t('editor.errors.commandFailed', { message: row.id }));
+      }
+    },
+    [commandContext, appContext, notify, t],
+  );
+
+  const handleExtensionActivityAction = useCallback(
+    async (viewId: string, command: string | undefined) => {
+      const host = getExtensionHost();
+      if (command) {
+        const outcome = await host.executeCommand(command);
+        if (!outcome.ok) notify(t('editor.errors.commandFailed', { message: command }));
+      } else {
+        await host.activateByTrigger({ kind: 'view', viewId });
+      }
+    },
+    [notify, t],
+  );
+
+  // Desktop reliability: attempt an autosave when the page hides while dirty
+  // instead of relying on unload alone. Respects the autosave preference.
   useEffect(() => {
     function onHide() {
-      if (document.visibilityState === 'hidden' && saveState.kind === 'dirty') saveNow();
+      if (
+        document.visibilityState === 'hidden' &&
+        saveState.kind === 'dirty' &&
+        preferenceService.getAutosaveEnabled()
+      ) {
+        saveNow();
+      }
     }
     document.addEventListener('visibilitychange', onHide);
     return () => document.removeEventListener('visibilitychange', onHide);
   }, [saveNow, saveState.kind]);
 
   const startingEngine = session.kind === 'opening' && !engine.ready && !engine.failed;
+  const openingLabel =
+    startingEngine
+      ? t('editor.errors.engineStarting')
+      : session.kind !== 'opening'
+      ? t('editor.project.opening')
+      : session.stage === 'read'
+        ? t('editor.project.openingRead')
+        : session.stage === 'validate'
+          ? t('editor.project.openingValidate')
+          : session.stage === 'initialize'
+            ? t('editor.project.openingInitialize')
+            : t('editor.project.opening');
   const showHint =
     session.kind === 'ready' &&
     !rendererFailed &&
@@ -343,8 +594,101 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
     totalEntries(frame) === 0 &&
     !workspace.hintDismissed;
 
+  const overlays = (
+    <>
+      {rendererFailed ? (
+        <div className="editor-overlay" role="alert">
+          <div className="editor-overlay__title">{t('editor.errors.rendererFailed')}</div>
+          <div className="editor-overlay__hint">{t('editor.errors.rendererDescription')}</div>
+          <Button variant="secondary" size="sm" onClick={retryRenderer}>
+            {t('common.actions.retry')}
+          </Button>
+        </div>
+      ) : null}
+      {showHint ? (
+        <div className="editor-hint">
+          <span>{t(projectKindHintKey(projectKind))}</span>
+          <Button variant="ghost" size="sm" onClick={dismissHint}>
+            {t('editor.hint.dismiss')}
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
+
+  const shellProps = {
+    workspace,
+    onWorkspaceChange: setWorkspace,
+    onExtensionActivityAction: (viewId: string, command: string | undefined) =>
+      void handleExtensionActivityAction(viewId, command),
+    menubar: (
+      <EditorTopBar
+        context={commandContext}
+        appContext={appContext}
+        onExecuteAppCommand={(id, patch) => void handleExecuteAppCommand(id, patch)}
+      />
+    ),
+    canvas: (
+      <Canvas
+        key={canvasKey}
+        engine={engine}
+        activeTool={activeTool}
+        onFrame={handleFrame}
+        onRenderError={handleRenderError}
+        commandContext={commandContext}
+        onViewActions={handleViewActionsReady}
+        onToolChange={handleToolChange}
+      />
+    ),
+    toolbar: <EditorToolbar activeTool={activeTool} onToolChange={handleToolChange} />,
+    overlays,
+    leftDock: (
+      <PanelHost
+        location="left"
+        frame={frame}
+        onSelect={handleSelect}
+        engine={engine}
+        sendBatch={engine.sendBatch}
+        commandContext={commandContext}
+      />
+    ),
+    rightDock: (
+      <PanelHost
+        location="right"
+        frame={frame}
+        onSelect={handleSelect}
+        engine={engine}
+        sendBatch={engine.sendBatch}
+        commandContext={commandContext}
+      />
+    ),
+    statusBar: (
+      <EditorStatusBar
+        frame={frame}
+        protocolVersion={protocolVersion}
+        context={commandContext}
+        appContext={appContext}
+        onExecuteCommand={(id) => void handleQuickExecute(id)}
+        onExecuteAppCommand={(id) => void handleExecuteAppCommand(id)}
+        onExecuteExtensionCommand={(id) => void handleExtensionActivityAction(id, id)}
+      />
+    ),
+    activityBarFooter: (
+      <Tooltip content={t('settings.title')} placement="right">
+        <button
+          type="button"
+          className="editor-activitybar__item"
+          aria-label={t('settings.title')}
+          onClick={() => void handleExecuteAppCommand('dialog.openSettings')}
+        >
+          <SettingsIcon size={20} />
+        </button>
+      </Tooltip>
+    ),
+  };
+
   return (
-    <div className="editor">
+    <div className="editor-screen">
       <input
         ref={fileInputRef}
         type="file"
@@ -356,11 +700,23 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
           if (file) void handleImportFile(file);
         }}
       />
+      <input
+        ref={extensionInputRef}
+        type="file"
+        accept=".onry,application/zip"
+        aria-label={t('editor.menu.installExtension')}
+        style={{ display: 'none' }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          const resolve = extensionPickResolve.current;
+          extensionPickResolve.current = null;
+          resolve?.(file);
+        }}
+      />
       {session.kind === 'opening' ? (
         <div className="editor__center">
-          <LoadingState
-            label={t(startingEngine ? 'editor.errors.engineStarting' : 'editor.project.opening')}
-          />
+          <LoadingState label={openingLabel} />
         </div>
       ) : null}
       {session.kind === 'failed' ? (
@@ -370,6 +726,11 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
               session.error.details !== undefined
                 ? t(session.error.messageKey, { details: session.error.details })
                 : t(session.error.messageKey)
+            }
+            description={
+              session.error.details !== undefined
+                ? t('projects.errors.technicalDetails', { details: session.error.details })
+                : undefined
             }
             action={
               <div className="editor__center-actions">
@@ -386,103 +747,40 @@ export function EditorScreen({ projectId, onBackToHome }: EditorScreenProps) {
       ) : null}
       {session.kind === 'ready' ? (
         <>
-          <EditorTopBar
+          <TitlebarQuickSwitcher
             projectName={session.name}
-            saveLabel={saveLabel}
-            saveDisabled={
-              saveState.kind === 'saving' ||
-              saveState.kind === 'saved' ||
-              saveState.kind === 'recovering'
-            }
-            onSave={saveNow}
-            onBack={requestClose}
+            dirty={dirty}
+            open={quickOpen.open}
+            initialQuery={quickOpen.initialQuery}
+            frame={frame}
             context={commandContext}
-            openPanels={openPanels}
-            onTogglePanel={handleTogglePanel}
-            onOpenPalette={openPalette}
+            appContext={appContext}
+            onPillClick={() => {
+              if (quickOpen.open) closeQuick();
+              else openLayers();
+            }}
+            onClose={closeQuick}
+            onExecuteCommand={(row) => void handleQuickExecuteUnified(row)}
+            onSelectLayer={handleQuickSelect}
           />
-          {recovery ? (
-            <div className="editor__banner" role="alert">
-              <span>{t('editor.project.recoveryAvailable')}</span>
-              <Button variant="secondary" size="sm" onClick={() => void handleRestoreRecovery()}>
-                {t('editor.project.recoveryRestore')}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={discardRecovery}>
-                {t('editor.project.recoveryDiscard')}
-              </Button>
-            </div>
+          {projectKind === 'whiteboard' ? (
+            <WhiteboardEditor {...shellProps} />
+          ) : projectKind === 'diagram' ? (
+            <DiagramEditor {...shellProps} />
+          ) : (
+            <DesignEditor {...shellProps} />
+          )}
+          {createKind !== null ? (
+            <CreateProjectDialog
+              onClose={() => {
+                if (!createPending) setCreateKind(null);
+              }}
+              onConfirm={(name) => void confirmNewProject(name)}
+              pending={createPending}
+              error={createError}
+            />
           ) : null}
-          <EditorToolbar
-            activeTool={activeTool}
-            onToolChange={handleToolChange}
-            context={commandContext}
-          />
-          <div className="editor-workspace">
-            {openPanels.includes('layers') ? (
-              <aside className="editor-dock editor-dock--left" aria-label={t('editor.panels.layers')}>
-                <PanelHost
-                  location="left"
-                  frame={frame}
-                  onSelect={handleSelect}
-                  engine={engine}
-                  sendBatch={engine.sendBatch}
-                  commandContext={commandContext}
-                />
-              </aside>
-            ) : null}
-            <div className="editor-canvaswrap">
-              <div className="editor__canvas">
-                <Canvas
-                  key={canvasKey}
-                  engine={engine}
-                  activeTool={activeTool}
-                  onFrame={handleFrame}
-                  onRenderError={handleRenderError}
-                  commandContext={commandContext}
-                  onViewActions={handleViewActionsReady}
-                />
-              </div>
-              {rendererFailed ? (
-                <div className="editor-overlay" role="alert">
-                  <div className="editor-overlay__title">{t('editor.errors.rendererFailed')}</div>
-                  <div className="editor-overlay__hint">{t('editor.errors.rendererDescription')}</div>
-                  <Button variant="secondary" size="sm" onClick={retryRenderer}>
-                    {t('common.actions.retry')}
-                  </Button>
-                </div>
-              ) : null}
-              {showHint ? (
-                <div className="editor-hint">
-                  <span>{t('editor.hint.text')}</span>
-                  <Button variant="ghost" size="sm" onClick={dismissHint} title={t('editor.hint.dismiss')}>
-                    {t('editor.hint.dismiss')}
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-            {openPanels.includes('inspector') ? (
-              <aside
-                className="editor-dock editor-dock--right"
-                aria-label={t('editor.panels.inspector')}
-              >
-                <PanelHost
-                  location="right"
-                  frame={frame}
-                  onSelect={handleSelect}
-                  engine={engine}
-                  sendBatch={engine.sendBatch}
-                  commandContext={commandContext}
-                />
-              </aside>
-            ) : null}
-          </div>
-          <EditorStatusBar frame={frame} protocolVersion={protocolVersion} />
-          <CommandPalette
-            open={paletteOpen}
-            context={commandContext}
-            onClose={closePalette}
-            onExecute={(id) => void handlePaletteExecute(id)}
-          />
+          {settingsOpen ? <SettingsModal onClose={() => setSettingsOpen(false)} /> : null}
           {closeDialogOpen ? (
             <Dialog
               title={t('editor.project.closeTitle')}

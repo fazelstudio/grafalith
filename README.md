@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/assets/icons/nary.svg" width="120" alt="Nary logo" />
+  <img src="public/assets/icons/opennary.svg" width="120" alt="OpenNary logo" />
 </p>
 
-<h1 align="center">Nary</h1>
+<h1 align="center">OpenNary</h1>
 
 <p align="center">
   A lightweight, framework-agnostic canvas engine for building infinite whiteboard applications — written in Rust, distributed to npm (WASM) and PyPI (Python).
@@ -10,9 +10,9 @@
 
 <p align="center">
   <a href="https://github.com/fazelstudio/opennary/actions/workflows/ci.yml"><img src="https://github.com/fazelstudio/opennary/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://www.npmjs.com/package/@fazelstudio/nary"><img src="https://img.shields.io/npm/v/@fazelstudio/nary" alt="npm version" /></a>
-  <a href="https://pypi.org/project/nary/"><img src="https://img.shields.io/pypi/v/nary" alt="PyPI version" /></a>
-  <a href="https://github.com/fazelstudio/opennary/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@fazelstudio/nary" alt="license" /></a>
+  <a href="https://www.npmjs.com/package/@fazelstudio/opennary"><img src="https://img.shields.io/npm/v/@fazelstudio/opennary" alt="npm version" /></a>
+  <a href="https://pypi.org/project/opennary/"><img src="https://img.shields.io/pypi/v/opennary" alt="PyPI version" /></a>
+  <a href="https://github.com/fazelstudio/opennary/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@fazelstudio/opennary" alt="license" /></a>
 </p>
 
 ## Features
@@ -31,18 +31,18 @@
 - **Spatial index** — Grid-based spatial hash for fast hit-testing and viewport culling
 - **Export/Import** — Versioned JSON scene serialization and PNG export planning
 - **Headless engine API** — 100% usable without any UI framework; hosts render from a deterministic `RenderModel`
-- **Plugin system** — Custom shapes, tools, commands, and serializers via extension traits
+- **Extension system** — Custom shapes, tools, commands, and serializers via extension traits
 
 ## Install
 
 ```bash
-npm install @fazelstudio/nary
+npm install @fazelstudio/opennary
 # or
-bun add @fazelstudio/nary
+bun add @fazelstudio/opennary
 ```
 
 ```bash
-pip install nary
+pip install opennary
 ```
 
 Usage: [`docs/guides/javascript.md`](./docs/guides/javascript.md) for
@@ -53,14 +53,14 @@ for Python.
 
 | Crate | Description |
 |----|-------------|
-| [`nary-geometry`](./crates/nary-geometry) | Pure 2D math — points, bounds, transforms, hit-testing, spatial grid, snapping, viewport |
-| [`nary-core`](./crates/nary-core) | Document domain — elements, document store, history/commands, editor session, clipboard, components, plugins |
-| [`nary-io`](./crates/nary-io) | Interchange — versioned JSON schema, staged import pipeline, clipboard codec, PNG export descriptors |
-| [`nary-bindings`](./crates/nary-bindings) | Host boundary — JSON-string batch protocol, `Engine` facade, render/session DTOs |
-| [`nary`](./crates/nary) | npm distribution — `wasm-pack` target, published as `@fazelstudio/nary` |
-| [`nary-python`](./crates/nary-python) | PyPI distribution — `maturin`/PyO3 bindings, published as `nary` |
+| [`opennary-geometry`](./crates/opennary-geometry) | Pure 2D math — points, bounds, transforms, hit-testing, spatial grid, snapping, viewport |
+| [`opennary-core`](./crates/opennary-core) | Document domain — elements, document store, history/commands, editor session, clipboard, components, extensions |
+| [`opennary-io`](./crates/opennary-io) | Interchange — versioned JSON schema, staged import pipeline, clipboard codec, PNG export descriptors |
+| [`opennary-bindings`](./crates/opennary-bindings) | Host boundary — JSON-string batch protocol, `Engine` facade, render/session DTOs |
+| [`opennary`](./crates/opennary) | npm distribution — `wasm-pack` target, published as `@fazelstudio/opennary` |
+| [`opennary-python`](./crates/opennary-python) | PyPI distribution — `maturin`/PyO3 bindings, published as `opennary` |
 
-Dependency direction: `nary`/`nary-python` → `nary-bindings` → `nary-io` → `nary-core` → `nary-geometry`.
+Dependency direction: `opennary`/`opennary-python` → `opennary-bindings` → `opennary-io` → `opennary-core` → `opennary-geometry`.
 
 ## Docs
 

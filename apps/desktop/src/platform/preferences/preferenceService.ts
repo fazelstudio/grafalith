@@ -1,5 +1,6 @@
 import {
   loadEditorWorkspace as loadWorkspace,
+  normalizeAutosaveDelayMs,
   saveEditorWorkspace as saveWorkspace,
   type EditorWorkspace,
 } from './editorWorkspace';
@@ -9,6 +10,7 @@ import {
 } from './preferences';
 import type { Locale } from '../../app/i18n/locales';
 import type { ThemeMode } from '../../app/theme/tokens';
+import type { HomeViewMode } from './editorWorkspace';
 import { loadThemeMode as loadStoredTheme, saveThemeMode as saveStoredTheme } from './preferences';
 
 function updateWorkspace(patch: Partial<EditorWorkspace>): EditorWorkspace {
@@ -56,6 +58,26 @@ export const preferenceService = {
   },
   setRestoreViewport(restore: boolean): void {
     updateWorkspace({ restoreViewport: restore });
+  },
+  getHomeViewMode(): HomeViewMode {
+    return loadWorkspace().homeViewMode;
+  },
+  setHomeViewMode(mode: HomeViewMode): void {
+    updateWorkspace({ homeViewMode: mode });
+  },
+  /** Whether engine changes trigger a debounced automatic save. */
+  getAutosaveEnabled(): boolean {
+    return loadWorkspace().autosaveEnabled;
+  },
+  setAutosaveEnabled(enabled: boolean): void {
+    updateWorkspace({ autosaveEnabled: enabled });
+  },
+  /** Debounce between the last engine change and the next autosave. */
+  getAutosaveDelayMs(): number {
+    return loadWorkspace().autosaveDelayMs;
+  },
+  setAutosaveDelayMs(delayMs: number): void {
+    updateWorkspace({ autosaveDelayMs: normalizeAutosaveDelayMs(delayMs) });
   },
 };
 

@@ -20,7 +20,7 @@ function Routes() {
               />
             );
           }
-          return <EditorScreen projectId={projectId} onBackToHome={() => navigate('#/')} />;
+          return <EditorScreen projectId={projectId} onBackToHome={() => navigate('#/')} onOpenProject={(id) => navigate(editorPath(id))} />;
         }
         if (routeId === 'settings' || routeId === 'settings-general') {
           return <SettingsScreen section="general" onNavigate={navigate} />;

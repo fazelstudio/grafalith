@@ -29,8 +29,8 @@
         "vite": "^8.0.16",
       },
     },
-    "packages/nary-sdk": {
-      "name": "@fazelstudio/nary-sdk",
+    "packages/opennary-sdk": {
+      "name": "@fazelstudio/opennary-sdk",
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "~6.0.3",
@@ -58,7 +58,7 @@
 
     "@fazelstudio/desktop": ["@fazelstudio/desktop@workspace:apps/desktop"],
 
-    "@fazelstudio/nary-sdk": ["@fazelstudio/nary-sdk@workspace:packages/nary-sdk"],
+    "@fazelstudio/opennary-sdk": ["@fazelstudio/opennary-sdk@workspace:packages/opennary-sdk"],
 
     "@humanfs/core": ["@humanfs/core@0.19.2", "", { "dependencies": { "@humanfs/types": "^0.15.0" } }, "sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA=="],
 

@@ -1,24 +1,24 @@
-//! `ext-sticker`: an out-of-workspace Nary plugin.
+//! `ext-sticker`: an out-of-workspace OpenNary extension.
 //!
 //! A third-party crate that adds a node type (`example.sticker`), a tool
 //! (`example.sticker`), and a command (`example.sticker.create`) without
-//! modifying engine sources. It depends on `nary-core` only, through the
-//! public plugin traits.
+//! modifying engine sources. It depends on `opennary-core` only, through the
+//! public extension traits.
 
 use std::collections::HashMap;
 
-use nary_core::command::CommandContext;
-use nary_core::command_extension::CommandExtension;
-use nary_core::element::{
+use opennary_core::command::CommandContext;
+use opennary_core::command_extension::CommandExtension;
+use opennary_core::element::{
     BaseElement, CustomElement, Element, ElementFillStyle, FillStyle, PatchValue, StrokeAlign,
     StrokeCap, StrokeJoin, StrokeStyle,
 };
-use nary_core::geometry::rect::Bounds;
-use nary_core::plugin::{Plugin, PluginContext, PluginMetadata};
-use nary_core::render_model::DrawEntry;
-use nary_core::EngineResult;
+use opennary_core::geometry::rect::Bounds;
+use opennary_core::extension::{Extension, ExtensionContext, ExtensionMetadata};
+use opennary_core::render_model::DrawEntry;
+use opennary_core::EngineResult;
 
-/// Discriminator for sticker elements (namespaced to this plugin).
+/// Discriminator for sticker elements (namespaced to this extension).
 pub const STICKER_TYPE: &str = "example.sticker";
 
 /// Tool id for the sticker tool (host-owned draw behavior).
@@ -46,7 +46,7 @@ pub fn sticker_element(
     data.insert("label".to_string(), PatchValue::Text(label.into()));
     Element::Custom(CustomElement {
         base: BaseElement {
-            id: nary_core::element::ElementId::of(id.into()),
+            id: opennary_core::element::ElementId::of(id.into()),
             x,
             y,
             width: STICKER_SIZE,
@@ -82,7 +82,7 @@ pub fn sticker_element(
 /// Circle behavior for the square sticker box: corners miss.
 pub struct StickerShape;
 
-impl nary_core::shape_extension::ShapeExtension for StickerShape {
+impl opennary_core::shape_extension::ShapeExtension for StickerShape {
     fn type_name(&self) -> &str {
         STICKER_TYPE
     }
@@ -128,16 +128,16 @@ impl CommandExtension for StickerCreate {
     }
 }
 
-/// The plugin: one tool, one shape, one command.
-pub struct StickerPlugin {
-    metadata: PluginMetadata,
+/// The extension: one tool, one shape, one command.
+pub struct StickerExtension {
+    metadata: ExtensionMetadata,
 }
 
-impl StickerPlugin {
-    /// Creates the plugin with its/default metadata.
+impl StickerExtension {
+    /// Creates the extension with its/default metadata.
     pub fn new() -> Self {
         Self {
-            metadata: PluginMetadata::new(
+            metadata: ExtensionMetadata::new(
                 "com.example.sticker",
                 "Example Sticker",
                 env!("CARGO_PKG_VERSION"),
@@ -146,18 +146,18 @@ impl StickerPlugin {
     }
 }
 
-impl Default for StickerPlugin {
+impl Default for StickerExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Plugin for StickerPlugin {
-    fn metadata(&self) -> &PluginMetadata {
+impl Extension for StickerExtension {
+    fn metadata(&self) -> &ExtensionMetadata {
         &self.metadata
     }
 
-    fn register(&mut self, ctx: &mut PluginContext) {
+    fn register(&mut self, ctx: &mut ExtensionContext) {
         ctx.register_tool(STICKER_TOOL);
         ctx.register_shape(STICKER_TYPE, Box::new(StickerShape));
         ctx.register_command(Box::new(StickerCreate));

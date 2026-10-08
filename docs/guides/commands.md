@@ -8,7 +8,7 @@ frozen (protocol v1); command IDs use `namespace.action`.
 `H` = history entry when the document changes. `Q` = read-only query (no
 history, observes prior ops in the same batch). Results are `ok/data` or a
 stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
-`parseError`) + message. Source of truth: `crates/nary-bindings/src/protocol.rs`
+`parseError`) + message. Source of truth: `crates/opennary-bindings/src/protocol.rs`
 (`BatchOp`, `op_name`) and `engine.rs` dispatch.
 
 ## Document & nodes
@@ -66,11 +66,11 @@ rotated inputs `invalidInput`. Closed-path inputs (path/freedraw/ellipse/
 rectangle outlines) run through flatten + overlay and return paths; holed
 results are the stable `unsupported` code, degenerate inputs `invalidInput`.
 
-## Plugin commands (dynamic dispatch)
+## Extension commands (dynamic dispatch)
 
 | Command ID | Wire op | Input | H | Result data |
 |---|---|---|---|---|
-| `plugin.execute` | `executeCommand` | `commandId` (e.g. `acme.sticker.create`; registration is native) | ✅ iff the command stored anything | `{affected: [], changed}` |
+| `extension.execute` | `executeCommand` | `commandId` (e.g. `acme.sticker.create`; registration is native) | ✅ iff the command stored anything | `{affected: [], changed}` |
 
 Unknown ids are a per-op `notFound` error that changes nothing and never
 fails the batch.

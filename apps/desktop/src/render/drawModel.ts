@@ -4,6 +4,7 @@ import type {
   SnapGuideDto,
   ViewportDto,
 } from '../hooks/useEngine';
+import { themeTokens } from '../app/theme/tokens';
 
 /**
  * Live ghost preview for one frame. The host owns the cursor locally (it
@@ -38,20 +39,12 @@ export const NO_PREVIEW: GhostPreview = { kind: 'none' };
  * do not follow the accent token. The rubber-band fill reuses the
  * selection hue at low alpha instead of duplicating the hex literal.
  */
-export const CANVAS_OVERLAY = {
-  selection: '#4a90d9',
-  preview: '#4a90d9',
-  snapGuide: '#ff0000',
-  handleFill: '#ffffff',
-  annotationMuted: '#666666',
-  placeholderStroke: '#999999',
-  fallbackFill: '#000000',
-} as const;
+export const CANVAS_OVERLAY = themeTokens.light.canvasOverlay;
 
 const SELECTION_COLOR = CANVAS_OVERLAY.selection;
 const PREVIEW_COLOR = CANVAS_OVERLAY.preview;
 const SNAP_COLOR = CANVAS_OVERLAY.snapGuide;
-const RUBBER_FILL = 'rgba(74, 144, 217, 0.12)';
+const RUBBER_FILL = CANVAS_OVERLAY.rubberBandFill;
 const ARROWHEAD_LENGTH = 12;
 const ARROWHEAD_WIDTH = 8;
 

@@ -11,6 +11,9 @@ export interface ColorTokens {
   accent: string;
   accentForeground: string;
   destructive: string;
+  destructiveForeground: string;
+  windowClose: string;
+  windowCloseForeground: string;
   success: string;
   warning: string;
   focusRing: string;
@@ -75,9 +78,37 @@ export interface ControlSizeTokens {
   lg: string;
 }
 
+/** Shared desktop layout dimensions used by shell and editor chrome. */
+export const DESKTOP_LAYOUT = {
+  titlebarHeight: 48,
+  sidebarWidth: 220,
+  sidebarCollapsedWidth: 64,
+  editorDockWidth: 248,
+  editorDockWidthCompact: 210,
+} as const;
+
+/** Shared desktop timing values for transient UI and frame mirroring. */
+export const DESKTOP_TIMING = {
+  toastDurationMs: 3200,
+  frameMirrorThrottleMs: 350,
+} as const;
+
+/** Colors used by the canvas interaction overlay, not document paints. */
+export interface CanvasOverlayTokens {
+  selection: string;
+  preview: string;
+  snapGuide: string;
+  handleFill: string;
+  annotationMuted: string;
+  placeholderStroke: string;
+  fallbackFill: string;
+  rubberBandFill: string;
+}
+
 /** Full semantic token set for one resolved theme. */
 export interface SemanticTokens {
   colors: ColorTokens;
+  canvasOverlay: CanvasOverlayTokens;
   spacing: SpacingTokens;
   typography: TypographyTokens;
   radii: ShapeTokens;
@@ -156,6 +187,9 @@ const lightColors: ColorTokens = {
   accent: '#2f6fed',
   accentForeground: '#ffffff',
   destructive: '#c9362b',
+  destructiveForeground: '#ffffff',
+  windowClose: '#e81123',
+  windowCloseForeground: '#ffffff',
   success: '#1f7a3d',
   warning: '#9a6700',
   focusRing: '#2f6fed',
@@ -177,6 +211,9 @@ const darkColors: ColorTokens = {
   accent: '#5b8def',
   accentForeground: '#0f1526',
   destructive: '#e5484d',
+  destructiveForeground: '#ffffff',
+  windowClose: '#e81123',
+  windowCloseForeground: '#ffffff',
   success: '#46a758',
   warning: '#e8a100',
   focusRing: '#5b8def',
@@ -186,6 +223,17 @@ const darkColors: ColorTokens = {
   canvasGuide: '#e5484d',
 };
 
+const canvasOverlay: CanvasOverlayTokens = {
+  selection: '#4a90d9',
+  preview: '#4a90d9',
+  snapGuide: '#ff0000',
+  handleFill: '#ffffff',
+  annotationMuted: '#666666',
+  placeholderStroke: '#999999',
+  fallbackFill: '#000000',
+  rubberBandFill: 'rgba(74, 144, 217, 0.12)',
+};
+
 /**
  * Token set per resolved theme. A future theme is added by supplying one
  * more entry here plus matching CSS variables; components stay unchanged.
@@ -193,6 +241,7 @@ const darkColors: ColorTokens = {
 export const themeTokens: Record<ResolvedTheme, SemanticTokens> = {
   light: {
     colors: lightColors,
+    canvasOverlay,
     spacing,
     typography,
     radii,
@@ -203,6 +252,7 @@ export const themeTokens: Record<ResolvedTheme, SemanticTokens> = {
   },
   dark: {
     colors: darkColors,
+    canvasOverlay,
     spacing,
     typography,
     radii,

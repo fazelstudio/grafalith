@@ -1,4 +1,4 @@
-//! Nary desktop binary entry point.
+//! OpenNary desktop binary entry point.
 
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
@@ -6,5 +6,5 @@
 )]
 
 fn main() {
-    nary_desktop_lib::run()
+    opennary_desktop_lib::run()
 }

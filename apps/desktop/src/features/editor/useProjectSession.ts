@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { Engine } from '../../hooks/useEngine';
 import { getProjectStore } from '../../platform/projects/projectService';
-import { parseProjectError, type ProjectError } from '../../platform/projects/types';
+import {
+  normalizeProjectKind,
+  parseProjectError,
+  type ProjectError,
+  type ProjectKind,
+} from '../../platform/projects/types';
 
 /** Open pipeline stage, identifying where a failure happened. */
 export type ProjectOpenStage =
@@ -15,7 +20,7 @@ export type ProjectOpenStage =
 /** Explicit project opening pipeline states. */
 export type ProjectSession =
   | { kind: 'opening'; stage: ProjectOpenStage }
-  | { kind: 'ready'; name: string; empty: boolean }
+  | { kind: 'ready'; name: string; projectKind: ProjectKind; empty: boolean }
   | { kind: 'failed'; error: ProjectError; stage: ProjectOpenStage };
 
 /** Maps a typed project error to the pipeline stage that produced it. */
@@ -35,10 +40,12 @@ function unreadableError(): ProjectError {
   };
 }
 
-function engineUnavailableError(): ProjectError {
+function engineUnavailableError(raw: unknown): ProjectError {
+  const parsed = parseProjectError(raw);
   return {
     code: 'storage-unavailable',
     messageKey: 'errors.engineUnavailable',
+    details: parsed.details,
     recoverable: true,
   };
 }
@@ -65,14 +72,20 @@ export function useProjectSession(engine: Engine, projectId: string): {
     async function run(): Promise<void> {
       if (engine.failed) {
         if (!cancelled) {
-          setSession({ kind: 'failed', error: engineUnavailableError(), stage: 'initialize' });
+          setSession({
+            kind: 'failed',
+            error: engineUnavailableError(engine.failure),
+            stage: 'initialize',
+          });
         }
         return;
       }
       if (!engine.ready) return;
       try {
+        if (!cancelled) setSession({ kind: 'opening', stage: 'read' });
         const { summary, sceneJson } = await getProjectStore().open(projectId);
         if (cancelled) return;
+        setSession({ kind: 'opening', stage: 'validate' });
         const raw = await engine.importScene(sceneJson, false);
         if (cancelled) return;
         let failed = false;
@@ -94,7 +107,13 @@ export function useProjectSession(engine: Engine, projectId: string): {
           setSession({ kind: 'failed', error: unreadableError(), stage: 'initialize' });
           return;
         }
-        setSession({ kind: 'ready', name: summary.name, empty });
+        setSession({ kind: 'opening', stage: 'initialize' });
+        setSession({
+          kind: 'ready',
+          name: summary.name,
+          projectKind: normalizeProjectKind(summary.kind),
+          empty,
+        });
       } catch (rawError) {
         if (!cancelled) {
           const error = parseProjectError(rawError);

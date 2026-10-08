@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createLocalProjectStore, type KeyValueStorage } from './localAdapter';
 import { buildBlankScene } from '../../features/projects/templateRegistry';
+import { persistenceConfig } from './persistenceConfig';
 
 function memoryStorage(): KeyValueStorage {
   const data = new Map<string, string>();
@@ -25,6 +26,16 @@ describe('local project store', () => {
     expect(listed[0].id).toBe(created.id);
     const opened = await store.open(created.id);
     expect(opened.sceneJson).toBe(buildBlankScene());
+  });
+
+  test('preview reads the scene without changing the last-opened timestamp', async () => {
+    const store = createLocalProjectStore(memoryStorage());
+    const created = await store.create('Preview', buildBlankScene());
+    const before = (await store.list())[0].lastOpenedAtMs;
+    const preview = await store.preview(created.id);
+    const after = (await store.list())[0].lastOpenedAtMs;
+    expect(preview.sceneJson).toBe(buildBlankScene());
+    expect(after).toBe(before);
   });
 
   test('rename trims and duplicate keeps an independent payload', async () => {
@@ -56,7 +67,7 @@ describe('local project store', () => {
       id: string;
       deletedAtMs?: number;
     }[];
-    index[0].deletedAtMs = Date.now() - 30 * 24 * 60 * 60 * 1000 - 1;
+    index[0].deletedAtMs = Date.now() - persistenceConfig.trashRetentionMs - 1;
     storage.setItem('opennary:projects:index:v1', JSON.stringify(index));
 
     expect(await store.list()).toEqual([]);
@@ -90,5 +101,17 @@ describe('local project store', () => {
     await expect(store.open(created.id)).rejects.toMatchObject({
       code: 'missing-document',
     });
+  });
+
+  test('project kinds default to design and survive duplication', async () => {
+    const store = createLocalProjectStore(memoryStorage());
+    const design = await store.create('Plan', buildBlankScene());
+    expect(design.kind).toBe('design');
+    const board = await store.create('Board', buildBlankScene(), 'whiteboard');
+    expect(board.kind).toBe('whiteboard');
+    const copy = await store.duplicate(board.id);
+    expect(copy.kind).toBe('whiteboard');
+    const kinds = (await store.list()).map((entry) => entry.kind).sort();
+    expect(kinds).toEqual(['design', 'whiteboard', 'whiteboard']);
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MIXED, type InspectorFieldDefinition, type InspectorFieldContext } from './descriptors';
 import { useI18n } from '../../../app/i18n/resources';
+import { Tooltip } from '../../../ui/primitives/tooltip';
 import { commandShortcutLabel, formatShortcut } from '../../../registries';
 
 interface FieldProps {
@@ -37,7 +38,7 @@ export function NumberTemplate({ field, ctx, onResult }: FieldProps) {
       return;
     }
     const result = await field.write(numeric, ctx);
-    onResult(field.id, result.status === 'ok', result.status === 'ok' ? null : t('editor.errors.commandFailed', { message: field.defaultLabel }));
+    onResult(field.id, result.status === 'ok', result.status === 'ok' ? null : t('editor.errors.commandFailed', { message: t(field.labelKey) }));
   }
 
   return (
@@ -114,13 +115,14 @@ export function ColorTemplate({ field, ctx, onResult }: FieldProps) {
           value={disabled ? '#000000' : solid}
           disabled={disabled}
           aria-label={t(field.labelKey)}
-          title={disabled ? t('editor.inspector.gradientNote') : t(field.labelKey)}
           onChange={(event) => void commit(event.target.value)}
           onKeyDown={(event) => event.stopPropagation()}
         />
-        <span className="inspector-field__value" title={disabled ? t('editor.inspector.gradientNote') : solid}>
-          {disabled ? t('editor.inspector.gradientNote') : solid}
-        </span>
+        <Tooltip content={disabled ? t('editor.inspector.gradientNote') : solid}>
+          <span className="inspector-field__value">
+            {disabled ? t('editor.inspector.gradientNote') : solid}
+          </span>
+        </Tooltip>
       </span>
     </label>
   );
@@ -149,7 +151,6 @@ export function SegmentedTemplate({ field, ctx, onResult }: FieldProps) {
               role="radio"
               aria-checked={value === option.value}
               disabled={disabled}
-              title={t(option.labelKey)}
               className="ui-segmented__option"
               onClick={() => void pick(option.value)}
               onKeyDown={(event) => event.stopPropagation()}
@@ -172,9 +173,11 @@ export function ReadonlyTemplate({ field, ctx }: FieldProps) {
   return (
     <div className="inspector-field">
       <dt className="inspector-field__label">{t(field.labelKey)}</dt>
-      <dd className="inspector-field__value" title={text}>
-        {text}
-      </dd>
+      <Tooltip content={text}>
+        <dd className="inspector-field__value">
+          {text}
+        </dd>
+      </Tooltip>
     </div>
   );
 }
@@ -209,7 +212,6 @@ export function AlignmentTemplate({
             type="button"
             className="ui-button ui-button--sm ui-button--secondary inspector-align__button"
             disabled={!canAlign}
-            title={item.label}
             onClick={() => onAlign(item.mode)}
           >
             {item.label}
@@ -221,7 +223,6 @@ export function AlignmentTemplate({
           type="button"
           className="ui-button ui-button--sm ui-button--secondary inspector-align__button"
           disabled={!canDistribute}
-          title={t('editor.commands.distributeHorizontal')}
           onClick={() => onDistribute('horizontal')}
         >
           {t('editor.commands.distributeHorizontal')}
@@ -230,7 +231,6 @@ export function AlignmentTemplate({
           type="button"
           className="ui-button ui-button--sm ui-button--secondary inspector-align__button"
           disabled={!canDistribute}
-          title={t('editor.commands.distributeVertical')}
           onClick={() => onDistribute('vertical')}
         >
           {t('editor.commands.distributeVertical')}

@@ -1,15 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  commandRegistry,
   commandsForSurface,
   canExecuteCommand,
+  appCommandRegistry,
+  menusFor,
+  menuRowExecutable,
   commandShortcutLabel,
   type CommandContext,
+  type AppCommandContext,
+  type MenuItemDefinition,
 } from '../../../registries';
+import { projectKindRegistry } from '../../projects/projectKinds';
+import type { ProjectKind } from '../../../platform/projects/types';
 import { useI18n } from '../../../app/i18n/resources';
 
-interface EditorMenuProps {
+type TopMenu = 'file' | 'edit' | 'view';
+
+interface EditorMenuBarProps {
   context: CommandContext;
-  onExecute: (id: string) => void;
+  appContext: AppCommandContext;
+  onExecuteCommand: (id: string) => void;
+  onExecuteAppCommand: (id: string, patch?: Partial<AppCommandContext>) => void;
 }
 
 /** Move focus among enabled menu items (ArrowUp/Down, Home/End). */
@@ -29,30 +41,94 @@ function moveMenuFocus(container: HTMLElement | null, key: string): boolean {
   return true;
 }
 
+const EDIT_COMMANDS = ['undo', 'redo', 'selectAll'] as const;
+const VIEW_COMMANDS = ['zoomIn', 'zoomOut', 'resetZoom', 'fitContent', 'commandPalette'] as const;
+
 /**
- * Edit menu built from the same command definitions as toolbar, context
- * menu, palette, and shortcuts. Groups derive from command categories so
- * adding a command needs no new hardcoded menu branch.
+ * Registry-driven menu row: resolves engine and host commands through one
+ * template so menubar, context, and select surfaces never diverge.
  */
-export function EditorMenu({ context, onExecute }: EditorMenuProps) {
+function RegistryRow({
+  row,
+  context,
+  appContext,
+  onPickEngine,
+  onPickApp,
+}: {
+  row: MenuItemDefinition;
+  context: CommandContext;
+  appContext: AppCommandContext;
+  onPickEngine: (id: string) => void;
+  onPickApp: (id: string) => void;
+}) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const executable = menuRowExecutable(row, context, appContext);
+  const command =
+    row.commandKind === 'engine'
+      ? commandRegistry.get(row.commandId)
+      : appCommandRegistry.get(row.commandId);
+  const shortcut =
+    row.commandKind === 'engine' && command && 'shortcuts' in command
+      ? commandShortcutLabel(command as Parameters<typeof commandShortcutLabel>[0])
+      : undefined;
+  const label = command ? t(command.labelKey) : row.defaultLabel;
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="editor-menu__item"
+      disabled={!executable}
+      onClick={() => {
+        if (!executable) return;
+        if (row.commandKind === 'engine') onPickEngine(row.commandId);
+        else onPickApp(row.commandId);
+      }}
+    >
+      <span className="editor-menu__label">{label}</span>
+      {shortcut ? <kbd className="ui-shortcut">{shortcut}</kbd> : null}
+    </button>
+  );
+}
+
+/**
+ * Editor menubar: File, Edit, and View only. Rows render from the menu
+ * registry so enablement and shortcuts never diverge from palette, toolbar,
+ * or keys. File rows are host commands (project store + dialogs), Edit/View
+ * rows are engine intents — both dispatched through one path.
+ */
+export function EditorMenuBar({
+  context,
+  appContext,
+  onExecuteCommand,
+  onExecuteAppCommand,
+}: EditorMenuBarProps) {
+  const { t } = useI18n();
+  const [openMenu, setOpenMenu] = useState<TopMenu | null>(null);
+  const [newExpanded, setNewExpanded] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const commands = commandsForSurface('menu');
+  const triggerRefs = useRef<Record<TopMenu, HTMLButtonElement | null>>({
+    file: null,
+    edit: null,
+    view: null,
+  });
 
   useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement;
-    rootRef.current?.querySelector<HTMLElement>('.editor-menu__popup button:not([disabled])')?.focus();
+    if (!openMenu) {
+      setNewExpanded(false);
+      return;
+    }
+    const current: TopMenu = openMenu;
+    rootRef.current
+      ?.querySelector<HTMLElement>(`[data-menu="${current}"] .editor-menu__popup button:not([disabled])`)
+      ?.focus();
     function onPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null);
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setOpen(false);
-        triggerRef.current?.focus();
+        setOpenMenu(null);
+        triggerRefs.current[current]?.focus();
       }
     }
     document.addEventListener('pointerdown', onPointerDown);
@@ -60,64 +136,219 @@ export function EditorMenu({ context, onExecute }: EditorMenuProps) {
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
-      // Click-outside leaves focus where the pointer landed; other closes
-      // return focus to the trigger or wherever it was.
-      if (document.activeElement === document.body && previous instanceof HTMLElement) {
-        previous.focus();
-      }
     };
-  }, [open]);
+  }, [openMenu]);
 
-  function onPopupKeyDown(event: React.KeyboardEvent): void {
-    if (moveMenuFocus(rootRef.current, event.key)) event.preventDefault();
+  function toggle(menu: TopMenu) {
+    setOpenMenu((current) => (current === menu ? null : menu));
   }
 
-  return (
-    <div ref={rootRef} className="editor-menu">
+  function expandNewAndFocusFirstKind() {
+    setNewExpanded(true);
+    setTimeout(() => {
+      rootRef.current?.querySelector<HTMLElement>('[data-submenu-kind]')?.focus();
+    }, 0);
+  }
+
+  function collapseNewAndFocusParent() {
+    setNewExpanded(false);
+    setTimeout(() => {
+      rootRef.current?.querySelector<HTMLElement>('[data-submenu-parent="new"]')?.focus();
+    }, 0);
+  }
+
+  function pickCommand(id: string) {
+    setOpenMenu(null);
+    onExecuteCommand(id);
+  }
+
+  function pickAppCommand(id: string, patch?: Partial<AppCommandContext>) {
+    setOpenMenu(null);
+    onExecuteAppCommand(id, patch);
+  }
+
+  function onPopupKeyDown(event: React.KeyboardEvent, menu: TopMenu) {
+    const scope = rootRef.current?.querySelector<HTMLElement>(`[data-menu="${menu}"]`) ?? null;
+    if (moveMenuFocus(scope, event.key)) {
+      event.preventDefault();
+    }
+  }
+
+  function trigger(menu: TopMenu, label: string) {
+    return (
       <button
-        ref={triggerRef}
+        ref={(node) => {
+          triggerRefs.current[menu] = node;
+        }}
         type="button"
         className="ui-button ui-button--sm ui-button--ghost editor-menu__trigger"
         aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        aria-expanded={openMenu === menu}
+        onClick={() => toggle(menu)}
+        onMouseEnter={() => {
+          if (openMenu !== null && openMenu !== menu) setOpenMenu(menu);
+        }}
       >
-        {t('editor.menu.edit')}
+        {label}
       </button>
-      {open ? (
-        <div
-          className="editor-menu__popup"
-          role="menu"
-          aria-label={t('editor.menu.edit')}
-          onKeyDown={onPopupKeyDown}
-        >
-          {commands.map((command) => {
-            const verdict = canExecuteCommand(command.id, context);
-            const shortcut = commandShortcutLabel(command);
-            return (
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="editor-menubar" role="menubar" aria-label={t('editor.title')}>
+      <div className="editor-menu" data-menu="file">
+        {trigger('file', t('editor.menu.file'))}
+        {openMenu === 'file' ? (
+          <div
+            className="editor-menu__popup"
+            role="menu"
+            aria-label={t('editor.menu.file')}
+            onKeyDown={(event) => onPopupKeyDown(event, 'file')}
+          >
+            <div
+              className="editor-menu__submenu-wrap"
+              onMouseEnter={() => setNewExpanded(true)}
+              onMouseLeave={() => setNewExpanded(false)}
+            >
               <button
-                key={command.id}
                 type="button"
                 role="menuitem"
-                className="editor-menu__item"
-                disabled={!verdict.executable}
-                title={command.defaultDescription ?? command.defaultLabel}
-                onClick={() => {
-                  setOpen(false);
-                  triggerRef.current?.focus();
-                  if (verdict.executable) onExecute(command.id);
+                aria-haspopup="menu"
+                aria-expanded={newExpanded}
+                data-submenu-parent="new"
+                className="editor-menu__item editor-menu__item--parent"
+                onClick={() => setNewExpanded((value) => !value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    expandNewAndFocusFirstKind();
+                  }
                 }}
               >
-                <span className="editor-menu__label">{t(command.labelKey)}</span>
-                {shortcut ? <kbd className="ui-shortcut">{shortcut}</kbd> : null}
+                <span className="editor-menu__label">{t('editor.menu.new')}</span>
+                <span className="editor-menu__arrow" aria-hidden="true">
+                  ›
+                </span>
               </button>
-            );
-          })}
-        </div>
-      ) : null}
+              {newExpanded ? (
+                <div className="editor-menu__submenu" role="menu" aria-label={t('editor.menu.new')}>
+                  {projectKindRegistry.all().map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      role="menuitem"
+                      data-submenu-kind={entry.id}
+                      className="editor-menu__item"
+                      onClick={() => {
+                        pickAppCommand('project.new', { targetKind: entry.id as ProjectKind });
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowLeft') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          collapseNewAndFocusParent();
+                        }
+                      }}
+                    >
+                      <span className="editor-menu__label">{t(entry.labelKey)}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {menusFor('menubar.file')
+              .filter((row) => row.id !== 'file.new')
+              .map((row, index, rows) => {
+                const previous = rows[index - 1];
+                const separator = previous !== undefined && previous.group !== row.group;
+                return (
+                  <span key={row.id}>
+                    {separator ? <div className="editor-menu__separator" role="separator" /> : null}
+                    <RegistryRow
+                      row={row}
+                      context={context}
+                      appContext={appContext}
+                      onPickEngine={pickCommand}
+                      onPickApp={(id) => pickAppCommand(id)}
+                    />
+                  </span>
+                );
+              })}
+            <button
+              type="button"
+              role="menuitem"
+              className="editor-menu__item"
+              disabled
+              title={t('editor.menu.placeMediaUnavailable')}
+            >
+              <span className="editor-menu__label">{t('editor.menu.placeMedia')}</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <div className="editor-menu" data-menu="edit">
+        {trigger('edit', t('editor.menu.edit'))}
+        {openMenu === 'edit' ? (
+          <div
+            className="editor-menu__popup"
+            role="menu"
+            aria-label={t('editor.menu.edit')}
+            onKeyDown={(event) => onPopupKeyDown(event, 'edit')}
+          >
+            {menusFor('menubar.edit').map((row, index, rows) => {
+              const previous = rows[index - 1];
+              const separator = previous !== undefined && previous.group !== row.group;
+              return (
+                <span key={row.id}>
+                  {separator ? <div className="editor-menu__separator" role="separator" /> : null}
+                  <RegistryRow
+                    row={row}
+                    context={context}
+                    appContext={appContext}
+                    onPickEngine={pickCommand}
+                    onPickApp={(id) => pickAppCommand(id)}
+                  />
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+      <div className="editor-menu" data-menu="view">
+        {trigger('view', t('editor.menu.view'))}
+        {openMenu === 'view' ? (
+          <div
+            className="editor-menu__popup"
+            role="menu"
+            aria-label={t('editor.menu.view')}
+            onKeyDown={(event) => onPopupKeyDown(event, 'view')}
+          >
+            {menusFor('menubar.view').map((row, index, rows) => {
+              const previous = rows[index - 1];
+              const separator = previous !== undefined && previous.group !== row.group;
+              return (
+                <span key={row.id}>
+                  {separator ? <div className="editor-menu__separator" role="separator" /> : null}
+                  <RegistryRow
+                    row={row}
+                    context={context}
+                    appContext={appContext}
+                    onPickEngine={pickCommand}
+                    onPickApp={(id) => pickAppCommand(id)}
+                  />
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
+
+export const EDIT_MENU_COMMANDS: readonly string[] = EDIT_COMMANDS;
+export const VIEW_MENU_COMMANDS: readonly string[] = VIEW_COMMANDS;
 
 interface CanvasContextMenuProps {
   x: number;

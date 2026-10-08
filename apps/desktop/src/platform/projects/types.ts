@@ -1,8 +1,32 @@
 /** Shared project types crossing the desktop storage boundary. */
 
+/**
+ * Editor family a project belongs to; stored in project metadata.
+ * Mirrored by `PROJECT_KINDS` in `apps/desktop/src-tauri/src/projects.rs` —
+ * extend both together; the kind registry
+ * (`features/projects/projectKinds.ts`) owns everything else per family,
+ * including creation-menu order.
+ */
+export type ProjectKind = 'design' | 'whiteboard' | 'diagram';
+
+/** Fallback kind for payloads written before kinds existed. */
+export const DEFAULT_PROJECT_KIND: ProjectKind = 'design';
+
+/** Type guard for kind values arriving over the IPC boundary. */
+export function isProjectKind(value: unknown): value is ProjectKind {
+  return value === 'design' || value === 'whiteboard' || value === 'diagram';
+}
+
+/** Normalizes an unknown kind to a valid one; unknown values become design. */
+export function normalizeProjectKind(value: unknown): ProjectKind {
+  return isProjectKind(value) ? value : DEFAULT_PROJECT_KIND;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
+  /** Editor family; absent in payloads written before kinds existed. */
+  kind: ProjectKind;
   createdAtMs: number;
   updatedAtMs: number;
   lastOpenedAtMs?: number;
@@ -42,10 +66,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function errorText(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  if (raw instanceof Error) return raw.message;
+  if (!isRecord(raw)) return '';
+  if (typeof raw.message === 'string') return raw.message;
+  if (typeof raw.error === 'string') return raw.error;
+  if (typeof raw.data === 'string') return raw.data;
+  return '';
+}
+
 /** Normalizes Tauri rejections and malformed payloads into one error shape. */
 export function parseProjectError(raw: unknown): ProjectError {
-  const text =
-    typeof raw === 'string' ? raw : raw instanceof Error ? raw.message : '';
+  const text = errorText(raw);
   if (text !== '') {
     try {
       const parsed: unknown = JSON.parse(text);
@@ -80,6 +113,12 @@ export function parseProjectError(raw: unknown): ProjectError {
         typeof raw.recoverable === 'boolean' ? raw.recoverable : true,
     };
   }
+  if (text !== '') {
+    return {
+      ...FALLBACK_ERROR,
+      details: text,
+    };
+  }
   return { ...FALLBACK_ERROR };
 }
 
@@ -89,6 +128,7 @@ export function isProjectSummary(value: unknown): value is ProjectSummary {
     isRecord(value) &&
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
+    (value.kind === undefined || isProjectKind(value.kind)) &&
     typeof value.createdAtMs === 'number' &&
     typeof value.updatedAtMs === 'number' &&
     (value.deletedAtMs === undefined || typeof value.deletedAtMs === 'number') &&

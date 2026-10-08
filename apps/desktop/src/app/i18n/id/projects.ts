@@ -4,6 +4,15 @@ const projects: EnDict['projects'] = {
   templates: {
     blank: 'Kanvas kosong',
     blankDescription: 'Kanvas kosong dengan pengaturan bawaan.',
+    whiteboard: 'Whiteboard',
+    whiteboardDescription: 'Kanvas whiteboard kosong.',
+    diagram: 'Diagram',
+    diagramDescription: 'Kanvas diagram kosong.',
+  },
+  kinds: {
+    design: 'Desain',
+    whiteboard: 'Whiteboard',
+    diagram: 'Diagram',
   },
   actions: {
     create: 'Buat',
@@ -30,6 +39,7 @@ const projects: EnDict['projects'] = {
     updatedAt: 'Diedit {date}',
     missingFile: 'Berkas hilang',
   },
+  previewLabel: 'Pratinjau kanvas untuk {name}',
   loading: 'Memuat proyek…',
   opening: 'Membuka "{name}"…',
   offlineNote: 'Tersimpan lokal · Tersedia luring',
@@ -57,11 +67,13 @@ const projects: EnDict['projects'] = {
   },
   errors: {
     storageUnavailable: 'Penyimpanan proyek tidak tersedia. Periksa penyimpanan perangkat dan coba lagi.',
+    technicalDetails: 'Detail teknis: {details}',
     unreadable: 'Proyek ini tidak dapat dibaca. Berkas mungkin rusak.',
     missing: 'Proyek ini tidak lagi tersedia. Mungkin telah dipindahkan atau dihapus.',
     migrationRequired: 'Proyek ini memerlukan migrasi sebelum dapat dibuka (versi {details}).',
     unsupportedOperation: 'Operasi ini ({details}) tidak didukung oleh penyimpanan lokal.',
     invalidName: 'Masukkan nama proyek.',
+    invalidKind: 'Jenis proyek tidak dikenal ({details}).',
     nameTooLong: 'Nama proyek dibatasi hingga {details} karakter.',
     createFailed: 'Tidak dapat membuat proyek. Silakan coba lagi.',
   },

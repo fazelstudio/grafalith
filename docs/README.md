@@ -1,10 +1,10 @@
-# Documentation — Nary
+# Documentation — OpenNary
 
-Start here to understand, use, and contribute to Nary.
+Start here to understand, use, and contribute to OpenNary.
 
 ## Product
 
-- [`PRD.md`](./PRD.md) — what Nary is, who it serves, and what is in scope.
+- [`PRD.md`](./PRD.md) — what OpenNary is, who it serves, and what is in scope.
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — technical contract: data model, rendering, history, and boundaries.
 
 ## Guides
@@ -13,7 +13,7 @@ Start here to understand, use, and contribute to Nary.
 - [`guides/python.md`](./guides/python.md) — use the engine from Python (PyPI).
 - [`guides/desktop.md`](./guides/desktop.md) — run the Tauri desktop demo (reference host).
 - [`guides/commands.md`](./guides/commands.md) — command and protocol reference for host developers.
-- [`guides/extensions.md`](./guides/extensions.md) — add shapes, tools, and commands without forking.
+- [`guides/extensions.md`](./guides/extensions.md) — add engine capabilities and ship desktop extensions (`.onry`) without forking.
 - [`guides/comment-guidelines.md`](./guides/comment-guidelines.md) — how to write source-code comments.
 - [`guides/locale-guide.md`](./guides/locale-guide.md) — how UI text and locales work in the desktop app.
 

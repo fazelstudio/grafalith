@@ -127,7 +127,14 @@ export function InspectorPanel({ frame, engine, sendBatch, commandContext }: Ins
   }
 
   const sections = inspectorSectionsFor(selection.length, kinds);
-  const fieldCtx = { entries, selection, sendBatch, engine };
+  const fieldCtx = {
+    entries,
+    selection,
+    sendBatch,
+    engine,
+    commit: async (commandId: string, op: string, ops: unknown[]) =>
+      executeCommand(commandId, { ...commandContext, inspectorOp: { op, ops } }),
+  };
   const alignVerdict = canExecuteCommand('alignLeft', commandContext);
   const distributeVerdict = canExecuteCommand('distributeHorizontal', commandContext);
 

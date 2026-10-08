@@ -76,10 +76,10 @@ jobs:
         run: bun run build:wasm:node
 
       - name: Typecheck TS SDK
-        run: bun run --filter @fazelstudio/nary-sdk typecheck
+        run: bun run --filter @fazelstudio/opennary-sdk typecheck
 
       - name: Run TS extension example
-        run: bun run --filter @fazelstudio/nary-sdk example
+        run: bun run --filter @fazelstudio/opennary-sdk example
 
   wasm:
     runs-on: ubuntu-latest
@@ -93,7 +93,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Check npm crate for wasm32
-        run: cargo check -p nary --target wasm32-unknown-unknown
+        run: cargo check -p opennary --target wasm32-unknown-unknown
 
   python:
     runs-on: ubuntu-latest
@@ -113,11 +113,11 @@ jobs:
         run: pip install maturin
 
       - name: Build Python wheels
-        working-directory: crates/nary-python
+        working-directory: crates/opennary-python
         run: maturin build
 
       - name: Install wheel and run integration tests
         run: |
           whl=$(ls target/wheels/*.whl dist/*.whl 2>/dev/null | head -1)
           pip install "$whl"
-          python -m unittest discover -s crates/nary-python/tests -v
+          python -m unittest discover -s crates/opennary-python/tests -v

@@ -1,33 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  searchCommands,
-  canExecuteCommand,
-  commandShortcutLabel,
+  searchUnifiedPalette,
+  groupUnifiedRows,
+  type AppCommandContext,
   type CommandContext,
+  type UnifiedPaletteRow,
 } from '../../../registries';
 import { useI18n } from '../../../app/i18n/resources';
 import { SearchInput } from '../../../ui/primitives/controls';
+import { PaletteCommandRow } from './PaletteCommandRow';
 
 interface CommandPaletteProps {
   open: boolean;
   context: CommandContext;
+  appContext: AppCommandContext;
   onClose: () => void;
-  onExecute: (id: string) => void;
+  onExecute: (row: UnifiedPaletteRow) => void;
 }
 
 /**
- * Command palette built from the same registry as toolbar, menus, and
- * shortcuts. Search covers labels and keywords; enablement mirrors the
- * shared `canExecute` path so the palette never diverges from buttons.
+ * Command palette built from the unified engine + host registries.
+ * Results group by category and rank MRU first; enablement mirrors the
+ * shared canExecute paths so the palette never diverges from buttons.
  */
-export function CommandPalette({ open, context, onClose, onExecute }: CommandPaletteProps) {
+export function CommandPalette({ open, context, appContext, onClose, onExecute }: CommandPaletteProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const results = useMemo(() => searchCommands(query), [query]);
+  const results = useMemo(
+    () => searchUnifiedPalette(query, context, appContext),
+    [query, context, appContext],
+  );
+  const groups = useMemo(() => groupUnifiedRows(results), [results]);
 
   // Focus the search field on open; return focus to the invoker on close so
   // keyboard users never lose their place in the editor chrome.
@@ -63,15 +70,12 @@ export function CommandPalette({ open, context, onClose, onExecute }: CommandPal
       } else if (event.key === 'Enter') {
         event.preventDefault();
         const target = results[active];
-        if (target) {
-          const verdict = canExecuteCommand(target.id, context);
-          if (verdict.executable) onExecute(target.id);
-        }
+        if (target?.executable) onExecute(target);
       }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, results, active, context, onClose, onExecute]);
+  }, [open, results, active, onClose, onExecute]);
 
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -79,6 +83,7 @@ export function CommandPalette({ open, context, onClose, onExecute }: CommandPal
 
   if (!open) return null;
 
+  let rowIndex = -1;
   return (
     <div
       className="palette-overlay"
@@ -100,30 +105,27 @@ export function CommandPalette({ open, context, onClose, onExecute }: CommandPal
           {results.length === 0 ? (
             <div className="palette__empty">{t('editor.palette.empty')}</div>
           ) : (
-            results.map((command, index) => {
-              const verdict = canExecuteCommand(command.id, context);
-              const shortcut = commandShortcutLabel(command);
-              return (
-                <button
-                  key={command.id}
-                  type="button"
-                  role="option"
-                  aria-selected={index === active}
-                  aria-disabled={!verdict.executable || undefined}
-                  data-index={index}
-                  className={`palette__item${index === active ? ' palette__item--active' : ''}`}
-                  disabled={!verdict.executable}
-                  title={command.defaultDescription ?? command.defaultLabel}
-                  onMouseEnter={() => setActive(index)}
-                  onClick={() => {
-                    if (verdict.executable) onExecute(command.id);
-                  }}
-                >
-                  <span className="palette__label">{t(command.labelKey)}</span>
-                  {shortcut ? <kbd className="ui-shortcut">{shortcut}</kbd> : null}
-                </button>
-              );
-            })
+            groups.map((group) => (
+              <div key={group.category}>
+                <div className="palette__group" role="presentation">
+                  {group.category}
+                </div>
+                {group.rows.map((row) => {
+                  rowIndex += 1;
+                  const index = rowIndex;
+                  return (
+                    <PaletteCommandRow
+                      key={`${row.kind}:${row.id}`}
+                      row={row}
+                      index={index}
+                      active={index === active}
+                      onPick={onExecute}
+                      onHighlight={setActive}
+                    />
+                  );
+                })}
+              </div>
+            ))
           )}
         </div>
         <div className="palette__hint">{t('editor.palette.hint')}</div>

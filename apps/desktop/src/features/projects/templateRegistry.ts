@@ -1,5 +1,6 @@
 import { createRegistry, type Descriptor } from '../../registries/core';
 import { buildBlankSceneEnvelope } from '../../platform/projects/documentEnvelope';
+import { isProjectKind, type ProjectKind } from '../../platform/projects/types';
 
 /** Declarative description of one project starting point. */
 export interface ProjectTemplateDefinition extends Descriptor {
@@ -7,6 +8,8 @@ export interface ProjectTemplateDefinition extends Descriptor {
   descriptionKey: string;
   /** English description rendered until the key resolves. */
   defaultDescription: string;
+  /** Editor family new projects from this template belong to. */
+  kind: ProjectKind;
   /** Initial scene payload stored verbatim by the backend. */
   buildScene: () => string;
 }
@@ -16,6 +19,9 @@ export function buildBlankScene(): string {
   return buildBlankSceneEnvelope();
 }
 
+// All three editor families start from the same blank scene for now; the
+// template identity only decides the stored project kind, which selects
+// the workspace shell used when the project opens.
 const TEMPLATES: readonly ProjectTemplateDefinition[] = [
   {
     id: 'blank',
@@ -23,6 +29,25 @@ const TEMPLATES: readonly ProjectTemplateDefinition[] = [
     defaultLabel: 'Blank canvas',
     descriptionKey: 'projects.templates.blankDescription',
     defaultDescription: 'An empty canvas with default settings.',
+    kind: 'design',
+    buildScene: buildBlankScene,
+  },
+  {
+    id: 'whiteboard',
+    labelKey: 'projects.templates.whiteboard',
+    defaultLabel: 'Whiteboard',
+    descriptionKey: 'projects.templates.whiteboardDescription',
+    defaultDescription: 'An empty whiteboard canvas.',
+    kind: 'whiteboard',
+    buildScene: buildBlankScene,
+  },
+  {
+    id: 'diagram',
+    labelKey: 'projects.templates.diagram',
+    defaultLabel: 'Diagram',
+    descriptionKey: 'projects.templates.diagramDescription',
+    defaultDescription: 'An empty diagram canvas.',
+    kind: 'diagram',
     buildScene: buildBlankScene,
   },
 ];
@@ -38,6 +63,9 @@ export const projectTemplateRegistry = createRegistry<ProjectTemplateDefinition>
       }
       if (template.defaultDescription === '') {
         return `missing defaultDescription for id "${template.id}"`;
+      }
+      if (!isProjectKind(template.kind)) {
+        return `unknown kind "${template.kind}" for id "${template.id}"`;
       }
       return undefined;
     },

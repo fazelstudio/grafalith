@@ -1,19 +1,19 @@
-# Python Guide — Nary
+# Python Guide — OpenNary
 
-Use the Nary engine from Python through the PyPI build.
+Use the OpenNary engine from Python through the PyPI build.
 
-Package: `nary`. Source of truth: `crates/nary-python/`.
+Package: `opennary`. Source of truth: `crates/opennary-python/`.
 
 ## Install
 
 ```bash
-pip install nary
+pip install opennary
 ```
 
 ## Quick start
 
 ```python
-from nary import Engine
+from opennary import Engine
 
 engine = Engine()
 
@@ -55,5 +55,5 @@ bun run dev:python
 bun run build:python
 ```
 
-Details: [`crates/nary-python/README.md`](../../crates/nary-python/README.md).
+Details: [`crates/opennary-python/README.md`](../../crates/opennary-python/README.md).
 Publishing: [`../../DEVELOPMENT.md`](../../DEVELOPMENT.md).

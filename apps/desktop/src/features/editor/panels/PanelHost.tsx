@@ -4,6 +4,7 @@ import { panelsFor, type CommandContext, type PanelLocation } from '../../../reg
 import { useI18n } from '../../../app/i18n/resources';
 import { LayersPanel } from './LayersPanel';
 import { InspectorPanel } from './InspectorPanel';
+import { EditorIcon } from '../../../ui/icons';
 
 interface PanelBodyProps {
   frame: FrameSnapshot | null;
@@ -42,7 +43,10 @@ export function PanelHost({ location, frame, onSelect, engine, sendBatch, comman
         }
         return (
           <section key={panel.id} className="editor-panel" aria-label={t(panel.labelKey)}>
-            <h2 className="editor-panel__title">{t(panel.labelKey)}</h2>
+            <h2 className="editor-panel__title">
+              {panel.id === 'layers' ? <EditorIcon size={14} /> : null}
+              <span>{t(panel.labelKey)}</span>
+            </h2>
             <div className="editor-panel__body">
               <Body
                 frame={frame}

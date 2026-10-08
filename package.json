@@ -1,7 +1,7 @@
 {
-  "name": "nary",
+  "name": "opennary",
   "private": true,
-  "description": "Nary monorepo root — Rust canvas engine (crates/*) with Tauri desktop demo (apps/desktop). Engine distributed as @fazelstudio/nary (npm/WASM) and nary (PyPI).",
+  "description": "OpenNary monorepo root — Rust canvas engine (crates/*) with Tauri desktop demo (apps/desktop). Engine distributed as @fazelstudio/opennary (npm/WASM) and opennary (PyPI).",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -14,11 +14,11 @@
     "fmt:check": "cargo fmt --all -- --check",
     "build": "cargo build --workspace",
     "build:release": "cargo build --workspace --release",
-    "build:wasm": "wasm-pack build crates/nary --target bundler --out-dir ../../pkg/bundler --scope fazelstudio",
-    "build:wasm:node": "wasm-pack build crates/nary --target nodejs --out-dir ../../pkg/node --scope fazelstudio",
-    "build:python": "maturin build -m crates/nary-python/Cargo.toml",
-    "publish:python": "maturin build -m crates/nary-python/Cargo.toml && maturin upload dist/*",
-    "dev:python": "maturin develop -m crates/nary-python/Cargo.toml",
+    "build:wasm": "wasm-pack build crates/opennary --target bundler --out-dir ../../pkg/bundler --scope fazelstudio",
+    "build:wasm:node": "wasm-pack build crates/opennary --target nodejs --out-dir ../../pkg/node --scope fazelstudio",
+    "build:python": "maturin build -m crates/opennary-python/Cargo.toml",
+    "publish:python": "maturin build -m crates/opennary-python/Cargo.toml && maturin upload dist/*",
+    "dev:python": "maturin develop -m crates/opennary-python/Cargo.toml",
     "dev:desktop": "bun run --filter @fazelstudio/desktop dev",
     "tauri": "bun run --filter @fazelstudio/desktop tauri",
     "tauri:dev": "bun run --filter @fazelstudio/desktop tauri:dev",
@@ -26,7 +26,7 @@
     "verify:docs": "python3 scripts/verify-docs.py",
     "verify:bindings": "python3 scripts/gen_command_bindings.py --check",
     "i18n:verify": "bun run --filter @fazelstudio/desktop i18n:verify",
-    "clean": "rimraf node_modules apps/desktop/node_modules packages/*/node_modules target apps/desktop/src-tauri/target examples/*/target pkg dist apps/desktop/dist coverage .venv venv \"**/__pycache__\" \"**/*.egg-info\" \"**/*.tsbuildinfo\""
+    "clean": "node scripts/clean.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9",

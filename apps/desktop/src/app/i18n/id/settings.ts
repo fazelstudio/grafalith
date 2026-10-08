@@ -24,6 +24,8 @@ const settings: EnDict['settings'] = {
       light: 'Terang',
       dark: 'Gelap',
     },
+    layoutLabel: 'Tata letak proyek',
+    layoutDescription: 'Susunan grid atau daftar untuk proyek di halaman beranda.',
   },
   editor: {
     title: 'Editor',
@@ -32,6 +34,10 @@ const settings: EnDict['settings'] = {
     canvasHintDescription: 'Tampilkan petunjuk mulai pada kanvas kosong.',
     restoreViewportLabel: 'Pulihkan posisi kanvas',
     restoreViewportDescription: 'Buka setiap proyek pada posisi kanvas terakhir.',
+    autosaveLabel: 'Simpan otomatis',
+    autosaveDescription: 'Simpan proyek yang terbuka secara otomatis setelah setiap perubahan.',
+    autosaveDelayLabel: 'Jeda simpan otomatis',
+    autosaveDelayDescription: 'Tunggu setelah perubahan terakhir sebelum menyimpan otomatis, dalam milidetik.',
   },
   shortcuts: {
     title: 'Pintasan',
@@ -43,6 +49,11 @@ const settings: EnDict['settings'] = {
   },
   actions: {
     resetSection: 'Kembalikan ke bawaan',
+  },
+  search: {
+    label: 'Cari pengaturan',
+    placeholder: 'Cari pengaturan…',
+    empty: 'Tidak ada pengaturan yang cocok.',
   },
 };
 

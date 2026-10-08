@@ -12,9 +12,12 @@ import { useHashRoute } from '../routing/useHashRoute';
 import { useI18n } from '../i18n/resources';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useToast } from './ToastProvider';
+import { ExtensionDialogHost } from './ExtensionDialogHost';
+import { getExtensionHost } from '../../platform/extensions/extensionHost';
 import { revealWhenReady } from '../boot';
 import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
 import { Titlebar } from './Titlebar';
+import { Tooltip } from '../../ui/primitives/tooltip';
 import { getProjectStore } from '../../platform/projects/projectService';
 import { parseProjectError } from '../../platform/projects/types';
 import { persistenceConfig } from '../../platform/projects/persistenceConfig';
@@ -105,7 +108,13 @@ export function AppShell({ children }: ShellProps) {
           <img src={appIcon} alt="" />
           {t('common.appName')}
         </span>
-        <span className="shell__spacer" data-tauri-drag-region />
+        {route.layout === 'editor' ? (
+          <div className="shell__titlebar-center">
+            <div id="editor-titlebar-center" className="shell__titlebar-slot" />
+          </div>
+        ) : (
+          <span className="shell__spacer" data-tauri-drag-region />
+        )}
         <Titlebar />
       </header>
       <div className="shell__workspace">
@@ -115,50 +124,69 @@ export function AppShell({ children }: ShellProps) {
             className={`shell__sidebar${sidebarCollapsed ? ' shell__sidebar--collapsed' : ''}`}
           >
             <nav className="shell__sidebar-nav" aria-label={t('navigation.projects')}>
-              <button
-                type="button"
-                className="shell__sidebar-link"
-                aria-current={route.id === 'home' ? 'page' : undefined}
-                title={t('navigation.projects')}
-                onClick={() => navigate('#/')}
+              <Tooltip
+                content={t('navigation.projects')}
+                placement="right"
+                disabled={!sidebarCollapsed}
               >
-                <ProjectsIcon className="shell__sidebar-icon" size={16} />
-                <span className="shell__sidebar-label">{t('navigation.projects')}</span>
-              </button>
-              <button
-                type="button"
-                className="shell__sidebar-link"
-                aria-current={route.id === 'trash' ? 'page' : undefined}
-                title={t('navigation.trash')}
-                onClick={() => navigate('#/trash')}
+                <button
+                  type="button"
+                  className="shell__sidebar-link"
+                  aria-current={route.id === 'home' ? 'page' : undefined}
+                  onClick={() => navigate('#/')}
+                >
+                  <ProjectsIcon className="shell__sidebar-icon" size={16} />
+                  <span className="shell__sidebar-label">{t('navigation.projects')}</span>
+                </button>
+              </Tooltip>
+              <Tooltip
+                content={t('navigation.trash')}
+                placement="right"
+                disabled={!sidebarCollapsed}
               >
-                <TrashIcon className="shell__sidebar-icon" size={16} />
-                <span className="shell__sidebar-label">{t('navigation.trash')}</span>
-              </button>
+                <button
+                  type="button"
+                  className="shell__sidebar-link"
+                  aria-current={route.id === 'trash' ? 'page' : undefined}
+                  onClick={() => navigate('#/trash')}
+                >
+                  <TrashIcon className="shell__sidebar-icon" size={16} />
+                  <span className="shell__sidebar-label">{t('navigation.trash')}</span>
+                </button>
+              </Tooltip>
             </nav>
             <nav className="shell__sidebar-bottom" aria-label={t('navigation.settings')}>
+              <Tooltip
+                content={t('navigation.settings')}
+                placement="right"
+                disabled={!sidebarCollapsed}
+              >
+                <button
+                  type="button"
+                  className="shell__sidebar-link"
+                  aria-current={route.layout === 'settings' ? 'page' : undefined}
+                  onClick={() => navigate(routeRegistry.get('settings')!.path)}
+                >
+                  <SettingsIcon className="shell__sidebar-icon" size={16} />
+                  <span className="shell__sidebar-label">{t('navigation.settings')}</span>
+                </button>
+              </Tooltip>
+            </nav>
+            <Tooltip
+              content={t(sidebarCollapsed ? 'navigation.expandSidebar' : 'navigation.collapseSidebar')}
+              placement="right"
+            >
               <button
                 type="button"
-                className="shell__sidebar-link"
-                aria-current={route.layout === 'settings' ? 'page' : undefined}
-                title={t('navigation.settings')}
-                onClick={() => navigate(routeRegistry.get('settings')!.path)}
+                className="shell__sidebar-toggle"
+                aria-label={t(sidebarCollapsed ? 'navigation.expandSidebar' : 'navigation.collapseSidebar')}
+                aria-controls="app-sidebar"
+                aria-expanded={!sidebarCollapsed}
+                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
               >
-                <SettingsIcon className="shell__sidebar-icon" size={16} />
-                <span className="shell__sidebar-label">{t('navigation.settings')}</span>
+                {sidebarCollapsed ? <ChevronRightIcon size={14} /> : <ChevronLeftIcon size={14} />}
               </button>
-            </nav>
-            <button
-              type="button"
-              className="shell__sidebar-toggle"
-              aria-label={t(sidebarCollapsed ? 'navigation.expandSidebar' : 'navigation.collapseSidebar')}
-              aria-controls="app-sidebar"
-              aria-expanded={!sidebarCollapsed}
-              title={t(sidebarCollapsed ? 'navigation.expandSidebar' : 'navigation.collapseSidebar')}
-              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            >
-              {sidebarCollapsed ? <ChevronRightIcon size={14} /> : <ChevronLeftIcon size={14} />}
-            </button>
+            </Tooltip>
           </aside>
         ) : null}
         <main className="shell__main">
@@ -174,19 +202,39 @@ export function AppShell({ children }: ShellProps) {
         </main>
       </div>
       <div className="shell__toasts" aria-live="polite" aria-atomic="false">
-        {toasts.map((toast) => (
-          <button
+        {toasts.map((toast) => {
+          const action = toast.action;
+          return (
+          <span
             key={toast.id}
-            type="button"
-            className="shell__toast"
-            onClick={() => dismiss(toast.id)}
-            title={t('common.actions.close')}
-            aria-label={`${toast.message} — ${t('common.actions.close')}`}
+            role="status"
+            className={`shell__toast shell__toast--${toast.level}`}
           >
-            {toast.message}
-          </button>
-        ))}
+            <button
+              type="button"
+              className="shell__toast-message"
+              onClick={() => dismiss(toast.id)}
+              aria-label={`${toast.message} — ${t('common.actions.close')}`}
+            >
+              {toast.message}
+            </button>
+            {action ? (
+              <button
+                type="button"
+                className="shell__toast-action"
+                onClick={() => {
+                  dismiss(toast.id);
+                  void getExtensionHost().executeCommand(action.commandId);
+                }}
+              >
+                {action.label}
+              </button>
+            ) : null}
+          </span>
+          );
+        })}
       </div>
+      <ExtensionDialogHost />
     </div>
   );
 }

@@ -22,6 +22,8 @@ const settings = {
       light: 'Light',
       dark: 'Dark',
     },
+    layoutLabel: 'Project layout',
+    layoutDescription: 'Grid or list arrangement for projects on the home page.',
   },
   editor: {
     title: 'Editor',
@@ -30,6 +32,10 @@ const settings = {
     canvasHintDescription: 'Show the getting-started hint on an empty canvas.',
     restoreViewportLabel: 'Restore canvas position',
     restoreViewportDescription: 'Reopen each project at its last canvas position.',
+    autosaveLabel: 'Autosave',
+    autosaveDescription: 'Save the open project automatically after each change.',
+    autosaveDelayLabel: 'Autosave delay',
+    autosaveDelayDescription: 'Wait after the last change before autosaving, in milliseconds.',
   },
   shortcuts: {
     title: 'Shortcuts',
@@ -41,6 +47,11 @@ const settings = {
   },
   actions: {
     resetSection: 'Reset to defaults',
+  },
+  search: {
+    label: 'Search settings',
+    placeholder: 'Search settings…',
+    empty: 'No matching settings.',
   },
 };
 

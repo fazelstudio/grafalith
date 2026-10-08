@@ -1,0 +1,81 @@
+/* Single tooltip primitive. Rendered in a portal with fixed positioning. */
+
+.opennary-tooltip-trigger {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.opennary-tooltip {
+  position: fixed;
+  z-index: 200;
+  max-width: min(240px, calc(100vw - 16px));
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-elevated);
+  color: var(--fg-primary);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-medium);
+  font: var(--font-compact);
+  border-radius: var(--radius-xs);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--motion-fast);
+}
+
+.opennary-tooltip__text {
+  display: block;
+  max-width: min(240px, calc(100vw - 16px));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opennary-tooltip[data-positioned='true'] {
+  opacity: 1;
+}
+
+.opennary-tooltip::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+.opennary-tooltip[data-placement='top']::after {
+  left: 50%;
+  bottom: -4px;
+  margin-left: -3px;
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.opennary-tooltip[data-placement='bottom']::after {
+  left: 50%;
+  top: -4px;
+  margin-left: -3px;
+  border-left: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.opennary-tooltip[data-placement='left']::after {
+  top: 50%;
+  right: -4px;
+  margin-top: -3px;
+  border-top: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.opennary-tooltip[data-placement='right']::after {
+  top: 50%;
+  left: -4px;
+  margin-top: -3px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 1px solid var(--border-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opennary-tooltip {
+    transition: none;
+  }
+}

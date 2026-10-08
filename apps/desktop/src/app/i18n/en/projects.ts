@@ -2,6 +2,15 @@ const projects = {
   templates: {
     blank: 'Blank canvas',
     blankDescription: 'An empty canvas with default settings.',
+    whiteboard: 'Whiteboard',
+    whiteboardDescription: 'An empty whiteboard canvas.',
+    diagram: 'Diagram',
+    diagramDescription: 'An empty diagram canvas.',
+  },
+  kinds: {
+    design: 'Design',
+    whiteboard: 'Whiteboard',
+    diagram: 'Diagram',
   },
   actions: {
     create: 'Create',
@@ -28,6 +37,7 @@ const projects = {
     updatedAt: 'Edited {date}',
     missingFile: 'File missing',
   },
+  previewLabel: 'Canvas preview for {name}',
   loading: 'Loading projects…',
   opening: 'Opening "{name}"…',
   offlineNote: 'Stored locally · Available offline',
@@ -55,11 +65,13 @@ const projects = {
   },
   errors: {
     storageUnavailable: 'Project storage is unavailable. Check device storage and try again.',
+    technicalDetails: 'Technical details: {details}',
     unreadable: 'This project could not be read. The file may be damaged.',
     missing: 'This project is no longer available. It may have been moved or deleted.',
     migrationRequired: 'This project needs migration before it can open (version {details}).',
     unsupportedOperation: 'This operation ({details}) is not supported by local storage.',
     invalidName: 'Enter a project name.',
+    invalidKind: 'Unknown project type ({details}).',
     nameTooLong: 'Project names are limited to {details} characters.',
     createFailed: 'Could not create the project. Please try again.',
   },

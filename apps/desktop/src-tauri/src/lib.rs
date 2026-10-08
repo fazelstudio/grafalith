@@ -1,10 +1,10 @@
-//! Nary desktop application layer (Tauri host).
+//! OpenNary desktop application layer (Tauri host).
 //!
 //! Thin native host over the Rust engine: owns one instance-scoped
-//! [`Engine`](nary_bindings::Engine) behind Tauri managed state and
+//! [`Engine`](opennary_bindings::Engine) behind Tauri managed state and
 //! exposes it through Tauri commands. No domain logic lives here — hit
 //! testing, selection, transforms, history, geometry, and rendering rules
-//! all stay in `nary-core` behind `nary-bindings`.
+//! all stay in `opennary-core` behind `opennary-bindings`.
 //!
 //! Project files live beside the engine state: one directory per project
 //! holding a small metadata file and the full scene payload, so the home
@@ -12,8 +12,8 @@
 
 mod projects;
 
-use nary_bindings::tauri as engine_ipc;
-use nary_bindings::Engine;
+use opennary_bindings::tauri as engine_ipc;
+use opennary_bindings::Engine;
 use std::sync::Mutex;
 
 /// Tauri managed state: the single instance-scoped engine handle.
@@ -98,9 +98,10 @@ fn project_create(
     app: tauri::AppHandle,
     name: String,
     scene_json: String,
+    kind: Option<String>,
 ) -> Result<String, String> {
     let base = projects_base(&app)?;
-    projects::create_project(&base, &name, &scene_json)
+    projects::create_project(&base, &name, &scene_json, kind.as_deref())
         .and_then(|summary| {
             serde_json::to_string(&summary).map_err(|e| projects::ProjectError {
                 code: "storage-unavailable".to_string(),
@@ -116,6 +117,21 @@ fn project_create(
 fn project_open(app: tauri::AppHandle, id: String) -> Result<String, String> {
     let base = projects_base(&app)?;
     projects::open_project(&base, &id)
+        .and_then(|result| {
+            serde_json::to_string(&result).map_err(|e| projects::ProjectError {
+                code: "storage-unavailable".to_string(),
+                message_key: "projects.errors.storageUnavailable".to_string(),
+                details: Some(e.to_string()),
+                recoverable: true,
+            })
+        })
+        .map_err(|e| e.to_json())
+}
+
+#[tauri::command]
+fn project_preview(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    let base = projects_base(&app)?;
+    projects::preview_project(&base, &id)
         .and_then(|result| {
             serde_json::to_string(&result).map_err(|e| projects::ProjectError {
                 code: "storage-unavailable".to_string(),
@@ -281,6 +297,7 @@ pub fn run() {
             project_purge_expired,
             project_create,
             project_open,
+            project_preview,
             project_rename,
             project_duplicate,
             project_delete,

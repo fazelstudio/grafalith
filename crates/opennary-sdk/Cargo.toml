@@ -1,0 +1,12 @@
+[package]
+name = "opennary-sdk"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Public extension SDK facade for the OpenNary Rust engine: re-exports the extension traits and registry so third-party crates never touch engine internals."
+
+[dependencies]
+opennary-core = { version = "0.1.0", path = "../opennary-core" }
+
+[lints]
+workspace = true

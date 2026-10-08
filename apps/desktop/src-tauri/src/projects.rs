@@ -15,7 +15,7 @@
 //! fails. Only v1 scenes are readable today; newer envelopes are rejected
 //! with `unsupported-version` instead of being silently overwritten.
 
-use nary_core::document::SCHEMA_VERSION;
+use opennary_core::document::SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
@@ -33,6 +33,33 @@ pub const TRASH_RETENTION_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
 static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Editor family a project belongs to; new kinds must extend this list
+/// together with the desktop `ProjectKind` union
+/// (`apps/desktop/src/platform/projects/types.ts`) and the kind registry
+/// (`apps/desktop/src/features/projects/projectKinds.ts`).
+pub const PROJECT_KINDS: &[&str] = &["design", "whiteboard", "diagram"];
+
+/// Fallback kind for metadata written before kinds existed.
+pub fn default_project_kind() -> String {
+    "design".to_string()
+}
+
+/// Trims and checks the project kind; unknown values are rejected so hosts
+/// share one validation instead of reimplementing it per platform.
+pub fn validate_kind(kind: &str) -> Result<String, ProjectError> {
+    let trimmed = kind.trim();
+    if PROJECT_KINDS.contains(&trimmed) {
+        Ok(trimmed.to_string())
+    } else {
+        Err(ProjectError::new(
+            "invalid-kind",
+            "projects.errors.invalidKind",
+            Some(kind.to_string()),
+            false,
+        ))
+    }
+}
+
 /// Small metadata record stored per project, separate from the scene payload.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +68,10 @@ pub struct ProjectMeta {
     pub id: String,
     /// User-visible display name; ids stay stable across renames.
     pub name: String,
+    /// Editor family selecting the workspace layout; defaults for metadata
+    /// written before kinds existed.
+    #[serde(default = "default_project_kind")]
+    pub kind: String,
     /// Creation time as millis since the Unix epoch.
     pub created_at_ms: u64,
     /// Last metadata or document write as millis since the Unix epoch.
@@ -68,6 +99,9 @@ pub struct ProjectSummary {
     pub id: String,
     /// User-visible display name.
     pub name: String,
+    /// Editor family selecting the workspace layout.
+    #[serde(default = "default_project_kind")]
+    pub kind: String,
     /// Creation time as millis since the Unix epoch.
     pub created_at_ms: u64,
     /// Last metadata or document write as millis since the Unix epoch.
@@ -306,9 +340,9 @@ fn storage_error(details: String) -> ProjectError {
 
 /// Writes through a temporary sibling file so a crash mid-write keeps the
 /// previous valid payload instead of a truncated one. The temp file is
-/// fsynced before the rename; the rename then commits the new payload
-/// atomically. Validation must happen before this call — this function
-/// only guarantees the bytes reach disk intact.
+/// fsynced before replacement. Unix replaces the destination atomically;
+/// Windows requires removing the existing destination before `rename`, since
+/// the standard library does not expose an overwrite form there.
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), ProjectError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -322,6 +356,10 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), ProjectError> {
     file.sync_all()
         .map_err(|e| storage_error(format!("{}: {e}", tmp.display())))?;
     drop(file);
+    #[cfg(windows)]
+    if path.exists() {
+        fs::remove_file(path).map_err(|e| storage_error(format!("{}: {e}", path.display())))?;
+    }
     fs::rename(&tmp, path).map_err(|e| storage_error(format!("{}: {e}", path.display())))?;
     Ok(())
 }
@@ -368,6 +406,7 @@ fn to_summary(meta: &ProjectMeta, document_exists: bool) -> ProjectSummary {
     ProjectSummary {
         id: meta.id.clone(),
         name: meta.name.clone(),
+        kind: meta.kind.clone(),
         created_at_ms: meta.created_at_ms,
         updated_at_ms: meta.updated_at_ms,
         last_opened_at_ms: meta.last_opened_at_ms,
@@ -486,13 +525,19 @@ pub fn create_project(
     base: &Path,
     name: &str,
     scene_json: &str,
+    kind: Option<&str>,
 ) -> Result<ProjectSummary, ProjectError> {
     let name = validate_name(name)?;
+    let kind = match kind {
+        Some(raw) => validate_kind(raw)?,
+        None => default_project_kind(),
+    };
     let version = check_scene_version(scene_json)?;
     let now = now_ms();
     let meta = ProjectMeta {
         id: generate_id(),
         name,
+        kind,
         created_at_ms: now,
         updated_at_ms: now,
         last_opened_at_ms: Some(now),
@@ -543,10 +588,50 @@ pub fn open_project(base: &Path, id: &str) -> Result<ProjectOpenResult, ProjectE
     migration_status(version)?;
     validate_scene_payload(&scene_json)?;
     meta.last_opened_at_ms = Some(now_ms());
-    write_meta(base, &meta)?;
+    // Opening is read-first: a telemetry stamp must not make a valid
+    // document unavailable when another open/save is replacing metadata.
+    if let Err(error) = write_meta(base, &meta) {
+        eprintln!("project open metadata refresh skipped: {error}");
+    }
     let summary = to_summary(&meta, true);
     Ok(ProjectOpenResult {
         summary,
+        scene_json,
+    })
+}
+
+/// Reads a project for a Home thumbnail without changing open metadata.
+pub fn preview_project(base: &Path, id: &str) -> Result<ProjectOpenResult, ProjectError> {
+    let meta = read_meta(base, id)?;
+    if meta.deleted_at_ms.is_some() {
+        return Err(ProjectError::new(
+            "not-found",
+            "projects.errors.missing",
+            Some(id.to_string()),
+            false,
+        ));
+    }
+    if meta.format_version > PROJECT_FORMAT_VERSION {
+        return Err(ProjectError::new(
+            "unsupported-version",
+            "projects.errors.migrationRequired",
+            Some(meta.format_version.to_string()),
+            true,
+        ));
+    }
+    let scene_json = fs::read_to_string(document_path(base, id)).map_err(|_| {
+        ProjectError::new(
+            "missing-document",
+            "projects.errors.missing",
+            Some(meta.name.clone()),
+            false,
+        )
+    })?;
+    let version = envelope_version(&scene_json)?;
+    migration_status(version)?;
+    validate_scene_payload(&scene_json)?;
+    Ok(ProjectOpenResult {
+        summary: to_summary(&meta, true),
         scene_json,
     })
 }
@@ -596,6 +681,7 @@ pub fn duplicate_project(base: &Path, id: &str) -> Result<ProjectSummary, Projec
     let meta = ProjectMeta {
         id: generate_id(),
         name,
+        kind: source.kind.clone(),
         created_at_ms: now,
         updated_at_ms: now,
         last_opened_at_ms: Some(now),
@@ -740,7 +826,7 @@ mod tests {
     fn test_base() -> PathBuf {
         let n = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
-            "nary-projects-test-{}-{}-{n}",
+            "opennary-projects-test-{}-{}-{n}",
             std::process::id(),
             now_ms()
         ));
@@ -752,7 +838,7 @@ mod tests {
     #[test]
     fn create_and_list_roundtrip() {
         let base = test_base();
-        let created = create_project(&base, "First", &blank_scene()).unwrap();
+        let created = create_project(&base, "First", &blank_scene(), None).unwrap();
         assert_eq!(created.name, "First");
         assert!(created.document_exists);
         let listed = list_projects(&base).unwrap();
@@ -764,7 +850,7 @@ mod tests {
     #[test]
     fn list_never_parses_scene_payloads() {
         let base = test_base();
-        let created = create_project(&base, "Heavy", &blank_scene()).unwrap();
+        let created = create_project(&base, "Heavy", &blank_scene(), None).unwrap();
         fs::write(
             document_path(&base, &created.id),
             r#"{"schemaVersion":1,"version":1,"not":"a scene"}"#,
@@ -779,7 +865,7 @@ mod tests {
     #[test]
     fn open_refreshes_last_opened() {
         let base = test_base();
-        let created = create_project(&base, "Open me", &blank_scene()).unwrap();
+        let created = create_project(&base, "Open me", &blank_scene(), None).unwrap();
         let opened = open_project(&base, &created.id).unwrap();
         assert_eq!(opened.summary.id, created.id);
         assert!(opened.summary.last_opened_at_ms.is_some());
@@ -790,7 +876,7 @@ mod tests {
     #[test]
     fn rename_trims_and_keeps_id_stable() {
         let base = test_base();
-        let created = create_project(&base, "Before", &blank_scene()).unwrap();
+        let created = create_project(&base, "Before", &blank_scene(), None).unwrap();
         let renamed = rename_project(&base, &created.id, "  After  ").unwrap();
         assert_eq!(renamed.id, created.id);
         assert_eq!(renamed.name, "After");
@@ -815,7 +901,7 @@ mod tests {
     #[test]
     fn duplicate_gets_independent_identity() {
         let base = test_base();
-        let created = create_project(&base, "Original", &blank_scene()).unwrap();
+        let created = create_project(&base, "Original", &blank_scene(), None).unwrap();
         let copy = duplicate_project(&base, &created.id).unwrap();
         assert_ne!(copy.id, created.id);
         assert!(copy.name.contains("Original"));
@@ -831,7 +917,7 @@ mod tests {
     #[test]
     fn trash_restore_permanent_delete_and_expiration() {
         let base = test_base();
-        let project = create_project(&base, "Recoverable", &blank_scene()).unwrap();
+        let project = create_project(&base, "Recoverable", &blank_scene(), None).unwrap();
 
         delete_project(&base, &project.id).unwrap();
         assert!(list_projects(&base).unwrap().is_empty());
@@ -852,7 +938,7 @@ mod tests {
         assert!(list_trash_projects(&base).unwrap().is_empty());
         assert!(!project_dir(&base, &project.id).exists());
 
-        let expired = create_project(&base, "Expired", &blank_scene()).unwrap();
+        let expired = create_project(&base, "Expired", &blank_scene(), None).unwrap();
         let mut meta = read_meta(&base, &expired.id).unwrap();
         meta.deleted_at_ms = Some(now_ms().saturating_sub(TRASH_RETENTION_MS + 1));
         write_meta(&base, &meta).unwrap();
@@ -865,7 +951,7 @@ mod tests {
     #[test]
     fn missing_document_reports_missing() {
         let base = test_base();
-        let created = create_project(&base, "Ghost", &blank_scene()).unwrap();
+        let created = create_project(&base, "Ghost", &blank_scene(), None).unwrap();
         fs::remove_file(document_path(&base, &created.id)).unwrap();
         let listed = list_projects(&base).unwrap();
         assert!(!listed[0].document_exists);
@@ -878,7 +964,7 @@ mod tests {
     fn unsupported_scene_version_requires_migration() {
         let base = test_base();
         let future = r#"{"schemaVersion":999,"version":999,"elements":[],"elementOrder":[]}"#;
-        let err = create_project(&base, "Future", future).unwrap_err();
+        let err = create_project(&base, "Future", future, None).unwrap_err();
         assert_eq!(err.code, "unsupported-version");
         let _ = fs::remove_dir_all(&base);
     }
@@ -895,7 +981,7 @@ mod tests {
     #[test]
     fn malformed_document_is_invalid_data() {
         let base = test_base();
-        let created = create_project(&base, "Broken", &blank_scene()).unwrap();
+        let created = create_project(&base, "Broken", &blank_scene(), None).unwrap();
         fs::write(document_path(&base, &created.id), "{not json").unwrap();
         let err = open_project(&base, &created.id).unwrap_err();
         assert_eq!(err.code, "invalid-data");
@@ -905,7 +991,7 @@ mod tests {
     #[test]
     fn non_object_root_is_invalid_data() {
         let base = test_base();
-        let err = create_project(&base, "Array", "[1,2,3]").unwrap_err();
+        let err = create_project(&base, "Array", "[1,2,3]", None).unwrap_err();
         assert_eq!(err.code, "invalid-data");
         let _ = fs::remove_dir_all(&base);
     }
@@ -914,7 +1000,7 @@ mod tests {
     fn non_array_elements_are_invalid_data() {
         let base = test_base();
         let bad = r#"{"schemaVersion":1,"version":1,"elements":{},"elementOrder":[]}"#;
-        let err = create_project(&base, "Bad shape", bad).unwrap_err();
+        let err = create_project(&base, "Bad shape", bad, None).unwrap_err();
         assert_eq!(err.code, "invalid-data");
         let _ = fs::remove_dir_all(&base);
     }
@@ -930,7 +1016,7 @@ mod tests {
     #[test]
     fn failed_save_keeps_previous_payload() {
         let base = test_base();
-        let created = create_project(&base, "Keep me", &blank_scene()).unwrap();
+        let created = create_project(&base, "Keep me", &blank_scene(), None).unwrap();
         let before = fs::read_to_string(document_path(&base, &created.id)).unwrap();
         let future = r#"{"schemaVersion":999,"version":999,"elements":[],"elementOrder":[]}"#;
         let err = save_project(&base, &created.id, future).unwrap_err();
@@ -944,9 +1030,71 @@ mod tests {
     #[test]
     fn successful_save_retains_backup() {
         let base = test_base();
-        let created = create_project(&base, "Backup", &blank_scene()).unwrap();
+        let created = create_project(&base, "Backup", &blank_scene(), None).unwrap();
         save_project(&base, &created.id, &blank_scene()).unwrap();
         assert!(document_backup_path(&base, &created.id).exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_defaults_to_design_kind() {
+        let base = test_base();
+        let created = create_project(&base, "Kindless", &blank_scene(), None).unwrap();
+        assert_eq!(created.kind, "design");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_accepts_whiteboard_and_diagram_kinds() {
+        let base = test_base();
+        let board = create_project(&base, "Board", &blank_scene(), Some("whiteboard")).unwrap();
+        assert_eq!(board.kind, "whiteboard");
+        let diagram = create_project(&base, "Flow", &blank_scene(), Some("diagram")).unwrap();
+        assert_eq!(diagram.kind, "diagram");
+        let kinds: Vec<String> = list_projects(&base)
+            .unwrap()
+            .iter()
+            .map(|entry| entry.kind.clone())
+            .collect();
+        assert!(kinds.contains(&"whiteboard".to_string()));
+        assert!(kinds.contains(&"diagram".to_string()));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_rejects_unknown_kinds() {
+        let base = test_base();
+        let err = create_project(&base, "Weird", &blank_scene(), Some("spreadsheet")).unwrap_err();
+        assert_eq!(err.code, "invalid-kind");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn duplicate_preserves_project_kind() {
+        let base = test_base();
+        let created = create_project(&base, "Board", &blank_scene(), Some("whiteboard")).unwrap();
+        let copy = duplicate_project(&base, &created.id).unwrap();
+        assert_eq!(copy.kind, "whiteboard");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn metadata_without_kind_still_reads_as_design() {
+        let base = test_base();
+        let created = create_project(&base, "Legacy", &blank_scene(), None).unwrap();
+        let raw = fs::read_to_string(meta_path(&base, &created.id)).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(value.get("kind").is_some());
+        let mut legacy = value;
+        legacy.as_object_mut().unwrap().remove("kind");
+        fs::write(
+            meta_path(&base, &created.id),
+            serde_json::to_vec_pretty(&legacy).unwrap(),
+        )
+        .unwrap();
+        let listed = list_projects(&base).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].kind, "design");
         let _ = fs::remove_dir_all(&base);
     }
 }

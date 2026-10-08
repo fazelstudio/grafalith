@@ -1,0 +1,16 @@
+{
+  "name": "@fazelstudio/opennary-sdk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TypeScript SDK for OpenNary engine extensions: typed engine client, extension manifest and registry.",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src/",
+    "example": "bun example/toolbar-extension.ts"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}

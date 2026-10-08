@@ -4,8 +4,11 @@ import {
 } from './documentEnvelope';
 import { persistenceConfig } from './persistenceConfig';
 import {
+  DEFAULT_PROJECT_KIND,
+  normalizeProjectKind,
   parseProjectError,
   type ProjectError,
+  type ProjectKind,
   type ProjectOpenResult,
   type ProjectSummary,
   type TrashedProjectSummary,
@@ -18,6 +21,8 @@ const docKey = (id: string): string => `opennary:projects:doc:${id}`;
 interface StoredMeta {
   id: string;
   name: string;
+  /** Editor family; entries written before kinds existed have no value. */
+  kind?: ProjectKind;
   createdAtMs: number;
   updatedAtMs: number;
   lastOpenedAtMs?: number;
@@ -100,6 +105,7 @@ function toSummary(meta: StoredMeta, documentExists: boolean): ProjectSummary {
   return {
     id: meta.id,
     name: meta.name,
+    kind: normalizeProjectKind(meta.kind),
     createdAtMs: meta.createdAtMs,
     updatedAtMs: meta.updatedAtMs,
     lastOpenedAtMs: meta.lastOpenedAtMs,
@@ -182,13 +188,14 @@ export function createLocalProjectStore(storage: KeyValueStorage = backingStorag
       pruneExpired(storage, readIndex(storage), Date.now());
     },
 
-    async create(name: string, sceneJson: string): Promise<ProjectSummary> {
+    async create(name: string, sceneJson: string, kind: ProjectKind = DEFAULT_PROJECT_KIND): Promise<ProjectSummary> {
       const clean = cleanName(name);
       const version = checkScene(sceneJson);
       const now = Date.now();
       const meta: StoredMeta = {
         id: makeId(),
         name: clean,
+        kind: normalizeProjectKind(kind),
         createdAtMs: now,
         updatedAtMs: now,
         lastOpenedAtMs: now,
@@ -224,6 +231,25 @@ export function createLocalProjectStore(storage: KeyValueStorage = backingStorag
       return { summary: toSummary(next, true), sceneJson };
     },
 
+    async preview(id: string): Promise<ProjectOpenResult> {
+      const metas = readIndex(storage);
+      const meta = metas.find((entry) => entry.id === id);
+      if (!meta || meta.deletedAtMs !== undefined) throw missingProject(id);
+      const sceneJson = storage.getItem(docKey(id));
+      if (sceneJson === null) {
+        throw parseProjectError(
+          JSON.stringify({
+            code: 'missing-document',
+            messageKey: 'projects.errors.missing',
+            details: meta.name,
+            recoverable: false,
+          }),
+        );
+      }
+      checkScene(sceneJson);
+      return { summary: toSummary(meta, true), sceneJson };
+    },
+
     async rename(id: string, name: string): Promise<ProjectSummary> {
       const clean = cleanName(name);
       const metas = readIndex(storage);
@@ -257,6 +283,7 @@ export function createLocalProjectStore(storage: KeyValueStorage = backingStorag
       const meta: StoredMeta = {
         id: makeId(),
         name: `${source.name} copy`.slice(0, persistenceConfig.maxNameLength),
+        kind: normalizeProjectKind(source.kind),
         createdAtMs: now,
         updatedAtMs: now,
         lastOpenedAtMs: now,

@@ -1,4 +1,4 @@
-# crates — Nary Rust engine
+# crates — OpenNary Rust engine
 
 The Rust workspace is the single source of truth for the engine. Hosts
 (browser JS, Python, Tauri desktop) are thin adapters over the JSON-string
@@ -7,9 +7,9 @@ protocol — all engine rules live here.
 ## Crate responsibilities (one-way dependency)
 
 ```text
-nary  ─┐
-            ├─▶ nary-bindings ─▶ nary-io ─▶ nary-core ─▶ nary-geometry
-nary-python ┘        │              │           │            │
+opennary  ─┐
+            ├─▶ opennary-bindings ─▶ opennary-io ─▶ opennary-core ─▶ opennary-geometry
+opennary-python ┘        │              │           │            │
                      │              │           │            │
                JSON string      envelope +   domain      pure math
                batch protocol   clipboard   (no DOM,     (no deps)
@@ -17,31 +17,31 @@ nary-python ┘        │              │           │            │
                                            no Tauri)
 ```
 
-- **`nary-geometry`** — pure 2D math, zero deps: `point`, `rect` (`Bounds`),
+- **`opennary-geometry`** — pure 2D math, zero deps: `point`, `rect` (`Bounds`),
   `segment`, `rotation`, `hit`, `path`, `transform` (resize/rotate/handles),
   `spatial` (`SpatialGrid`), `snap`, `viewport`.
-- **`nary-core`** — persistent domain + editor session (see the module map in
-  `nary-core/src/lib.rs`): `domain`, `history`, `session`, `ops`, `view`,
+- **`opennary-core`** — persistent domain + editor session (see the module map in
+  `opennary-core/src/lib.rs`): `domain`, `history`, `session`, `ops`, `view`,
   `ext`. `Document` is the sole version/nonce authority; all mutation goes
   through `Command` (two-phase validate-then-store, one history entry per
   intent).
-- **`nary-io`** — interchange: `schema` (versioned DTOs, lenient-version /
+- **`opennary-io`** — interchange: `schema` (versioned DTOs, lenient-version /
   strict-data), `pipeline` (`export/import`, staged plan, PNG descriptors),
   `clipboard_codec` (versioned envelope + bare-array compatibility).
-- **`nary-bindings`** — the only stateful surface (`Engine`):
+- **`opennary-bindings`** — the only stateful surface (`Engine`):
   `protocol` (JSON-string `BatchOp`, `PROTOCOL_VERSION`), `engine` (dispatch,
   reuses the same command/io machinery), `render_dto`/`session` shapes,
   `wasm::JsEngine` (string-only), `tauri` (thin wrapper, no Tauri dep).
-- **`nary`** — npm distribution (`wasm-pack`), published as
-  `@fazelstudio/nary`. Thin, string-only.
-- **`nary-python`** — PyPI distribution (`maturin`/PyO3), published as
-  `nary`. Thin, dict-in/dict-out.
-- **`nary-sdk`** — Rust SDK facade for plugins and extensions.
-- **`nary-text`** — Text measurement and shaping helpers.
+- **`opennary`** — npm distribution (`wasm-pack`), published as
+  `@fazelstudio/opennary`. Thin, string-only.
+- **`opennary-python`** — PyPI distribution (`maturin`/PyO3), published as
+  `opennary`. Thin, dict-in/dict-out.
+- **`opennary-sdk`** — Rust SDK facade for extensions.
+- **`opennary-text`** — Text measurement and shaping helpers.
 
 ## Main rules
 
-- `nary-core` must not depend on any host binding, renderer, DOM/Canvas,
+- `opennary-core` must not depend on any host binding, renderer, DOM/Canvas,
   React, or Tauri (enforced by the `workspace_wiring` test).
 - All fallible ops → `EngineResult<T, EngineError>`; `panic!` is reserved for
   must-never-fail invariants and never crosses an FFI boundary.
@@ -68,27 +68,27 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-## Readiness for the future plugin SDK
+## Readiness for the future extension SDK
 
-The engine is deliberately architected for a future public plugin SDK (the
+The engine is deliberately architected for a future public extension SDK (the
 "VSCode extension" model) without shipping the SDK yet:
 
 - **Command-based core** — every user intent is one atomic `Command` executed
   via `HistoryManager`; the protocol batch is a command list. Hosts build
   tool buttons by calling commands (CodeMirror 6 style).
-- **Plugin = installable unit** — `Plugin` trait + `PluginMetadata` +
+- **Extension = installable unit** — `Extension` trait + `ExtensionMetadata` +
   lifecycle (register → activate → deactivate → dispose) + protocol-version
   compatibility check. Instance-scoped, no globals.
 - **Extension = registered capability** — `ShapeExtension`,
   `CommandExtension`, `SerializerExtension`, `ImporterExtension`,
-  `ExporterExtension`. Plugins declare capabilities through `PluginContext`,
+  `ExporterExtension`. Extensions declare capabilities through `ExtensionContext`,
   which is backed by the registry's persistent capability storage
   (`tools`/`shapes`/`commands`/`serializers`/`importers`/`exporters`).
-- **Dispatch seam** — `PluginRegistry::command_by_id` is the lookup point
+- **Dispatch seam** — `ExtensionRegistry::command_by_id` is the lookup point
   for the future `executeCommand` protocol op; the SDK will re-export the
-  registry surface so plugin authors never touch engine internals.
+  registry surface so extension authors never touch engine internals.
 
-When the SDK ships, it will be a thin facade crate (`nary-sdk`) over these
+When the SDK ships, it will be a thin facade crate (`opennary-sdk`) over these
 public surfaces — no engine changes required.
 
 ## Feature map (engine)
@@ -101,9 +101,9 @@ public surfaces — no engine changes required.
 | Editor session | `editor`, `editor_state`, `selection`, `gesture`, `text_session`, `interaction` | normalized input; pointer phase machine; drainable event queue |
 | Domain ops | `group`, `lock`, `zorder`, `style`, `frame`, `alignment`, `arrow_binding`, `constraints`, `auto_layout`, `clipboard`, `components`, `assets`, `path_edit` | follow-binding + constraint propagation inside the same transaction (no hidden `afterUpsert`) |
 | View | `hit_test`, `render_model`, `canvas_mode`, `theme` | render as deterministic DTO; frame-clip partition; instance resolve |
-| Extensions | `shape_registry`, `shape_extension`, `plugin`, `command_extension`, `serializer` | instance-scoped, no globals |
-| Interchange | `nary-io/*` | versioned schema, staged import, clipboard codec, PNG plan |
-| Host boundary | `nary-bindings/*` | JSON-string batch, per-op atomic, error envelopes |
+| Extensions | `shape_registry`, `shape_extension`, `extension`, `command_extension`, `serializer` | instance-scoped, no globals |
+| Interchange | `opennary-io/*` | versioned schema, staged import, clipboard codec, PNG plan |
+| Host boundary | `opennary-bindings/*` | JSON-string batch, per-op atomic, error envelopes |
 
 What stays host-side (by design, not a gap): Canvas2D rasterization, DOM
 (textarea overlay, OS clipboard, file download), pixel-exact text measuring

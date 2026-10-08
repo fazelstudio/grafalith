@@ -7,7 +7,8 @@ import type {
   SnapGuideDto,
 } from '../../hooks/useEngine';
 import { lastResultData, parseBatchResult } from '../../hooks/useEngine';
-import { executeCommand, type CommandContext, type ViewActions } from '../../registries';
+import { canExecuteCommand, executeCommand, type CommandContext, type ViewActions } from '../../registries';
+import { executeExtensionCommand, hasExtensionCommand, extensionMenuRowsFor } from '../../platform/extensions/extensionContributions';
 import { commandResultMessage } from './engineGaps';
 import { CanvasContextMenu } from './menus/menus';
 import { useToast } from '../../app/shell/ToastProvider';
@@ -15,8 +16,10 @@ import { drawRenderModel, NO_PREVIEW, type GhostPreview } from '../../render/dra
 import { screenToScene, sceneToScreen } from '../../render/coords';
 import { useI18n } from '../../app/i18n/resources';
 import { FitIcon, FitSelectionIcon, MinusIcon, PlusIcon } from '../../ui/icons';
+import { Tooltip } from '../../ui/primitives/tooltip';
 import { contentBounds, selectionBounds } from './navigator';
 import { fitViewport, zoomViewport } from './viewport';
+import { DESKTOP_TIMING } from '../../app/theme/tokens';
 
 interface CanvasProps {
   engine: Engine;
@@ -29,6 +32,8 @@ interface CanvasProps {
   commandContext: CommandContext;
   /** Host registers viewport actions so view commands reuse one implementation. */
   onViewActions?: (actions: ViewActions | null) => void;
+  /** Returns to selection after a completed shape gesture. */
+  onToolChange?: (tool: string) => void;
 }
 
 interface ContextMenuState {
@@ -38,8 +43,17 @@ interface ContextMenuState {
 }
 
 const DRAW_TOOLS = new Set(['rectangle', 'ellipse', 'line', 'arrow', 'frame', 'image']);
+const DRAW_CURSOR_TOOLS = new Set([...DRAW_TOOLS, 'freedraw']);
 
-export function Canvas({ engine, activeTool, onFrame, onRenderError, commandContext, onViewActions }: CanvasProps) {
+export function Canvas({
+  engine,
+  activeTool,
+  onFrame,
+  onRenderError,
+  commandContext,
+  onViewActions,
+  onToolChange,
+}: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -87,8 +101,6 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
   const errorReportedRef = useRef(false);
   const [zoomLabel, setZoomLabel] = useState('100%');
   const zoomLabelRef = useRef('100%');
-  const [hasSelection, setHasSelection] = useState(false);
-  const hasSelectionRef = useRef(false);
   // Visible text overlay, driven by engine `textEditing` (id changes only).
   const [editingId, setEditingId] = useState<string | null>(null);
   const editingIdRef = useRef<string | null>(null);
@@ -135,7 +147,10 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
   const maybeEmitFrame = useCallback((snapshot: FrameSnapshot, force: boolean) => {
     const key = frameKey(snapshot);
     const now = Date.now();
-    if (!force && (key === lastEmitRef.current.key || now - lastEmitRef.current.time < 350)) {
+    if (
+      !force &&
+      (key === lastEmitRef.current.key || now - lastEmitRef.current.time < DESKTOP_TIMING.frameMirrorThrottleMs)
+    ) {
       return;
     }
     lastEmitRef.current = { time: now, key };
@@ -147,11 +162,6 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
     if (label !== zoomLabelRef.current) {
       zoomLabelRef.current = label;
       setZoomLabel(label);
-    }
-    const selected = snapshot.session.selection.length > 0;
-    if (selected !== hasSelectionRef.current) {
-      hasSelectionRef.current = selected;
-      setHasSelection(selected);
     }
   }
 
@@ -213,6 +223,13 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
 
   useEffect(() => {
     sendBatch([{ op: 'setTool', tool: activeTool }]);
+    setCursor(
+      activeTool === 'select'
+        ? 'var(--cursor-select)'
+        : activeTool === 'text'
+          ? 'var(--cursor-text)'
+          : 'var(--cursor-draw)',
+    );
     // A tool switch cancels gestures/sessions engine-side; drop host ghosts.
     ghostRef.current = NO_PREVIEW;
     guidesRef.current = null;
@@ -401,6 +418,52 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
     return screenToScene(pos, viewport);
   }
 
+  function hasElementAt(scene: [number, number]): boolean {
+    const snapshot = frameRef.current;
+    if (!snapshot) return false;
+    const entries = [
+      ...snapshot.model.base,
+      ...snapshot.model.frames.flatMap((pass) => [pass.frame, ...pass.children]),
+    ];
+    return entries.some(
+      (entry) =>
+        scene[0] >= entry.bounds.minX &&
+        scene[0] <= entry.bounds.maxX &&
+        scene[1] >= entry.bounds.minY &&
+        scene[1] <= entry.bounds.maxY,
+    );
+  }
+
+  function setCursor(cursor: string): void {
+    const canvas = canvasRef.current;
+    if (canvas && canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
+  }
+
+  function updateCursor(pos?: [number, number], button?: number): void {
+    const phase = frameRef.current?.session.pointerPhase;
+    if (activePointerRef.current !== null || phase?.kind === 'dragging' || button === 1) {
+      setCursor('var(--cursor-grabbing)');
+      return;
+    }
+    if (button === 1) {
+      setCursor('var(--cursor-grab)');
+      return;
+    }
+    if (activeTool === 'text') {
+      setCursor('var(--cursor-text)');
+      return;
+    }
+    if (DRAW_CURSOR_TOOLS.has(activeTool)) {
+      setCursor('var(--cursor-draw)');
+      return;
+    }
+    if (pos && hasElementAt(sceneOf(pos))) {
+      setCursor('var(--cursor-pointer)');
+      return;
+    }
+    setCursor('var(--cursor-select)');
+  }
+
   // -- pointer ---------------------------------------------------------------
 
   const handlePointerDown = useCallback(async (e: React.PointerEvent) => {
@@ -412,6 +475,7 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
     lastClickTimeRef.current = now;
 
     const pos = getPos(e);
+    updateCursor(pos, e.button);
     cursorRef.current = pos;
     const button = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
 
@@ -431,6 +495,9 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
     } else if (outcome?.committedText) {
       setEditingId(null);
     }
+    if (activeTool === 'select' && button === 'left' && outcome?.hit) {
+      setCursor('var(--cursor-grabbing)');
+    }
 
     // Freedraw accumulates its own display trail from the press origin.
     if (toolRef.current === 'freedraw' && button === 'left') {
@@ -448,6 +515,7 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
 
   const handlePointerMove = useCallback(async (e: React.PointerEvent) => {
     const pos = getPos(e);
+    updateCursor(pos);
     cursorRef.current = pos;
     const scene = sceneOf(pos);
     const modifiers = getModifiers(e);
@@ -569,6 +637,9 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
     const session = batch
       ? (lastResultData(batch, 'sessionState') as SessionStateDto | undefined)
       : undefined;
+    const outcome = batch
+      ? (lastResultData(batch, 'pointerUp') as { kind?: string; id?: string } | undefined)
+      : undefined;
     if (session && frameRef.current) {
       frameRef.current = { ...frameRef.current, session };
       // Commits change selection and history: push one snapshot now so
@@ -578,12 +649,17 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
     }
     clearTransient();
     activePointerRef.current = null;
-  }, [sendBatch, clearTransient, maybeEmitFrame]);
+    updateCursor(pos);
+    if (button === 'left' && outcome?.kind === 'shapeCreated' && outcome.id) {
+      onToolChange?.('select');
+    }
+  }, [sendBatch, clearTransient, maybeEmitFrame, onToolChange]);
 
   const handlePointerCancel = useCallback(async () => {
     await sendBatch([{ op: 'pointerCancel' }]);
     clearTransient();
     activePointerRef.current = null;
+    updateCursor();
   }, [sendBatch, clearTransient]);
 
   const handleBlur = useCallback(() => {
@@ -733,6 +809,9 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
       ? (lastResultData(batch, 'contextMenu') as { intents?: string[] } | undefined)
       : undefined;
     const intents = data?.intents ?? [];
+    for (const row of extensionMenuRowsFor('canvas.context')) {
+      if (!intents.includes(row.commandId)) intents.push(row.commandId);
+    }
     if (intents.length > 0) {
       setMenu({ x: e.clientX, y: e.clientY, intents });
     }
@@ -740,8 +819,21 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
 
   const runMenuAction = useCallback(async (intent: string) => {
     setMenu(null);
+    if (hasExtensionCommand(intent)) {
+      const outcome = await executeExtensionCommand(intent);
+      if (!outcome.ok && outcome.reason) notify(outcome.reason);
+      return;
+    }
     const result = await executeCommand(intent, commandContextRef.current);
     const message = commandResultMessage(intent, result, tRef.current);
+    if (message) notify(message);
+  }, [notify]);
+
+  // Viewcontrols dispatch through the shared view commands so enablement,
+  // toasts, and shortcuts stay identical to menubar, palette, and keys.
+  const runViewCommand = useCallback(async (id: string) => {
+    const result = await executeCommand(id, commandContextRef.current);
+    const message = commandResultMessage(id, result, tRef.current);
     if (message) notify(message);
   }, [notify]);
 
@@ -754,7 +846,18 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
     >
       <canvas
         ref={canvasRef}
-        style={{ position: 'absolute', top: 0, left: 0, cursor: 'crosshair', touchAction: 'none' }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          cursor:
+            activeTool === 'select'
+              ? 'var(--cursor-select)'
+              : activeTool === 'text'
+                ? 'var(--cursor-text)'
+                : 'var(--cursor-draw)',
+          touchAction: 'none',
+        }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -800,52 +903,61 @@ export function Canvas({ engine, activeTool, onFrame, onRenderError, commandCont
         />
       )}
       <div className="editor-viewcontrols" role="group" aria-label={t('editor.title')}>
-        <button
-          type="button"
-          className="editor-viewcontrols__button"
-          onClick={() => void zoomStep(1 / 1.25)}
-          title={t('editor.view.zoomOut')}
-          aria-label={t('editor.view.zoomOut')}
-        >
-          <MinusIcon size={14} />
-        </button>
-        <button
-          type="button"
-          className="editor-viewcontrols__label"
-          onClick={() => void resetZoom()}
-          title={t('editor.view.resetZoom')}
-          aria-label={t('editor.view.resetZoom')}
-        >
-          {zoomLabel}
-        </button>
-        <button
-          type="button"
-          className="editor-viewcontrols__button"
-          onClick={() => void zoomStep(1.25)}
-          title={t('editor.view.zoomIn')}
-          aria-label={t('editor.view.zoomIn')}
-        >
-          <PlusIcon size={14} />
-        </button>
-        <button
-          type="button"
-          className="editor-viewcontrols__button"
-          onClick={() => void fitContent()}
-          title={t('editor.view.fitContent')}
-          aria-label={t('editor.view.fitContent')}
-        >
-          <FitIcon size={14} />
-        </button>
-        <button
-          type="button"
-          className="editor-viewcontrols__button"
-          onClick={() => void fitSelection()}
-          disabled={!hasSelection}
-          title={t('editor.view.fitSelection')}
-          aria-label={t('editor.view.fitSelection')}
-        >
-          <FitSelectionIcon size={14} />
-        </button>
+        <Tooltip content={t('editor.view.zoomOut')} placement="top">
+          <button
+            type="button"
+            className="editor-viewcontrols__button"
+            onClick={() => void runViewCommand('zoomOut')}
+            disabled={!canExecuteCommand('zoomOut', commandContext).executable}
+            aria-label={t('editor.view.zoomOut')}
+          >
+            <MinusIcon size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip content={t('editor.view.resetZoom')} placement="top">
+          <button
+            type="button"
+            className="editor-viewcontrols__label"
+            onClick={() => void runViewCommand('resetZoom')}
+            disabled={!canExecuteCommand('resetZoom', commandContext).executable}
+            aria-label={t('editor.view.resetZoom')}
+          >
+            {zoomLabel}
+          </button>
+        </Tooltip>
+        <Tooltip content={t('editor.view.zoomIn')} placement="top">
+          <button
+            type="button"
+            className="editor-viewcontrols__button"
+            onClick={() => void runViewCommand('zoomIn')}
+            disabled={!canExecuteCommand('zoomIn', commandContext).executable}
+            aria-label={t('editor.view.zoomIn')}
+          >
+            <PlusIcon size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip content={t('editor.view.fitContent')} placement="top">
+          <button
+            type="button"
+            className="editor-viewcontrols__button"
+            onClick={() => void runViewCommand('fitContent')}
+            disabled={!canExecuteCommand('fitContent', commandContext).executable}
+            aria-label={t('editor.view.fitContent')}
+          >
+            <FitIcon size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip content={t('editor.view.fitSelection')} placement="top">
+          <button
+            type="button"
+            className="editor-viewcontrols__button"
+            onClick={() => void runViewCommand('fitSelection')}
+            disabled={!canExecuteCommand('fitSelection', commandContext).executable}
+            aria-label={t('editor.view.fitSelection')}
+          >
+            <FitSelectionIcon size={14} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

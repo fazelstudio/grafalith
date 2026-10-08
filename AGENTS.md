@@ -6,12 +6,12 @@ If a task instruction contradicts this document or an established project constr
 
 ## 1. Project
 
-Nary is a lightweight and efficient canvas drawing engine similar to Excalidraw and TLDraw.
+OpenNary is a lightweight and efficient canvas drawing engine similar to Excalidraw and TLDraw.
 
 The engine is a Rust workspace under `crates/*` and is distributed through:
 
-* npm as `@fazelstudio/nary` using `wasm-pack`
-* PyPI as `nary` using `maturin`
+* npm as `@fazelstudio/opennary` using `wasm-pack`
+* PyPI as `opennary` using `maturin`
 
 The engine has zero framework dependencies. Engine crates must not import React, Vue, or other UI frameworks, and must not access the DOM or Canvas directly.
 
@@ -65,9 +65,9 @@ The following project constraints must be preserved.
 * Each user operation must produce one undoable, atomic history entry.
 * Element mutation follows the established validate-then-store flow.
 * Delete is a soft delete using `isDeleted = true`; elements are not removed from the scene map.
-* `nary-core` must not depend on host bindings, renderers, DOM/Canvas APIs, React, or Tauri.
-* `nary-bindings` is the only crate that owns the JSON-string protocol.
-* `nary` and `nary-python` are thin wrappers around `nary-bindings`.
+* `opennary-core` must not depend on host bindings, renderers, DOM/Canvas APIs, React, or Tauri.
+* `opennary-bindings` is the only crate that owns the JSON-string protocol.
+* `opennary` and `opennary-python` are thin wrappers around `opennary-bindings`.
 * Host adapters such as Tauri commands, browser JavaScript, and Python integration remain outside the engine crates.
 
 Do not change the element interfaces defined in `docs/ARCHITECTURE.md` without explicit user approval.
@@ -76,31 +76,31 @@ Do not change the element interfaces defined in `docs/ARCHITECTURE.md` without e
 
 ```text
 crates/
-  nary-geometry/  # Pure 2D math: point, bounds, transform, hit, path, spatial, snap, viewport
-  nary-core/      # Document domain and editor session
-  nary-io/        # Interchange: versioned JSON schema, import pipeline, clipboard codec, PNG descriptors
-  nary-bindings/  # Host boundary: JSON-string protocol, Engine facade, render/session DTOs
-  nary/           # npm distribution through wasm-pack
-  nary-python/    # PyPI distribution through maturin/PyO3
-  nary-sdk/       # Rust SDK facade for plugins and extensions
-  nary-text/      # Text measurement and shaping helpers
+  opennary-geometry/  # Pure 2D math: point, bounds, transform, hit, path, spatial, snap, viewport
+  opennary-core/      # Document domain and editor session
+  opennary-io/        # Interchange: versioned JSON schema, import pipeline, clipboard codec, PNG descriptors
+  opennary-bindings/  # Host boundary: JSON-string protocol, Engine facade, render/session DTOs
+  opennary/           # npm distribution through wasm-pack
+  opennary-python/    # PyPI distribution through maturin/PyO3
+  opennary-sdk/       # Rust SDK facade for extensions
+  opennary-text/      # Text measurement and shaping helpers
 
 apps/
   desktop/        # Tauri demo application and reference host
 
 packages/
-  nary-sdk/       # TypeScript SDK: typed client, extension registry, overlays
+  opennary-sdk/       # TypeScript SDK: typed client, extension registry, overlays
 
 examples/
   custom-button/  # One toolbar scenario on three hosts (Rust/JS/Python)
-  ext-sticker/    # Standalone plugin example (own workspace)
+  ext-sticker/    # Standalone extension example (own workspace)
 
 scripts/
   gen_command_bindings.py  # Single source for generated protocol bindings
 
 generated/
-  nary-commands.d.ts  # Generated TS bindings (checked by CI)
-  nary.pyi            # Generated Python stubs (checked by CI)
+  opennary-commands.d.ts  # Generated TS bindings (checked by CI)
+  opennary.pyi            # Generated Python stubs (checked by CI)
 
 docs/
   PRD.md              # Product scope and explicit in/out boundaries
@@ -113,15 +113,15 @@ docs/
 Dependency direction:
 
 ```text
-nary / nary-python
+opennary / opennary-python
         ↓
-nary-bindings
+opennary-bindings
         ↓
-nary-io
+opennary-io
         ↓
-nary-core
+opennary-core
         ↓
-nary-geometry
+opennary-geometry
 ```
 
 The `workspace_wiring` test enforces this dependency direction.

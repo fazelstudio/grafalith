@@ -1,11 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { buildBlankSceneEnvelope } from './documentEnvelope';
 import { createLocalProjectStore, type KeyValueStorage } from './localAdapter';
-import {
-  clearRecoverySnapshot,
-  hasRecoverySnapshot,
-  saveRecoverySnapshot,
-} from './recovery';
 
 function trackingStorage(): { storage: KeyValueStorage; keys: () => string[] } {
   const data = new Map<string, string>();
@@ -20,26 +15,6 @@ function trackingStorage(): { storage: KeyValueStorage; keys: () => string[] } {
       },
     },
     keys: () => [...data.keys()].sort(),
-  };
-}
-
-function installMemoryWindow(data: Map<string, string>): () => void {
-  const globals = globalThis as Record<string, unknown>;
-  const previous = globals['window'];
-  globals['window'] = {
-    localStorage: {
-      getItem: (key: string) => data.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        data.set(key, value);
-      },
-      removeItem: (key: string) => {
-        data.delete(key);
-      },
-    },
-  };
-  return () => {
-    if (previous === undefined) delete globals['window'];
-    else globals['window'] = previous;
   };
 }
 
@@ -73,30 +48,5 @@ describe('repeated project open/close', () => {
     const residue = keys().filter((key) => key !== 'opennary:projects:index:v1');
     expect(residue).toEqual(baseline.filter((key) => key !== 'opennary:projects:index:v1'));
     expect(keys().filter((key) => key.startsWith('opennary:projects:doc:'))).toEqual([]);
-  });
-
-  test('recovery snapshots stage and clear without leaking keys', () => {
-    const data = new Map<string, string>();
-    const restore = installMemoryWindow(data);
-    try {
-      expect(hasRecoverySnapshot('p-1')).toBe(false);
-      for (let i = 0; i < 10; i++) {
-        saveRecoverySnapshot({
-          projectId: `p-${i}`,
-          sceneJson: buildBlankSceneEnvelope(),
-          savedAtMs: Date.now(),
-          schemaVersion: 1,
-          reason: 'dirty',
-        });
-      }
-      expect(data.size).toBe(10);
-      for (let i = 0; i < 10; i++) {
-        clearRecoverySnapshot(`p-${i}`);
-      }
-      expect(data.size).toBe(0);
-      expect(hasRecoverySnapshot('p-1')).toBe(false);
-    } finally {
-      restore();
-    }
   });
 });

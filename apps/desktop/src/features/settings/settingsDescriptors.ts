@@ -1,26 +1,33 @@
 import { createRegistry, type Descriptor } from '../../registries';
 import { DEFAULT_LOCALE, isLocale } from '../../app/i18n/locales';
 import { DEFAULT_THEME_MODE, isThemeMode } from '../../app/theme/tokens';
+import {
+  AUTOSAVE_DELAY_MS,
+  DEFAULT_HOME_VIEW_MODE,
+  isHomeViewMode,
+} from '../../platform/preferences/editorWorkspace';
 import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
 
 /** Settings section; tab order follows `SETTING_SECTIONS`, not this union. */
 export type SettingSection = 'general' | 'appearance' | 'editor' | 'shortcuts';
 
 /** Control rendered for one setting; `shortcutList` is read-only. */
-export type SettingControl = 'theme' | 'locale' | 'switch' | 'shortcutList';
+export type SettingControl = 'theme' | 'locale' | 'homeView' | 'switch' | 'number' | 'shortcutList';
 
 /** Platform predicate: settings render only where they apply. */
 export type SettingPlatform = 'all' | 'tauri' | 'browser';
 
 /** Persisted value shape; every control maps to one of these. */
-export type SettingValue = string | boolean;
+export type SettingValue = string | boolean | number;
 
 /**
  * Descriptor for one user setting.
  *
  * Only settings backed by real implemented behavior are registered here:
- * locale and theme (independent persisted preferences), editor workspace
- * flags (canvas hint, viewport restore), and the read-only shortcut list.
+ * locale and theme (independent persisted preferences), project layout
+ * (the persisted home view mode), editor workspace flags (canvas hint,
+ * viewport restore, autosave switch and debounce), and the read-only
+ * shortcut list.
  * Startup behavior and storage preferences are intentionally absent —
  * neither is implemented, and fake settings are worse than missing ones.
  */
@@ -37,12 +44,20 @@ export interface SettingDefinition extends Descriptor {
   platform?: SettingPlatform;
   /** Value guard; absent means any value of the control shape. */
   validate?: (value: unknown) => boolean;
+  /** Minimum for `number` controls; absent means unbounded. */
+  min?: number;
+  /** Maximum for `number` controls; absent means unbounded. */
+  max?: number;
+  /** Step for `number` controls; absent means whole numbers. */
+  step?: number;
 }
 
 /** Descriptor for one settings tab; tab order is registration order. */
 export interface SettingSectionDefinition extends Descriptor {
   /** Hash path for the section, such as `#/settings/editor`. */
   path: string;
+  /** Shared icon identifier resolved by the settings sidebar. */
+  icon: string;
 }
 
 const SECTIONS: readonly SettingSectionDefinition[] = [
@@ -51,29 +66,36 @@ const SECTIONS: readonly SettingSectionDefinition[] = [
     labelKey: 'settings.general.title',
     defaultLabel: 'General',
     path: '#/settings/general',
+    icon: 'general',
   },
   {
     id: 'appearance',
     labelKey: 'settings.appearance.title',
     defaultLabel: 'Appearance',
     path: '#/settings/appearance',
+    icon: 'appearance',
   },
   {
     id: 'editor',
     labelKey: 'settings.editor.title',
     defaultLabel: 'Editor',
     path: '#/settings/editor',
+    icon: 'editor',
   },
   {
     id: 'shortcuts',
     labelKey: 'settings.shortcuts.title',
     defaultLabel: 'Shortcuts',
     path: '#/settings/shortcuts',
+    icon: 'shortcuts',
   },
 ];
 
 /** Validated lookup over settings tabs in display order. */
-export const settingSectionRegistry = createRegistry('setting-section', SECTIONS);
+export const settingSectionRegistry = createRegistry('setting-section', SECTIONS, {
+  validateItem: (section) =>
+    section.icon === '' ? `empty icon for id "${section.id}"` : undefined,
+});
 
 const SETTINGS: readonly SettingDefinition[] = [
   {
@@ -101,6 +123,18 @@ const SETTINGS: readonly SettingDefinition[] = [
     validate: isThemeMode,
   },
   {
+    id: 'homeView',
+    section: 'appearance',
+    labelKey: 'settings.appearance.layoutLabel',
+    defaultLabel: 'Project layout',
+    descriptionKey: 'settings.appearance.layoutDescription',
+    defaultDescription: 'Grid or list arrangement for projects on the home page.',
+    control: 'homeView',
+    defaultValue: DEFAULT_HOME_VIEW_MODE,
+    persistenceKey: 'opennary:editor-workspace',
+    validate: isHomeViewMode,
+  },
+  {
     id: 'canvasHint',
     section: 'editor',
     labelKey: 'settings.editor.canvasHintLabel',
@@ -123,6 +157,33 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultValue: true,
     persistenceKey: 'opennary:editor-workspace',
     validate: (value) => typeof value === 'boolean',
+  },
+  {
+    id: 'autosaveEnabled',
+    section: 'editor',
+    labelKey: 'settings.editor.autosaveLabel',
+    defaultLabel: 'Autosave',
+    descriptionKey: 'settings.editor.autosaveDescription',
+    defaultDescription: 'Save the open project automatically after each change.',
+    control: 'switch',
+    defaultValue: true,
+    persistenceKey: 'opennary:editor-workspace',
+    validate: (value) => typeof value === 'boolean',
+  },
+  {
+    id: 'autosaveDelayMs',
+    section: 'editor',
+    labelKey: 'settings.editor.autosaveDelayLabel',
+    defaultLabel: 'Autosave delay',
+    descriptionKey: 'settings.editor.autosaveDelayDescription',
+    defaultDescription: 'Wait after the last change before autosaving, in milliseconds.',
+    control: 'number',
+    defaultValue: AUTOSAVE_DELAY_MS.default,
+    persistenceKey: 'opennary:editor-workspace',
+    min: AUTOSAVE_DELAY_MS.min,
+    max: AUTOSAVE_DELAY_MS.max,
+    step: 100,
+    validate: (value) => typeof value === 'number' && Number.isFinite(value),
   },
   {
     id: 'shortcutList',

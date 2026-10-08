@@ -1,11 +1,11 @@
 [package]
-name = "nary-desktop"
+name = "opennary-desktop"
 version = "0.1.0"
-description = "Nary desktop app — Tauri host for the Rust engine"
+description = "OpenNary desktop app — Tauri host for the Rust engine"
 edition = "2021"
 
 [lib]
-name = "nary_desktop_lib"
+name = "opennary_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -16,8 +16,8 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-snap-layout = "1"
-nary-bindings = { path = "../../../crates/nary-bindings" }
-nary-core = { path = "../../../crates/nary-core" }
+opennary-bindings = { path = "../../../crates/opennary-bindings" }
+opennary-core = { path = "../../../crates/opennary-core" }
 
 [lints]
 workspace = true

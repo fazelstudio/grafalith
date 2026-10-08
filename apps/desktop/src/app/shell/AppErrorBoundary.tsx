@@ -31,23 +31,12 @@ export class AppErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div
-        role="alert"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 'var(--space-sm)',
-          padding: 'var(--space-xxl)',
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ font: 'var(--font-section)' }}>{this.props.title}</div>
-        <div style={{ font: 'var(--font-body-small)', color: 'var(--fg-secondary)', maxWidth: 360 }}>
+      <div role="alert" className="ui-error-state">
+        <div className="ui-error-state__title">{this.props.title}</div>
+        <div className="ui-error-state__description">
           {this.props.description}
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+        <div className="ui-error-state__actions">
           <Button variant="secondary" onClick={() => this.setState({ failed: false })}>
             {this.props.retryLabel}
           </Button>

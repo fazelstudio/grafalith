@@ -2,17 +2,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../app/i18n/resources';
 import { notifyBootDataReady } from '../../app/boot';
 import { useToast } from '../../app/shell/ToastProvider';
+import { executeAppCommand, type AppCommandContext } from '../../registries/appCommands';
 import { getProjectStore } from '../../platform/projects/projectService';
-import { parseProjectError, type ProjectError, type ProjectSummary } from '../../platform/projects/types';
+import {
+  parseProjectError,
+  type ProjectError,
+  type ProjectKind,
+  type ProjectSummary,
+} from '../../platform/projects/types';
 import { filterProjects } from '../projects/search';
 import { projectTemplateRegistry } from '../projects/templateRegistry';
-import { ChevronDownIcon, EditorIcon, PlusIcon } from '../../ui/icons';
+import { projectKindRegistry, templateForKind } from '../projects/projectKinds';
+import { ChevronDownIcon, EditorIcon, GridViewIcon, ListViewIcon, PlusIcon } from '../../ui/icons';
 import { Button, EmptyState, LoadingState, SearchInput } from '../../ui/primitives/controls';
+import { Tooltip } from '../../ui/primitives/tooltip';
 import { deriveHomeListState, toProjectOpenError, type ProjectOpenError } from './homeState';
 import { ProjectCard } from './ProjectCard';
 import { CreateProjectDialog, DeleteProjectDialog, RenameProjectDialog } from './ProjectDialogs';
 import { ProjectMenu } from './ProjectMenu';
 import './home.css';
+import { preferenceService } from '../../platform/preferences/preferenceService';
+import type { HomeViewMode } from '../../platform/preferences/editorWorkspace';
 
 interface HomeScreenProps {
   onOpenProject: (id: string) => void;
@@ -49,6 +59,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openError, setOpenError] = useState<ProjectOpenError | null>(null);
+  const [viewMode, setViewMode] = useState<HomeViewMode>(() => preferenceService.getHomeViewMode());
   const searchRef = useRef<HTMLInputElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
 
@@ -106,18 +117,12 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   }
 
   const openProject = useCallback(
-    async (project: ProjectSummary) => {
+    (project: ProjectSummary) => {
       if (openingId !== null) return;
       setOpeningId(project.id);
       setOpenError(null);
-      try {
-        await getProjectStore().open(project.id);
-        onOpenProject(project.id);
-      } catch (raw) {
-        setOpenError(toProjectOpenError(parseProjectError(raw), project.name));
-      } finally {
-        setOpeningId(null);
-      }
+      setOpeningId(null);
+      onOpenProject(project.id);
     },
     [openingId, onOpenProject],
   );
@@ -128,7 +133,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     setDialogError(null);
     try {
       const template = projectTemplateRegistry.get(templateId) ?? projectTemplateRegistry.all()[0];
-      const created = await getProjectStore().create(name, template.buildScene());
+      const created = await getProjectStore().create(name, template.buildScene(), template.kind);
       notify(t('projects.notifications.created', { name: created.name }));
       setDialog(null);
       onOpenProject(created.id);
@@ -142,9 +147,9 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     }
   }
 
-  function createDesign(): void {
+  function createOfKind(kind: ProjectKind): void {
     setCreateMenuOpen(false);
-    openDialog({ kind: 'create', templateId: 'blank' });
+    openDialog({ kind: 'create', templateId: templateForKind(kind).id });
   }
 
   async function renameProject(id: string, name: string): Promise<void> {
@@ -162,15 +167,54 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     }
   }
 
+  // Non-dialog project mutations run through the shared host commands so
+  // the card menu, palette, and future extensions share one execution path.
+  // Dialog-backed flows (create, rename, delete) keep typed field errors
+  // and stay direct.
+  const homeAppCtx: AppCommandContext = useMemo(
+    () => ({
+      notify,
+      openProject: (id: string) => {
+        const summary = projects.find((project) => project.id === id);
+        if (summary) openProject(summary);
+      },
+      refreshHome: () => refresh(false),
+      toggleFavorite: async (id: string) => {
+        const current = projects.find((project) => project.id === id);
+        if (current?.favoriteAtMs !== undefined) {
+          await getProjectStore().unfavorite(id);
+          notify(t('projects.notifications.unfavorited', { name: current.name }));
+        } else {
+          await getProjectStore().favorite(id);
+          const name = current?.name ?? id;
+          notify(t('projects.notifications.favorited', { name }));
+        }
+      },
+    }),
+    [notify, onOpenProject, refresh, projects, t],
+  );
+
+  const runHomeCommand = useCallback(
+    async (id: string, patch?: Partial<AppCommandContext>, onError?: (raw: unknown) => void) => {
+      const result = await executeAppCommand(id, { ...homeAppCtx, ...patch });
+      if (result.status !== 'ok' && onError) onError(result);
+    },
+    [homeAppCtx],
+  );
+
   async function duplicateProject(project: ProjectSummary): Promise<void> {
     setMenu(null);
-    try {
-      const copy = await getProjectStore().duplicate(project.id);
-      notify(t('projects.notifications.duplicated', { name: copy.name }));
-      await refresh(false);
-    } catch (raw) {
-      setOpenError(toProjectOpenError(parseProjectError(raw), project.name));
-    }
+    await runHomeCommand(
+      'project.duplicate',
+      {
+        targetProjectId: project.id,
+        duplicateProject: async () => {
+          const copy = await getProjectStore().duplicate(project.id);
+          notify(t('projects.notifications.duplicated', { name: copy.name }));
+        },
+      },
+      (result) => setOpenError(toProjectOpenError(parseProjectError(result), project.name)),
+    );
   }
 
   async function deleteProject(project: ProjectSummary): Promise<void> {
@@ -191,29 +235,24 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
 
   async function favoriteProject(project: ProjectSummary): Promise<void> {
     setMenu(null);
-    try {
-      await getProjectStore().favorite(project.id);
-      notify(t('projects.notifications.favorited', { name: project.name }));
-      await refresh(false);
-    } catch (raw) {
-      setOpenError(toProjectOpenError(parseProjectError(raw), project.name));
-    }
+    await runHomeCommand(
+      'project.toggleFavorite',
+      { targetProjectId: project.id },
+      (result) => setOpenError(toProjectOpenError(parseProjectError(result), project.name)),
+    );
   }
 
   async function unfavoriteProject(project: ProjectSummary): Promise<void> {
     setMenu(null);
-    try {
-      await getProjectStore().unfavorite(project.id);
-      notify(t('projects.notifications.unfavorited', { name: project.name }));
-      await refresh(false);
-    } catch (raw) {
-      setOpenError(toProjectOpenError(parseProjectError(raw), project.name));
-    }
+    await runHomeCommand(
+      'project.toggleFavorite',
+      { targetProjectId: project.id },
+      (result) => setOpenError(toProjectOpenError(parseProjectError(result), project.name)),
+    );
   }
 
   function openDialog(next: DialogState): void {
-    setDialog(next);
-    setDialogError(null);
+    setDialog(next);    setDialogError(null);
     setDialogPending(false);
   }
 
@@ -260,7 +299,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
       const selected = visible.find((project) => project.id === selectedId);
       if (selected && target.tagName !== 'BUTTON') {
         event.preventDefault();
-        void openProject(selected);
+        openProject(selected);
       }
     } else if (event.key === 'F2') {
       const selected = visible.find((project) => project.id === selectedId);
@@ -272,6 +311,10 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   }
 
   const busy = openingId !== null;
+  function changeViewMode(mode: HomeViewMode): void {
+    setViewMode(mode);
+    preferenceService.setHomeViewMode(mode);
+  }
   const showRecentSection =
     loadState.kind === 'loading' ||
     loadState.kind === 'failed' ||
@@ -288,6 +331,30 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
         </div>
         <div className="home__header-actions">
           <div className="home__toolbar">
+            <div className="home__view-toggle" role="group" aria-label={t('home.view.label')}>
+              <Tooltip content={t('home.view.grid')} placement="bottom">
+                <button
+                  type="button"
+                  className={`home__view-button${viewMode === 'grid' ? ' home__view-button--active' : ''}`}
+                  aria-pressed={viewMode === 'grid'}
+                  aria-label={t('home.view.grid')}
+                  onClick={() => changeViewMode('grid')}
+                >
+                  <GridViewIcon size={15} />
+                </button>
+              </Tooltip>
+              <Tooltip content={t('home.view.list')} placement="bottom">
+                <button
+                  type="button"
+                  className={`home__view-button${viewMode === 'list' ? ' home__view-button--active' : ''}`}
+                  aria-pressed={viewMode === 'list'}
+                  aria-label={t('home.view.list')}
+                  onClick={() => changeViewMode('list')}
+                >
+                  <ListViewIcon size={15} />
+                </button>
+              </Tooltip>
+            </div>
             <SearchInput
               label={t('home.search.label')}
               placeholder={t('home.search.placeholder')}
@@ -314,6 +381,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
               aria-haspopup="menu"
               aria-expanded={createMenuOpen}
               aria-controls="home-create-menu"
+              className={createMenuOpen ? 'home__create-button--open' : undefined}
             >
               <PlusIcon size={15} />
               {t('home.actions.create')}
@@ -321,35 +389,46 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
             </Button>
             {createMenuOpen ? (
               <div id="home-create-menu" className="home__create-menu" role="menu">
-                <button
-                  type="button"
-                  className="home__create-menu-item"
-                  role="menuitem"
-                  onClick={createDesign}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setCreateMenuOpen(false);
-                      createMenuRef.current
-                        ?.querySelector<HTMLElement>('[aria-haspopup="menu"]')
-                        ?.focus();
-                    } else if (
-                      event.key === 'ArrowDown' ||
-                      event.key === 'ArrowUp' ||
-                      event.key === 'Home' ||
-                      event.key === 'End'
-                    ) {
-                      event.preventDefault();
-                      createMenuRef.current
-                        ?.querySelector<HTMLElement>('[role="menuitem"]')
-                        ?.focus();
-                    }
-                  }}
-                >
-                  <EditorIcon size={15} />
-                  <span className="home__create-menu-title">{t('home.actions.design')}</span>
-                </button>
+                {projectKindRegistry.all().map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="home__create-menu-item"
+                    role="menuitem"
+                    onClick={() => createOfKind(entry.id as ProjectKind)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setCreateMenuOpen(false);
+                        createMenuRef.current
+                          ?.querySelector<HTMLElement>('[aria-haspopup="menu"]')
+                          ?.focus();
+                      } else if (
+                        event.key === 'ArrowDown' ||
+                        event.key === 'ArrowUp' ||
+                        event.key === 'Home' ||
+                        event.key === 'End'
+                      ) {
+                        event.preventDefault();
+                        const items = Array.from(
+                          createMenuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+                        );
+                        const index = items.indexOf(event.currentTarget as HTMLElement);
+                        const next =
+                          event.key === 'ArrowDown' || event.key === 'End'
+                            ? items[(index + 1) % items.length]
+                            : items[(index - 1 + items.length) % items.length];
+                        if (event.key === 'Home') items[0]?.focus();
+                        else if (event.key === 'End') items[items.length - 1]?.focus();
+                        else next?.focus();
+                      }
+                    }}
+                  >
+                    <EditorIcon size={15} />
+                    <span className="home__create-menu-title">{t(entry.labelKey)}</span>
+                  </button>
+                ))}
               </div>
             ) : null}
           </div>
@@ -414,14 +493,14 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
             </p>
           ) : null}
           {visible.length > 0 ? (
-            <div className="home__grid">
+            <div className={viewMode === 'list' ? 'home__list' : 'home__grid'}>
               {visible.map((project) => (
                 <ProjectCard
                   key={project.id}
                   project={project}
                   selected={project.id === selectedId}
                   busy={busy}
-                  onOpen={() => void openProject(project)}
+                  onOpen={() => openProject(project)}
                   onMenu={(entry, x, y) => {
                     setSelectedId(entry.id);
                     setMenu({ project: entry, x, y });
@@ -442,7 +521,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
           onClose={() => setMenu(null)}
           onOpen={() => {
             setMenu(null);
-            void openProject(menu.project);
+            void runHomeCommand('project.open', { targetProjectId: menu.project.id });
           }}
           onRename={() => {
             setMenu(null);

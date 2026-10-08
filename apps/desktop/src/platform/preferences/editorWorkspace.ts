@@ -1,26 +1,64 @@
 import { panelRegistry } from '../../registries/panels';
 import { toolRegistry } from '../../registries/tools';
 import type { ViewportState } from '../../render/coords';
+import { persistenceConfig } from '../projects/persistenceConfig';
 
 const WORKSPACE_KEY = 'opennary:editor-workspace';
+
+/** User-level editor dock sizing policy. */
+export const EDITOR_DOCK_WIDTHS = {
+  default: 264,
+  min: 180,
+  max: 420,
+} as const;
+
+/** Autosave debounce bounds shared with the persistence layer. */
+export const AUTOSAVE_DELAY_MS = {
+  default: persistenceConfig.autosaveDelayMs,
+  min: persistenceConfig.autosaveDelayMinMs,
+  max: persistenceConfig.autosaveDelayMaxMs,
+} as const;
+
+export type HomeViewMode = 'grid' | 'list';
+
+/** Project list arrangements offered on the home page. */
+export const HOME_VIEW_MODES: readonly HomeViewMode[] = ['grid', 'list'];
+export const DEFAULT_HOME_VIEW_MODE: HomeViewMode = 'grid';
+
+/** Type guard for persisted project list arrangements. */
+export function isHomeViewMode(value: unknown): value is HomeViewMode {
+  return value === 'grid' || value === 'list';
+}
 
 /** Persisted editor chrome: tool, open panels, hint, viewports, and restore flag. */
 export interface EditorWorkspace {
   activeTool: string;
   openPanels: string[];
+  leftPanelWidth: number;
+  rightPanelWidth: number;
   hintDismissed: boolean;
   viewports: Record<string, ViewportState>;
   /** Whether reopening a project restores its last canvas position. */
   restoreViewport: boolean;
+  homeViewMode: HomeViewMode;
+  /** Whether engine changes trigger a debounced automatic save. */
+  autosaveEnabled: boolean;
+  /** Debounce between the last engine change and the next autosave. */
+  autosaveDelayMs: number;
 }
 
 function defaultWorkspace(): EditorWorkspace {
   return {
     activeTool: 'select',
     openPanels: panelRegistry.all().filter((panel) => panel.defaultOpen).map((panel) => panel.id),
+    leftPanelWidth: EDITOR_DOCK_WIDTHS.default,
+    rightPanelWidth: EDITOR_DOCK_WIDTHS.default,
     hintDismissed: false,
     viewports: {},
     restoreViewport: true,
+    homeViewMode: DEFAULT_HOME_VIEW_MODE,
+    autosaveEnabled: persistenceConfig.autosaveEnabled,
+    autosaveDelayMs: AUTOSAVE_DELAY_MS.default,
   };
 }
 
@@ -53,6 +91,18 @@ function isViewport(value: unknown): value is ViewportState {
   );
 }
 
+/** Normalize a persisted or measured dock width to the supported range. */
+export function normalizeEditorDockWidth(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return EDITOR_DOCK_WIDTHS.default;
+  return Math.min(EDITOR_DOCK_WIDTHS.max, Math.max(EDITOR_DOCK_WIDTHS.min, Math.round(value)));
+}
+
+/** Normalize a persisted autosave delay to the supported range. */
+export function normalizeAutosaveDelayMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return AUTOSAVE_DELAY_MS.default;
+  return Math.min(AUTOSAVE_DELAY_MS.max, Math.max(AUTOSAVE_DELAY_MS.min, Math.round(value)));
+}
+
 /** Load workspace preferences; unknown ids fall back to registry defaults. */
 export function loadEditorWorkspace(): EditorWorkspace {
   const fallback = defaultWorkspace();
@@ -75,8 +125,17 @@ export function loadEditorWorkspace(): EditorWorkspace {
         (id): id is string => typeof id === 'string' && panelRegistry.get(id) !== undefined,
       )
     : fallback.openPanels;
+  const leftPanelWidth = normalizeEditorDockWidth(record['leftPanelWidth']);
+  const rightPanelWidth = normalizeEditorDockWidth(record['rightPanelWidth']);
   const hintDismissed = record['hintDismissed'] === true;
   const restoreViewport = record['restoreViewport'] === undefined ? true : record['restoreViewport'] === true;
+  const autosaveEnabled =
+    record['autosaveEnabled'] === undefined ? true : record['autosaveEnabled'] === true;
+  const autosaveDelayMs = normalizeAutosaveDelayMs(record['autosaveDelayMs']);
+  const storedViewMode: unknown = record['homeViewMode'];
+  const homeViewMode: HomeViewMode = isHomeViewMode(storedViewMode)
+    ? storedViewMode
+    : fallback.homeViewMode;
   const viewports: Record<string, ViewportState> = {};
   if (typeof record['viewports'] === 'object' && record['viewports'] !== null) {
     for (const [projectId, viewport] of Object.entries(
@@ -85,7 +144,18 @@ export function loadEditorWorkspace(): EditorWorkspace {
       if (isViewport(viewport)) viewports[projectId] = viewport;
     }
   }
-  return { activeTool, openPanels, hintDismissed, viewports, restoreViewport };
+  return {
+    activeTool,
+    openPanels,
+    leftPanelWidth,
+    rightPanelWidth,
+    hintDismissed,
+    viewports,
+    restoreViewport,
+    homeViewMode,
+    autosaveEnabled,
+    autosaveDelayMs,
+  };
 }
 
 /** Persist the whole workspace object after a caller-side mutation. */

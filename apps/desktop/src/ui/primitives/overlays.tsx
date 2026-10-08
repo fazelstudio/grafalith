@@ -1,16 +1,20 @@
 import { useEffect, useRef } from 'react';
-import { Button } from './controls';
 
 interface DialogProps {
   title: string;
   description?: string;
   onClose: () => void;
   children?: React.ReactNode;
+  /** Caller-provided buttons; omitted when the dialog needs none (no fallback label). */
   actions?: React.ReactNode;
+  /** Extra dialog sizing (e.g. `ui-dialog--wide`); styling stays in CSS. */
+  className?: string;
+  /** Right-aligned header slot (e.g. search + close); the title block stays left. */
+  headerExtra?: React.ReactNode;
 }
 
 /** Modal dialog with focus containment and Escape dismissal. */
-export function Dialog({ title, description, onClose, children, actions }: DialogProps) {
+export function Dialog({ title, description, onClose, children, actions, className, headerExtra }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<Element | null>(null);
 
@@ -53,29 +57,20 @@ export function Dialog({ title, description, onClose, children, actions }: Dialo
     <div className="ui-dialog-overlay" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <div ref={dialogRef} className="ui-dialog" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="ui-dialog__title">{title}</div>
-        {description ? <div className="ui-dialog__description">{description}</div> : null}
+      <div ref={dialogRef} className={`ui-dialog${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="ui-dialog__header">
+          <div className="ui-dialog__heading">
+            <div className="ui-dialog__title">{title}</div>
+            {description ? <div className="ui-dialog__description">{description}</div> : null}
+          </div>
+          {headerExtra ? <div className="ui-dialog__header-extra">{headerExtra}</div> : null}
+        </div>
         {children}
-        <div className="ui-dialog__actions">{actions ?? <Button onClick={onClose}>OK</Button>}</div>
+        {actions ? <div className="ui-dialog__actions">{actions}</div> : null}
       </div>
     </div>
   );
 }
 
-interface TooltipProps {
-  label: string;
-  children: React.ReactNode;
-}
-
-/** Visual hint wrapper; the child keeps its own accessible name. */
-export function Tooltip({ label, children }: TooltipProps) {
-  return (
-    <span className="ui-tooltip-wrap">
-      {children}
-      <span className="ui-tooltip" role="presentation">
-        {label}
-      </span>
-    </span>
-  );
-}
+export { Tooltip } from './tooltip';
+export type { TooltipPlacement } from './tooltip';

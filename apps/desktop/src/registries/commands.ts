@@ -80,6 +80,10 @@ export interface CommandContext {
   files?: FileActions;
   /** Present at the application root. */
   ui?: UiActions;
+  /** Explicit ids for targeted selection commands (layers, quick switcher). */
+  targetIds?: readonly string[];
+  /** Inspector write payload: op name plus the ops to send when enabled. */
+  inspectorOp?: { op: string; ops: unknown[] };
 }
 
 /** Why a command refuses to run (surfaced consistently, never swallowed). */
@@ -440,6 +444,100 @@ const COMMANDS: readonly CommandDefinition[] = [
       return runOp(ctx, 'select', [{ op: 'select', ids: [...ctx.documentIds] }]);
     },
   },
+  {
+    id: 'selectIds',
+    labelKey: 'editor.commands.selectAll',
+    defaultLabel: 'Select layers',
+    descriptionKey: 'editor.commands.selectAllDescription',
+    defaultDescription: 'Select the targeted elements',
+    scope: 'selection',
+    category: 'edit',
+    icon: 'selectAll',
+    keywords: ['select', 'layer'],
+    surfaces: [],
+    canExecute: (ctx) =>
+      ctx.targetIds !== undefined && ctx.targetIds.length > 0 ? enabled() : disabled('unavailable'),
+    execute: async (ctx) => {
+      if (!ctx.targetIds || ctx.targetIds.length === 0) {
+        return { status: 'disabled', reason: 'unavailable' };
+      }
+      return runOp(ctx, 'select', [{ op: 'select', ids: [...ctx.targetIds] }]);
+    },
+  },
+  {
+    id: 'deselect',
+    labelKey: 'editor.commands.escape',
+    defaultLabel: 'Deselect all',
+    descriptionKey: 'editor.commands.escapeDescription',
+    defaultDescription: 'Clear the selection',
+    scope: 'selection',
+    category: 'edit',
+    icon: 'escape',
+    keywords: ['deselect', 'clear', 'selection'],
+    surfaces: ['palette'],
+    canExecute: (ctx) => needsSelection(ctx, 1),
+    execute: async (ctx) => runOp(ctx, 'select', [{ op: 'select', ids: [] }]),
+  },
+  {
+    id: 'inspector.setBounds',
+    labelKey: 'editor.commands.selectAll',
+    defaultLabel: 'Set bounds',
+    descriptionKey: 'editor.commands.selectAllDescription',
+    defaultDescription: 'Write inspector bounds to the engine',
+    scope: 'selection',
+    category: 'edit',
+    icon: 'inspector',
+    keywords: ['inspector', 'bounds', 'position', 'size'],
+    surfaces: [],
+    canExecute: (ctx) =>
+      ctx.inspectorOp?.op === 'setBounds' ? needsSelection(ctx, 1) : disabled('unavailable'),
+    execute: async (ctx) => {
+      if (!ctx.inspectorOp || ctx.inspectorOp.op !== 'setBounds') {
+        return { status: 'disabled', reason: 'unavailable' };
+      }
+      return runOp(ctx, 'setBounds', ctx.inspectorOp.ops);
+    },
+  },
+  {
+    id: 'inspector.setRotation',
+    labelKey: 'editor.commands.selectAll',
+    defaultLabel: 'Set rotation',
+    descriptionKey: 'editor.commands.selectAllDescription',
+    defaultDescription: 'Write inspector rotation to the engine',
+    scope: 'selection',
+    category: 'edit',
+    icon: 'inspector',
+    keywords: ['inspector', 'rotation'],
+    surfaces: [],
+    canExecute: (ctx) =>
+      ctx.inspectorOp?.op === 'setRotation' ? needsSelection(ctx, 1) : disabled('unavailable'),
+    execute: async (ctx) => {
+      if (!ctx.inspectorOp || ctx.inspectorOp.op !== 'setRotation') {
+        return { status: 'disabled', reason: 'unavailable' };
+      }
+      return runOp(ctx, 'setRotation', ctx.inspectorOp.ops);
+    },
+  },
+  {
+    id: 'inspector.setStyle',
+    labelKey: 'editor.commands.selectAll',
+    defaultLabel: 'Set style',
+    descriptionKey: 'editor.commands.selectAllDescription',
+    defaultDescription: 'Write inspector style to the engine',
+    scope: 'selection',
+    category: 'edit',
+    icon: 'inspector',
+    keywords: ['inspector', 'style', 'fill', 'stroke'],
+    surfaces: [],
+    canExecute: (ctx) =>
+      ctx.inspectorOp?.op === 'setStyle' ? needsSelection(ctx, 1) : disabled('unavailable'),
+    execute: async (ctx) => {
+      if (!ctx.inspectorOp || ctx.inspectorOp.op !== 'setStyle') {
+        return { status: 'disabled', reason: 'unavailable' };
+      }
+      return runOp(ctx, 'setStyle', ctx.inspectorOp.ops);
+    },
+  },
   nudgeCommand(
     'nudgeLeft',
     'editor.commands.nudgeLeft',
@@ -761,7 +859,10 @@ const COMMANDS: readonly CommandDefinition[] = [
     category: 'view',
     icon: 'palette',
     keywords: ['palette', 'command', 'search', 'actions'],
-    shortcuts: [{ key: 'k', ctrlOrCmd: true }],
+    shortcuts: [
+      { key: 'p', ctrlOrCmd: true, shift: true },
+      { key: 'k', ctrlOrCmd: true },
+    ],
     surfaces: [],
     canExecute: (ctx) => (ctx.ui ? enabled() : disabled('unavailable')),
     execute: async (ctx) => {

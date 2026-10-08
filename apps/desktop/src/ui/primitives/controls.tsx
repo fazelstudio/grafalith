@@ -1,7 +1,8 @@
 import './primitives.css';
-import type { ButtonHTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes } from 'react';
-import { useId, useRef } from 'react';
-import { SearchIcon } from '../icons';
+import type { ButtonHTMLAttributes, InputHTMLAttributes } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { CheckIcon, ChevronDownIcon, SearchIcon } from '../icons';
+import { Tooltip, type TooltipPlacement } from './tooltip';
 
 /** Button variants by semantic role; sizes map to control tokens. */
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
@@ -27,12 +28,22 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md';
   variant?: 'plain' | 'secondary';
   active?: boolean;
+  tooltipPlacement?: TooltipPlacement;
+  tooltipDisabled?: boolean;
 }
 
 /** Icon-only control; `label` is the accessible name and tooltip source. */
-export function IconButton({ label, size = 'md', variant = 'plain', active, ...props }: IconButtonProps) {
+export function IconButton({
+  label,
+  size = 'md',
+  variant = 'plain',
+  active,
+  tooltipPlacement = 'auto',
+  tooltipDisabled = false,
+  ...props
+}: IconButtonProps) {
   return (
-    <span className="ui-tooltip-wrap">
+    <Tooltip content={label} placement={tooltipPlacement} disabled={tooltipDisabled}>
       <button
         type="button"
         aria-label={label}
@@ -42,10 +53,7 @@ export function IconButton({ label, size = 'md', variant = 'plain', active, ...p
           `${active ? ' ui-icon-button--active' : ''} ${props.className ?? ''}`
         }
       />
-      <span className="ui-tooltip" role="presentation">
-        {label}
-      </span>
-    </span>
+    </Tooltip>
   );
 }
 
@@ -57,9 +65,9 @@ export function TextInput({ label, id: idProp, ...props }: TextInputProps) {
   const autoId = useId();
   const id = idProp ?? autoId;
   return (
-    <span style={{ display: 'block', width: '100%' }}>
+    <span className="ui-field">
       {label ? (
-        <label htmlFor={id} style={{ display: 'block', font: 'var(--font-label)', marginBottom: 'var(--space-xs)' }}>
+        <label className="ui-field__label" htmlFor={id}>
           {label}
         </label>
       ) : null}
@@ -94,26 +102,144 @@ interface SelectOption {
   label: string;
 }
 
-interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children'> {
+interface SelectProps {
   label: string;
   options: readonly SelectOption[];
+  value: string;
+  onChange: (value: string) => void;
+  id?: string;
+  disabled?: boolean;
 }
 
-export function Select({ label, options, id: idProp, ...props }: SelectProps) {
+/** Custom dropdown with listbox semantics; the native control cannot match app styling. */
+export function Select({ label, options, value, onChange, id: idProp, disabled = false }: SelectProps) {
   const autoId = useId();
   const id = idProp ?? autoId;
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  );
+
+  // Outside interaction closes the list, matching the home create menu.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent): void {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [open ]);
+
+  function focusOption(index: number): void {
+    setTimeout(() => optionRefs.current[index]?.focus(), 0);
+  }
+
+  function choose(index: number): void {
+    onChange(options[index].value);
+    setOpen(false);
+    setTimeout(() => buttonRef.current?.focus(), 0);
+  }
+
+  function openList(focusIndex: number): void {
+    if (disabled) return;
+    setOpen(true);
+    focusOption(focusIndex);
+  }
+
+  function onButtonKeyDown(event: React.KeyboardEvent): void {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openList(selectedIndex);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      openList(selectedIndex);
+    } else if (event.key === 'Escape' && open) {
+      event.preventDefault();
+      setOpen(false);
+    }
+  }
+
+  function onListKeyDown(event: React.KeyboardEvent, index: number): void {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusOption((index + 1) % options.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusOption((index - 1 + options.length) % options.length);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusOption(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusOption(options.length - 1);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      choose(index);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+      setTimeout(() => buttonRef.current?.focus(), 0);
+    } else if (event.key === 'Tab') {
+      setOpen(false);
+    }
+  }
+
+  const selected = options[selectedIndex];
+
   return (
-    <span style={{ display: 'block', width: '100%' }}>
-      <label htmlFor={id} style={{ display: 'block', font: 'var(--font-label)', marginBottom: 'var(--space-xs)' }}>
+    <span className="ui-field">
+      <span className="ui-field__label" id={`${id}-label`}>
         {label}
-      </label>
-      <select id={id} {...props} className="ui-select">
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      </span>
+      <span className="ui-select-custom" ref={rootRef}>
+        <button
+          ref={buttonRef}
+          type="button"
+          id={id}
+          className="ui-select-custom__button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-labelledby={`${id}-label ${id}`}
+          disabled={disabled}
+          onClick={() => (open ? setOpen(false) : openList(selectedIndex))}
+          onKeyDown={onButtonKeyDown}
+        >
+          <span className="ui-select-custom__value">{selected?.label}</span>
+          <ChevronDownIcon className="ui-select-custom__chevron" size={14} />
+        </button>
+        {open ? (
+          <ul
+            className="ui-select-custom__list"
+            role="listbox"
+            aria-labelledby={`${id}-label`}
+            tabIndex={-1}
+          >
+            {options.map((option, index) => (
+              <li
+                key={option.value}
+                ref={(node) => {
+                  optionRefs.current[index] = node;
+                }}
+                role="option"
+                aria-selected={option.value === value}
+                tabIndex={index === selectedIndex ? 0 : -1}
+                className="ui-select-custom__option"
+                onClick={() => choose(index)}
+                onKeyDown={(event) => onListKeyDown(event, index)}
+              >
+                <span>{option.label}</span>
+                <span className="ui-select-custom__check" aria-hidden="true">
+                  <CheckIcon size={14} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </span>
     </span>
   );
 }
@@ -146,8 +272,8 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
   }
 
   return (
-    <span style={{ display: 'block' }}>
-      <span style={{ display: 'block', font: 'var(--font-label)', marginBottom: 'var(--space-xs)' }}>{label}</span>
+    <span className="ui-field">
+      <span className="ui-field__label">{label}</span>
       <span className="ui-segmented" role="radiogroup" aria-label={label}>
         {options.map((option, index) => (
           <button
@@ -158,7 +284,6 @@ export function SegmentedControl<T extends string>({ label, options, value, onCh
             type="button"
             role="radio"
             aria-checked={option.value === value}
-            title={option.title ?? option.label}
             tabIndex={option.value === value ? 0 : -1}
             className="ui-segmented__option"
             onClick={() => onChange(option.value)}
@@ -183,16 +308,16 @@ interface SwitchProps {
 export function Switch({ label, checked, onChange, description }: SwitchProps) {
   return (
     <button type="button" role="switch" aria-checked={checked} className="ui-switch" onClick={() => onChange(!checked)}>
-      <span className="ui-switch__track" aria-hidden="true">
-        <span className="ui-switch__thumb" />
-      </span>
-      <span>
-        <span style={{ display: 'block', font: 'var(--font-label)' }}>{label}</span>
+      <span className="ui-switch__text">
+        <span className="ui-switch__label">{label}</span>
         {description ? (
-          <span style={{ display: 'block', font: 'var(--font-body-small)', color: 'var(--fg-secondary)' }}>
+          <span className="ui-switch__description">
             {description}
           </span>
         ) : null}
+      </span>
+      <span className="ui-switch__track" aria-hidden="true">
+        <span className="ui-switch__thumb" />
       </span>
     </button>
   );

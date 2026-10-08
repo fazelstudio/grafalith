@@ -20,7 +20,7 @@ venv/
 apps/
 examples/
 packages/
-plugins/
+extensions/
 public/
 scripts/
 generated/

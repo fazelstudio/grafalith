@@ -3,6 +3,7 @@ import { canonicalKeys, extraKeys, missingKeys } from './resources';
 import { LOCALES } from './locales';
 import { commandRegistry, panelRegistry, toolRegistry } from '../../registries';
 import { projectTemplateRegistry } from '../../features/projects/templateRegistry';
+import { projectKindRegistry } from '../../features/projects/projectKinds';
 import { settingRegistry } from '../../features/settings/settingsDescriptors';
 import { routeRegistry } from '../routing/routes';
 
@@ -45,6 +46,10 @@ describe('locale key sets', () => {
     for (const template of projectTemplateRegistry.all()) {
       expect(canonical.has(template.labelKey)).toBe(true);
       expect(canonical.has(template.descriptionKey)).toBe(true);
+    }
+    for (const kind of projectKindRegistry.all()) {
+      expect(canonical.has(kind.labelKey)).toBe(true);
+      expect(canonical.has(kind.hintKey)).toBe(true);
     }
     for (const route of routeRegistry.all()) {
       expect(canonical.has(route.titleKey)).toBe(true);

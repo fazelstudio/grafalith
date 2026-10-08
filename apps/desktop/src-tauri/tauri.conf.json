@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Nary Desktop",
+  "productName": "OpenNary",
   "version": "0.1.0",
   "identifier": "com.opennary.desktop",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Nary Desktop",
+        "title": "OpenNary",
         "width": 1200,
         "height": 800,
         "resizable": true,

@@ -12,7 +12,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  height: 48px;
+  height: var(--titlebar-height);
   flex: none;
   padding: 0 var(--space-md);
   padding-right: 0;
@@ -40,6 +40,21 @@
 
 .shell__spacer { flex: 1; }
 
+.shell__titlebar-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.shell__titlebar-slot {
+  display: flex;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  max-width: 560px;
+}
+
 .shell__workspace {
   flex: 1;
   min-width: 0;
@@ -50,7 +65,7 @@
 .shell__sidebar {
   position: relative;
   z-index: 2;
-  width: 220px;
+  width: var(--sidebar-width);
   flex: none;
   display: flex;
   flex-direction: column;
@@ -64,7 +79,7 @@
 }
 
 .shell__sidebar--collapsed {
-  width: 64px;
+  width: var(--sidebar-collapsed-width);
   padding-inline: var(--space-sm);
 }
 
@@ -220,6 +235,9 @@
 }
 
 .shell__toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   background: var(--fg-primary);
   color: var(--bg-base);
   font: var(--font-body-small);
@@ -227,6 +245,31 @@
   padding: var(--space-sm) var(--space-md);
   box-shadow: var(--shadow-medium);
   animation: shell-toast-in var(--motion-standard);
+}
+
+.shell__toast--error { outline: 2px solid var(--destructive); }
+.shell__toast--success { outline: 2px solid var(--accent); }
+
+.shell__toast-message {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.shell__toast-action {
+  flex: none;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-sm);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 }
 
 @keyframes shell-toast-in {

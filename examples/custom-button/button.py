@@ -1,10 +1,10 @@
 """Custom UI button scenario in Python: the same toolbar flow as the
-Rust/JS examples, driven through the real PyPI `nary` package.
+Rust/JS examples, driven through the real PyPI `opennary` package.
 
 Run after installing the built wheel (see README):  python button.py
 """
 
-from nary import Engine
+from opennary import Engine
 
 
 def main() -> None:

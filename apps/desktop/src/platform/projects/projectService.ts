@@ -1,7 +1,7 @@
 import { createLocalProjectStore } from './localAdapter';
 import { isTauriRuntime, tauriProjectStore } from './tauriAdapter';
 import { persistenceConfig } from './persistenceConfig';
-import type { ProjectOpenResult, ProjectSummary, TrashedProjectSummary } from './types';
+import type { ProjectKind, ProjectOpenResult, ProjectSummary, TrashedProjectSummary } from './types';
 
 /** Trash entries are permanently removed after this many days. */
 export const TRASH_RETENTION_DAYS = persistenceConfig.trashRetentionDays;
@@ -15,7 +15,6 @@ export const TRASH_RETENTION_MS = persistenceConfig.trashRetentionMs;
  *   fallback mirrors the same index/document split in localStorage.
  * - Document envelope + migration rules: `documentEnvelope.ts` (single
  *   version source shared by both backends).
- * - Ephemeral recovery snapshots: `recovery.ts` (never auto-overwrites).
  * - Preferences: `platform/preferences/preferenceService.ts` (independent
  *   keys, never inside project files).
  * - File-manager integration: `platform/files/fileService.ts` (explicitly
@@ -31,8 +30,9 @@ export interface ProjectStore {
   list(): Promise<ProjectSummary[]>;
   listTrash(): Promise<TrashedProjectSummary[]>;
   purgeExpired(): Promise<void>;
-  create(name: string, sceneJson: string): Promise<ProjectSummary>;
+  create(name: string, sceneJson: string, kind?: ProjectKind): Promise<ProjectSummary>;
   open(id: string): Promise<ProjectOpenResult>;
+  preview(id: string): Promise<ProjectOpenResult>;
   rename(id: string, name: string): Promise<ProjectSummary>;
   duplicate(id: string): Promise<ProjectSummary>;
   restore(id: string): Promise<ProjectSummary>;

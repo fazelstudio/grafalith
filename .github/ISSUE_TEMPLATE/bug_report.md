@@ -18,8 +18,8 @@
 
 ## Environment
 
-- Nary version / commit:
-- Host: (npm `@fazelstudio/nary` / PyPI `nary` / desktop app / other)
+- OpenNary version / commit:
+- Host: (npm `@fazelstudio/opennary` / PyPI `opennary` / desktop app / other)
 - OS:
 - Browser (if applicable):
 

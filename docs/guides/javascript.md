@@ -1,21 +1,21 @@
-# JavaScript / TypeScript Guide — Nary
+# JavaScript / TypeScript Guide — OpenNary
 
-Use the Nary engine from JavaScript or TypeScript through the npm/WASM build.
+Use the OpenNary engine from JavaScript or TypeScript through the npm/WASM build.
 
-Package: `@fazelstudio/nary`. Source of truth: `crates/nary/`.
+Package: `@fazelstudio/opennary`. Source of truth: `crates/opennary/`.
 
 ## Install
 
 ```bash
-npm install @fazelstudio/nary
+npm install @fazelstudio/opennary
 # or
-bun add @fazelstudio/nary
+bun add @fazelstudio/opennary
 ```
 
 ## Quick start
 
 ```typescript
-import { JsEngine, bindings_protocol_version } from '@fazelstudio/nary';
+import { JsEngine, bindings_protocol_version } from '@fazelstudio/opennary';
 
 // The bundler target initializes on import — no init() call needed.
 // (The Node.js target exports an async init() instead.)
@@ -63,5 +63,5 @@ bun run build:wasm
 bun run build:wasm:node
 ```
 
-Details: [`crates/nary/README.md`](../../crates/nary/README.md).
+Details: [`crates/opennary/README.md`](../../crates/opennary/README.md).
 Publishing: [`../../DEVELOPMENT.md`](../../DEVELOPMENT.md).

@@ -1,33 +1,47 @@
 import {
-  commandsForSurface,
-  canExecuteCommand,
-  executeCommand,
-  commandShortcutLabel,
-  toolGroups,
-  toolsForGroup,
   toolRegistry,
-  type CommandContext,
 } from '../../registries';
-import { commandResultMessage } from './engineGaps';
-import { Button } from '../../ui/primitives/controls';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../app/i18n/resources';
-import { useToast } from '../../app/shell/ToastProvider';
+import { Tooltip } from '../../ui/primitives/tooltip';
+import {
+  ArrowToolIcon,
+  ChevronUpIcon,
+  EllipseToolIcon,
+  FrameToolIcon,
+  FreedrawToolIcon,
+  LineToolIcon,
+  RectangleToolIcon,
+  SelectToolIcon,
+  TextToolIcon,
+} from '../../ui/icons';
 
 interface EditorToolbarProps {
   activeTool: string;
   onToolChange: (tool: string) => void;
-  context: CommandContext;
 }
 
 /**
- * Registry-driven toolbar: tool sections derive from tool groups, action
- * buttons derive from toolbar-surface commands. No per-tool or per-command
- * branching lives here; adding a tool or command is a registry change.
+ * Registry-driven toolbar: promoted tools and overflow tools derive from
+ * descriptors, while action buttons derive from toolbar-surface commands.
+ * Adding a tool or command does not require changing this component.
  */
-export function EditorToolbar({ activeTool, onToolChange, context }: EditorToolbarProps) {
+export function EditorToolbar({ activeTool, onToolChange }: EditorToolbarProps) {
   const { t } = useI18n();
-  const { notify } = useToast();
-  const actions = commandsForSurface('toolbar');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const tools = toolRegistry.all();
+  const primaryTools = tools.filter((tool) => tool.toolbarPlacement === 'primary');
+  const additionalTools = tools.filter((tool) => tool.toolbarPlacement === 'more');
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const close = (event: PointerEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [moreOpen]);
 
   function toolTitle(id: string): string {
     const tool = toolRegistry.get(id);
@@ -36,63 +50,73 @@ export function EditorToolbar({ activeTool, onToolChange, context }: EditorToolb
     return tool.shortcutHint ? `${base} (${tool.shortcutHint})` : base;
   }
 
-  function commandTitle(id: string): string {
-    const command = actions.find((entry) => entry.id === id);
-    if (!command) return id;
-    const base = command.descriptionKey ? t(command.descriptionKey) : t(command.labelKey);
-    const shortcut = commandShortcutLabel(command);
-    return shortcut ? `${base} (${shortcut})` : base;
-  }
-
-  async function runCommand(id: string) {
-    const result = await executeCommand(id, context);
-    const message = commandResultMessage(id, result, t);
-    if (message) notify(message);
+  function toolIcon(id: string, size = 18) {
+    const icons = {
+      select: SelectToolIcon,
+      rectangle: RectangleToolIcon,
+      ellipse: EllipseToolIcon,
+      frame: FrameToolIcon,
+      line: LineToolIcon,
+      arrow: ArrowToolIcon,
+      text: TextToolIcon,
+      freedraw: FreedrawToolIcon,
+    } as const;
+    const Icon = icons[id as keyof typeof icons];
+    return Icon ? <Icon size={size} /> : null;
   }
 
   return (
     <div className="editor-toolbar">
       <div className="editor-toolbar__tools" role="toolbar" aria-label={t('editor.title')}>
-        {toolGroups().map((group, index) => (
-          <div
-            key={group}
-            className="editor-toolbar__group"
-            role="group"
-            aria-label={t(`editor.toolGroups.${group}`)}
-          >
-            {index > 0 ? <span className="editor-toolbar__divider" aria-hidden="true" /> : null}
-            {toolsForGroup(group).map((tool) => (
-              <button
-                key={tool.id}
-                type="button"
-                onClick={() => onToolChange(tool.id)}
-                aria-pressed={activeTool === tool.id}
-                aria-keyshortcuts={tool.shortcutHint}
-                title={toolTitle(tool.id)}
-                className="ui-button ui-button--sm ui-button--secondary editor-toolbar__tool"
-              >
-                {t(tool.labelKey)}
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
-      <div className="editor-toolbar__spacer" />
-      <div className="editor-toolbar__actions">
-        {actions.map((command) => {
-          const verdict = canExecuteCommand(command.id, context);
-          return (
-            <Button
-              key={command.id}
-              size="sm"
-              onClick={() => void runCommand(command.id)}
-              disabled={!verdict.executable}
-              title={commandTitle(command.id)}
+        {primaryTools.map((tool) => (
+          <Tooltip key={tool.id} content={toolTitle(tool.id)} placement="top">
+            <button
+              type="button"
+              onClick={() => onToolChange(tool.id)}
+              aria-pressed={activeTool === tool.id}
+              aria-keyshortcuts={tool.shortcutHint}
+              className="ui-button ui-button--sm ui-button--secondary editor-toolbar__tool"
             >
-              {t(command.labelKey)}
-            </Button>
-          );
-        })}
+              {toolIcon(tool.icon)}
+              <span className="sr-only">{t(tool.labelKey)}</span>
+            </button>
+          </Tooltip>
+        ))}
+        {additionalTools.length > 0 ? (
+          <div ref={moreRef} className="editor-toolbar__more">
+            <button
+              type="button"
+              className="ui-button ui-button--sm ui-button--secondary editor-toolbar__more-trigger"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <ChevronUpIcon size={14} />
+              <span>{t('editor.toolbar.moreTools')}</span>
+            </button>
+            {moreOpen ? (
+              <div className="editor-toolbar__more-menu" role="menu" aria-label={t('editor.toolbar.moreTools')}>
+                {additionalTools.map((tool) => (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={activeTool === tool.id}
+                    className="editor-toolbar__more-item"
+                    onClick={() => {
+                      onToolChange(tool.id);
+                      setMoreOpen(false);
+                    }}
+                  >
+                    {toolIcon(tool.icon)}
+                    <span>{t(tool.labelKey)}</span>
+                    {tool.shortcutHint ? <kbd className="ui-shortcut">{tool.shortcutHint}</kbd> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

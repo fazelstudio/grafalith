@@ -1,4 +1,4 @@
-# ARCHITECTURE — Nary
+# ARCHITECTURE — OpenNary
 
 > The Rust workspace (`crates/*`) is the single source of truth. The
 > conceptual decisions in this document (data-oriented elements, Map-based
@@ -16,7 +16,7 @@ This document is the **technical contract**. Decisions here must not be changed 
 ## 1. Design Principles
 
 1. **Data-oriented over object-oriented.** Elements are plain objects (interfaces), not classes with methods. Behavior (render, hitTest) lives in separate functions that take elements as parameters — not methods on the element itself. This makes elements 100% serializable (JSON.stringify works directly) and easy to diff for history.
-2. **Framework-agnostic core.** The `@fazelstudio/nary` package must not import React/Vue/Svelte. UI (toolbar, property panel) lives in a separate layer that consumes the core through a public API.
+2. **Framework-agnostic core.** The `@fazelstudio/opennary` package must not import React/Vue/Svelte. UI (toolbar, property panel) lives in a separate layer that consumes the core through a public API.
 3. **Single source of truth for the scene.** All elements live in one `Scene` store. No element state is duplicated in UI components.
 4. **Explicit over implicit.** No "magic" — every coordinate transformation, every cache invalidation must be explicit and traceable.
 
@@ -227,9 +227,9 @@ History is stored as a stack of `HistoryEntry[]`. Undo = apply `before` from the
 ## 7. Package Structure (Monorepo)
 
 ```
-Nary/
+OpenNary/
   packages/
-    core/          # @fazelstudio/nary — pure engine, TypeScript, zero framework dependency
+    core/          # @fazelstudio/opennary — pure engine, TypeScript, zero framework dependency
       src/
         scene/       # Scene store, element types
         render/      # Render pipeline, canvas layers
@@ -280,13 +280,13 @@ All customization is provided via a **config object passed during engine/compone
 
 ```typescript
 // CORRECT — config passed explicitly
-const engine = createNary({
+const engine = createOpenNary({
   theme: myCustomTheme,
   shapeUtils: [myCustomShapeUtil],
 });
 
 // WRONG — don't do this
-NaryTheme.primaryColor = '#ff0000'; // global mutation, race condition between instances
+OpenNaryTheme.primaryColor = '#ff0000'; // global mutation, race condition between instances
 ```
 
 Reason: the engine must support **multiple instances on the same page** with different configurations (e.g., two side-by-side canvases with different themes) without affecting each other.
@@ -314,13 +314,13 @@ Built-in shapes (rectangle, ellipse, etc. from v1) are registered through the SA
 All visual values a developer might want to change (UI colors — NOT element drawing colors which already have `FillStyle` in §2.3 —, fonts, handle sizes, radii, etc.) are defined as tokens, not hardcoded in render code:
 
 ```typescript
-interface NaryTheme {
+interface OpenNaryTheme {
   colors: { background: string; selectionOutline: string; handleFill: string; /* ... */ };
   fonts: { default: string; /* available fonts in font picker */ };
   sizes: { handleSize: number; selectionOutlineWidth: number; /* ... */ };
 }
 
-const defaultTheme: NaryTheme = { /* engine default values */ };
+const defaultTheme: OpenNaryTheme = { /* engine default values */ };
 ```
 
 Render functions in `render-selection.ts` (from v1 Phase 3) and similar read from the `theme` resolved at that time (via context/parameter), not hardcoded constants.
@@ -330,7 +330,7 @@ Render functions in `render-selection.ts` (from v1 Phase 3) and similar read fro
 For UI components (toolbar, color picker, property panel) rendered by React in `packages/react` — NOT the core engine (core remains framework-agnostic per §1):
 
 ```typescript
-interface NaryUIOverrides {
+interface OpenNaryUIOverrides {
   components?: {
     ColorPicker?: React.ComponentType<ColorPickerProps>;
     Toolbar?: React.ComponentType<ToolbarProps>;
@@ -353,7 +353,7 @@ This layer addresses the need: **developers can build their own UI from scratch,
 
 ### 10.1 Why This is Different from §9 (Customization v2)
 
-§9 (Layers 1-3: Shape Registry, Theme, UI Overrides) assumes developers still use `NaryEditor` from `packages/react` as the main framework, and replace parts of it via props. That's **composition within our framework**.
+§9 (Layers 1-3: Shape Registry, Theme, UI Overrides) assumes developers still use `OpenNaryEditor` from `packages/react` as the main framework, and replace parts of it via props. That's **composition within our framework**.
 
 §10 is different: developers may **not use our framework at all**. They only need:
 1. A way to create an engine instance (Scene + all logic) without any DOM/React.
@@ -416,7 +416,7 @@ class Editor {
   unmount(): void;
 }
 
-function createEditor(config?: NaryConfig): Editor; // same config as v2 (theme, shapes, etc.)
+function createEditor(config?: OpenNaryConfig): Editor; // same config as v2 (theme, shapes, etc.)
 ```
 
 **Design principle for the methods above**: each method is a **thin wrapper** around functions that already exist in v1/v2 (`Scene.upsertElement`, `groupElements`, `alignLeft`, etc. from previous phases) — this phase does NOT rewrite logic, only exposes what already exists through one consistent contract. If an ability from a previous phase (e.g., `distributeHorizontal` from Phase 13) doesn't yet have a wrapper method in `Editor`, it must be added here — the list above is the minimum baseline, not the final complete list (audit all public functions from Phase 0-15 during implementation).

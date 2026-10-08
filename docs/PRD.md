@@ -1,4 +1,4 @@
-# PRD — Nary
+# PRD — OpenNary
 
 **Product Requirements Document**
 Status: v4 (Professional-Grade) · Owner: (fill in your name) · Last updated: 2026-10-01
@@ -7,7 +7,7 @@ Status: v4 (Professional-Grade) · Owner: (fill in your name) · Last updated: 2
 
 ## 1. Summary
 
-Nary is a **professional-grade 2D canvas engine for design & prototyping** (Figma/TLDraw/Excalidraw class), built as a headless library that can be embedded into other applications. The product goal has evolved over time — brief history:
+OpenNary is a **professional-grade 2D canvas engine for design & prototyping** (Figma/TLDraw/Excalidraw class), built as a headless library that can be embedded into other applications. The product goal has evolved over time — brief history:
 
 - **v1-v2**: Lightweight canvas engine like Excalidraw/TLDraw with basic drawing + full customization (theme, UI overrides, custom shapes).
 - **v3**: Headless architecture — the engine can be used fully without any built-in UI, through a public `Editor` API + event system.
@@ -60,7 +60,7 @@ Tools like Excalidraw/TLDraw are good, but:
 ### 4.3 Nice to Have (v2+, not v1 priority)
 - [ ] Real-time collaboration (multiplayer)
 - [x] Image upload & embed
-- [x] Custom shape plugin API
+- [x] Custom shape extension API
 - [x] Component library/templates
 
 ### 4.4 Explicitly Out of Scope
@@ -73,7 +73,7 @@ Tools like Excalidraw/TLDraw are good, but:
 Added after v1 evaluation: the engine was functional but did not "feel professional" compared to TLDraw/Excalidraw/Figma, and could not be customized by consumers (developers embedding this engine). v2 closes both gaps:
 
 **A. Full Customization** (highest priority — see §10)
-Developers embedding Nary must be able to change theme, icon set, color picker, font, UI size/position, and add/replace shapes themselves — **without forking the engine source code**. This is not an ordinary feature, it is an architecture layer that affects how all other features are built.
+Developers embedding OpenNary must be able to change theme, icon set, color picker, font, UI size/position, and add/replace shapes themselves — **without forking the engine source code**. This is not an ordinary feature, it is an architecture layer that affects how all other features are built.
 
 **B. Element organization**: grouping/ungroup, layer management, lock elements, frame/container.
 
@@ -148,7 +148,7 @@ Architecture decisions in this document are based on study of:
 
 This product requirement is **as important as the §5 performance targets**, not a complementary feature:
 
-> Developers embedding Nary must have full control over the engine's default look and behavior — theme/colors, icons, fonts, color picker, UI element size & position, and shapes — **without forking or modifying the engine source code**.
+> Developers embedding OpenNary must have full control over the engine's default look and behavior — theme/colors, icons, fonts, color picker, UI element size & position, and shapes — **without forking or modifying the engine source code**.
 
 Derived principles:
 1. **No hardcoded values** for anything a developer might want to replace (colors, font, icon sizes, UI components) — everything must go through overridable tokens/config.
@@ -172,12 +172,12 @@ Derived principles:
 
 This is a level shift, not just new features:
 
-> Nary must no longer be enough to "work like a simple draw tool" — every interaction must feel EXACTLY THE SAME as conventions already established in professional design tools (Figma, TLDraw, Illustrator). New features (path editing, boolean ops, component/instance, constraints/auto-layout) must match the capability of those class tools, not simplified/limited versions.
+> OpenNary must no longer be enough to "work like a simple draw tool" — every interaction must feel EXACTLY THE SAME as conventions already established in professional design tools (Figma, TLDraw, Illustrator). New features (path editing, boolean ops, component/instance, constraints/auto-layout) must match the capability of those class tools, not simplified/limited versions.
 
 Derived principles:
 1. **Behavior conformance is NOT optional.** Before any new feature is added in v4, OLD features must be audited and fixed first so their behavior matches professional conventions — a shaky foundation makes new features on top feel foreign/unnatural.
 2. **Behavior references are established tools, not new assumptions.** For every ambiguous interaction design decision, check how Figma/TLDraw/Illustrator handle it before deciding on your own — consistency with experienced users' expectations matters more than originality.
-3. **Canvas mode flexible for derivative product needs.** Because Nary will be used to build web applications (not just used directly), the engine must support both infinite mode (whiteboard) AND bounded/artboard mode (fixed size, for needs like thumbnail editors, social media templates, etc.) — chosen by the developer at initialization.
+3. **Canvas mode flexible for derivative product needs.** Because OpenNary will be used to build web applications (not just used directly), the engine must support both infinite mode (whiteboard) AND bounded/artboard mode (fixed size, for needs like thumbnail editors, social media templates, etc.) — chosen by the developer at initialization.
 4. **New features must not sacrifice §5 performance targets** — all features in §12 (especially boolean ops and component/instance which are computationally heavy) must keep large scenes (5,000+ elements) from dropping below 60fps for normal operations (heavy features like boolean ops may have their own reasonable latency for explicit operations, but must not burden the render loop/general interaction).
 
 ### New v4 Features

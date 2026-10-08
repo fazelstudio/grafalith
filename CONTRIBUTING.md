@@ -1,4 +1,4 @@
-# Contributing to Nary
+# Contributing to OpenNary
 
 Thank you for your interest in contributing!
 
@@ -21,20 +21,20 @@ Then follow `DEVELOPMENT.md`: `cargo test --workspace`,
 
 Short map (details in [`crates/README.md`](./crates/README.md)):
 
-- `crates/nary-geometry/` — Pure 2D math (zero dependencies)
-- `crates/nary-core/` — Document domain + editor session
-- `crates/nary-io/` — Interchange (JSON schema, import pipeline, clipboard codec, PNG descriptors)
-- `crates/nary-bindings/` — Host boundary (JSON-string batch protocol, `Engine` facade, DTOs)
-- `crates/nary/` — npm distribution (`@fazelstudio/nary`)
-- `crates/nary-python/` — PyPI distribution (`nary`)
-- `crates/nary-sdk/` — Rust SDK facade for plugins and extensions
-- `crates/nary-text/` — Text measurement and shaping helpers
+- `crates/opennary-geometry/` — Pure 2D math (zero dependencies)
+- `crates/opennary-core/` — Document domain + editor session
+- `crates/opennary-io/` — Interchange (JSON schema, import pipeline, clipboard codec, PNG descriptors)
+- `crates/opennary-bindings/` — Host boundary (JSON-string batch protocol, `Engine` facade, DTOs)
+- `crates/opennary/` — npm distribution (`@fazelstudio/opennary`)
+- `crates/opennary-python/` — PyPI distribution (`opennary`)
+- `crates/opennary-sdk/` — Rust SDK facade for extensions
+- `crates/opennary-text/` — Text measurement and shaping helpers
 - `apps/desktop/` — Tauri demo app (the reference host)
-- `packages/nary-sdk/` — TypeScript SDK (typed client, extension registry)
-- `examples/` — Standalone usage and plugin examples
+- `packages/opennary-sdk/` — TypeScript SDK (typed client, extension registry)
+- `examples/` — Standalone usage and extension examples
 - `docs/` — Product scope, technical contract, and guides (`docs/guides/`)
 
-Dependency direction: `nary`/`nary-python` → `nary-bindings` → `nary-io` → `nary-core` → `nary-geometry`.
+Dependency direction: `opennary`/`opennary-python` → `opennary-bindings` → `opennary-io` → `opennary-core` → `opennary-geometry`.
 
 ## Rules
 

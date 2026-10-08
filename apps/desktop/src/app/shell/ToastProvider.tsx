@@ -1,12 +1,25 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { DESKTOP_TIMING } from '../theme/tokens';
+
+interface ToastAction {
+  label: string;
+  commandId: string;
+}
 
 interface Toast {
   id: number;
   message: string;
+  level: 'info' | 'success' | 'error';
+  action?: ToastAction;
+}
+
+interface NotifyOptions {
+  level?: Toast['level'];
+  action?: ToastAction;
 }
 
 interface ToastContextValue {
-  notify: (message: string) => void;
+  notify: (message: string, options?: NotifyOptions) => void;
   toasts: readonly Toast[];
   dismiss: (id: number) => void;
 }
@@ -28,10 +41,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const notify = useCallback(
-    (message: string) => {
+    (message: string, options?: NotifyOptions) => {
       const id = nextId++;
-      setToasts((current) => [...current.slice(-2), { id, message }]);
-      window.setTimeout(() => dismiss(id), 3200);
+      const level = options?.level ?? 'info';
+      const action = options?.action;
+      setToasts((current) => [...current.slice(-2), { id, message, level, action }]);
+      window.setTimeout(() => dismiss(id), DESKTOP_TIMING.toastDurationMs);
     },
     [dismiss],
   );
