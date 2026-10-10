@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "id": "hello-world",
+  "publisher": "acme",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "Minimal Grafalith extension: one command, one canvas menu row, one toast.",
+  "license": "MIT",
+  "homepage": "https://example.com/acme-hello-world",
+  "repository": "https://example.com/acme-hello-world.git",
+  "engines": { "grafalith": "^0.1.0" },
+  "categories": ["tools"],
+  "keywords": ["hello", "example"],
+  "main": "./dist/index.js",
+  "priority": "normal",
+  "permissions": ["notifications"],
+  "activationEvents": ["onStartup", "onCommand:acme.hello.say"],
+  "contributes": {
+    "commands": [{ "command": "acme.hello.say", "title": "Say hello", "category": "Hello" }],
+    "menus": { "canvas.context": [{ "command": "acme.hello.say", "group": "9_hello" }] },
+    "keybindings": [{ "command": "acme.hello.say", "key": "ctrl+alt+h" }],
+    "configuration": [{ "key": "acme.hello.greeting", "title": "Greeting", "default": "Hello" }]
+  }
+}

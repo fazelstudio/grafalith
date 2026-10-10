@@ -12,6 +12,7 @@ import {
   type ExtensionViewContribution,
 } from './extensionContributions';
 import { extensionDialogQueue } from './extensionDialogs';
+import { getOutputChannels, type OutputChannel } from './outputChannel';
 
 /** Disposal handle a extension pushes to its subscriptions. */
 export interface ExtensionDisposable {
@@ -38,10 +39,30 @@ export interface ExtensionWindow {
   showNotification(
     message: string,
     options?: {
-      level?: 'info' | 'success' | 'error';
+      level?: 'info' | 'success' | 'warning' | 'error';
       actions?: readonly { label: string; command: string; args?: readonly unknown[] }[];
+      duration?: number;
+      source?: string;
     },
   ): void;
+  showToast(
+    message: string,
+    options?: {
+      level?: 'info' | 'success' | 'warning' | 'error';
+      actions?: readonly { label: string; command: string; args?: readonly unknown[] }[];
+      duration?: number;
+      source?: string;
+    },
+  ): void;
+  showProgress(
+    title: string,
+    task: (
+      progress: { report(fraction: number, message?: string): void },
+      token: { readonly cancelled: boolean },
+    ) => Promise<void>,
+    options?: { cancellable?: boolean },
+  ): Promise<void>;
+  showStatusMessage(message: string, duration?: number): { dispose(): void };
   showQuickPick(
     items: readonly { id: string; label: string; description?: string }[],
     placeholder?: string,
@@ -82,6 +103,10 @@ export interface ExtensionWorkspace {
   readonly events: {
     readonly onDidChangeSelection: ExtensionEvent<readonly string[]>;
     readonly onDidChangeDocument: ExtensionEvent<{ projectId: string }>;
+    readonly onDidChangeViewport: ExtensionEvent<{ zoom: number }>;
+    readonly onDidOpenProject: ExtensionEvent<{ projectId: string }>;
+    readonly onDidCloseProject: ExtensionEvent<{ projectId: string }>;
+    readonly onDidChangeActiveEditor: ExtensionEvent<{ editorType: string }>;
   };
   readonly memento: {
     get<T>(key: string, fallback: T): T;
@@ -89,28 +114,80 @@ export interface ExtensionWorkspace {
   };
 }
 
+/** Host environment info handed to one extension (`grafalith.env.*`). */
+export interface ExtensionEnv {
+  readonly appVersion: string;
+  readonly platform: 'windows' | 'macos' | 'linux' | 'web';
+  readonly locale: string;
+}
+
 /** Full activation context handed to one extension (SDK `ExtensionContext` shape). */
 export interface ExtensionContext {
+  /** Package id (`publisher.id`). */
+  readonly id: string;
+  /** Manifest version. */
+  readonly version: string;
   readonly commands: ExtensionCommandBus;
   readonly window: ExtensionWindow;
   readonly workspace: ExtensionWorkspace;
+  readonly storage: ExtensionWorkspace['memento'];
+  readonly env: ExtensionEnv;
+  readonly clipboard: {
+    read(): Promise<string>;
+    write(text: string): Promise<void>;
+  };
+  readonly fs: {
+    readFile(path: string): Promise<string>;
+    writeFile(path: string, content: string): Promise<void>;
+  };
+  /** Create a named output channel for this extension's logs. */
+  createOutputChannel(name: string): OutputChannel;
+  /** Install directory of this extension (for its own bundled files). */
+  readonly extensionPath: string;
+  /** Whether the host runs in development mode (hot-reload armed). */
+  readonly isDevelopment: boolean;
   readonly subscriptions: ExtensionDisposable[];
 }
 
 interface ContextDeps {
   packageId: string;
-  notify: (message: string, options?: { level?: 'info' | 'success' | 'error'; action?: { label: string; commandId: string } }) => void;
+  version?: string;
+  extensionPath?: string;
+  isDevelopment?: boolean;
+  permissions: readonly string[];
+  notify: (
+    message: string,
+    options?: {
+      level?: 'info' | 'success' | 'warning' | 'error';
+      action?: { label: string; commandId: string };
+      actions?: readonly { label: string; commandId: string }[];
+      duration?: number;
+      source?: string;
+    },
+  ) => void;
   executeHostCommand: (id: string, ...args: unknown[]) => Promise<{ ok: boolean; value?: unknown; reason?: string }>;
+  statusMessage?: (message: string, duration?: number) => { dispose(): void };
+  env?: ExtensionEnv;
 }
 
 const gatedCommands = new Map<string, (...args: unknown[]) => boolean>();
 
 /**
  * Build one extension's activation context. Shapes mirror the SDK so code
- * authored against `opennary-sdk` runs here without adaptation; the desktop
+ * authored against `grafalith-sdk` runs here without adaptation; the desktop
  * provides the host side (toasts, dialogs, status store, local storage).
  */
-export function createExtensionContext({ packageId, notify, executeHostCommand }: ContextDeps): ExtensionContext {
+export function createExtensionContext({
+  packageId,
+  version = '0.0.0',
+  extensionPath = '',
+  isDevelopment = false,
+  permissions = [],
+  notify,
+  executeHostCommand,
+  statusMessage,
+  env,
+}: ContextDeps): ExtensionContext {
   const subscriptions: ExtensionDisposable[] = [];
   const track = <T extends ExtensionDisposable>(disposable: T): T => {
     subscriptions.push(disposable);
@@ -121,11 +198,35 @@ export function createExtensionContext({ packageId, notify, executeHostCommand }
   const configListeners = new Set<(key: string) => void>();
   const selectionEvent = new ExtensionEvent<readonly string[]>();
   const documentEvent = new ExtensionEvent<{ projectId: string }>();
+  const viewportEvent = new ExtensionEvent<{ zoom: number }>();
+  const openedEvent = new ExtensionEvent<{ projectId: string }>();
+  const closedEvent = new ExtensionEvent<{ projectId: string }>();
+  const editorEvent = new ExtensionEvent<{ editorType: string }>();
   const mementoValues = new Map<string, unknown>();
   const configMemory = new Map<string, string | boolean | number>();
 
-  const commands: ExtensionCommandBus = {
-    registerCommand: (id, handler, options) => {
+  const notifyGuarded = (
+    message: string,
+    options?: {
+      level?: 'info' | 'success' | 'warning' | 'error';
+      action?: { label: string; commandId: string };
+      actions?: readonly { label: string; commandId: string }[];
+      duration?: number;
+      source?: string;
+    },
+  ): void => {
+    if (!permissions.includes('notifications')) {
+      // Soft enforcement: warn the author in their channel but still
+      // deliver, so an undeclared permission degrades instead of crashing
+      // activation. Clipboard/fs below stay hard-denied (data access).
+      getOutputChannels()
+        .channel(packageId)
+        .appendLine('[WARN] using notifications without permission — declare "notifications" in manifest permissions');
+    }
+    notify(message, options);
+  };
+
+  const commands: ExtensionCommandBus = {    registerCommand: (id, handler, options) => {
       registerExtensionCommand(id, handler);
       if (options?.canExecute) gatedCommands.set(id, options.canExecute);
       return track({ dispose: () => void gatedCommands.delete(id) });
@@ -149,11 +250,32 @@ export function createExtensionContext({ packageId, notify, executeHostCommand }
   const window: ExtensionWindow = {
     showNotification: (message, options) => {
       const [first] = options?.actions ?? [];
-      notify(message, {
+      notifyGuarded(message, {
         level: options?.level ?? 'info',
         action: first ? { label: first.label, commandId: first.command } : undefined,
+        actions: options?.actions?.map((action) => ({ label: action.label, commandId: action.command })),
+        duration: options?.duration,
+        source: options?.source ?? packageId,
       });
     },
+    showToast: (message, options) => {
+      const [first] = options?.actions ?? [];
+      notifyGuarded(message, {
+        level: options?.level ?? 'info',
+        action: first ? { label: first.label, commandId: first.command } : undefined,
+        actions: options?.actions?.map((action) => ({ label: action.label, commandId: action.command })),
+        duration: options?.duration,
+        source: options?.source ?? packageId,
+      });
+    },
+    showProgress: async (title, task) => {
+      // Progress runs inline; the toast reports start/failure so a slow
+      // task never blocks project entry or the editor shell.
+      notifyGuarded(title, { level: 'info', source: packageId });
+      await task({ report: () => undefined }, { cancelled: false });
+    },
+    showStatusMessage: (message, duration) =>
+      statusMessage?.(message, duration) ?? { dispose: () => undefined },
     showQuickPick: (items, placeholder) =>
       extensionDialogQueue.ask<{ id: string; label: string; description?: string }>({
         kind: 'quickPick',
@@ -218,12 +340,64 @@ export function createExtensionContext({ packageId, notify, executeHostCommand }
         return { dispose: () => void configListeners.delete(listener) };
       },
     },
-    events: { onDidChangeSelection: selectionEvent, onDidChangeDocument: documentEvent },
+    events: {
+      onDidChangeSelection: selectionEvent,
+      onDidChangeDocument: documentEvent,
+      onDidChangeViewport: viewportEvent,
+      onDidOpenProject: openedEvent,
+      onDidCloseProject: closedEvent,
+      onDidChangeActiveEditor: editorEvent,
+    },
     memento: {
       get: (key, fallback) => (mementoValues.has(key) ? mementoValues.get(key) : fallback) as never,
       update: async (key, value) => void mementoValues.set(key, value),
     },
   };
 
-  return { commands, window, workspace, subscriptions };
+  const denied = (capability: string): Error =>
+    new Error(`extension "${packageId}" lacks permission "${capability}"`);
+
+  const outputFor = (name: string): OutputChannel => getOutputChannels().channel(`${packageId}: ${name}`);
+
+  return {
+    id: packageId,
+    version,
+    commands,
+    window,
+    workspace,
+    storage: workspace.memento,
+    env: env ?? { appVersion: '0.1.0', platform: 'web', locale: 'en' },
+    clipboard: {
+      read: async () => {
+        if (!permissions.includes('clipboard')) {
+          getOutputChannels().channel(packageId).appendLine('[ERROR] clipboard read denied: "clipboard" permission is not declared');
+          throw denied('clipboard');
+        }
+        try {
+          return await globalThis.navigator.clipboard.readText();
+        } catch {
+          return '';
+        }
+      },
+      write: async (text: string) => {
+        if (!permissions.includes('clipboard')) {
+          getOutputChannels().channel(packageId).appendLine('[ERROR] clipboard write denied: "clipboard" permission is not declared');
+          throw denied('clipboard');
+        }
+        await globalThis.navigator.clipboard.writeText(text);
+      },
+    },
+    fs: {
+      readFile: async () => {
+        throw denied('filesystem:read');
+      },
+      writeFile: async () => {
+        throw denied('filesystem:write');
+      },
+    },
+    createOutputChannel: (name: string) => outputFor(name),
+    extensionPath,
+    isDevelopment,
+    subscriptions,
+  };
 }

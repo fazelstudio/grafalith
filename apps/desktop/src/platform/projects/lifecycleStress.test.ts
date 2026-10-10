@@ -45,8 +45,8 @@ describe('repeated project open/close', () => {
 
     expect(await store.list()).toEqual([]);
     // Only the project index key may remain; every document payload is gone.
-    const residue = keys().filter((key) => key !== 'opennary:projects:index:v1');
-    expect(residue).toEqual(baseline.filter((key) => key !== 'opennary:projects:index:v1'));
-    expect(keys().filter((key) => key.startsWith('opennary:projects:doc:'))).toEqual([]);
+    const residue = keys().filter((key) => key !== 'grafalith:projects:index:v1');
+    expect(residue).toEqual(baseline.filter((key) => key !== 'grafalith:projects:index:v1'));
+    expect(keys().filter((key) => key.startsWith('grafalith:projects:doc:'))).toEqual([]);
   });
 });

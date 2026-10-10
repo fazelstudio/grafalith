@@ -63,15 +63,15 @@ describe('local project store', () => {
     const created = await store.create('Expired', buildBlankScene());
     await store.remove(created.id);
 
-    const index = JSON.parse(storage.getItem('opennary:projects:index:v1') ?? '[]') as {
+    const index = JSON.parse(storage.getItem('grafalith:projects:index:v1') ?? '[]') as {
       id: string;
       deletedAtMs?: number;
     }[];
     index[0].deletedAtMs = Date.now() - persistenceConfig.trashRetentionMs - 1;
-    storage.setItem('opennary:projects:index:v1', JSON.stringify(index));
+    storage.setItem('grafalith:projects:index:v1', JSON.stringify(index));
 
     expect(await store.list()).toEqual([]);
-    expect(storage.getItem(`opennary:projects:doc:${created.id}`)).toBeNull();
+    expect(storage.getItem(`grafalith:projects:doc:${created.id}`)).toBeNull();
     expect(await store.listTrash()).toEqual([]);
   });
 
@@ -97,7 +97,7 @@ describe('local project store', () => {
     const storage = memoryStorage();
     const store = createLocalProjectStore(storage);
     const created = await store.create('Ghost', buildBlankScene());
-    storage.removeItem(`opennary:projects:doc:${created.id}`);
+    storage.removeItem(`grafalith:projects:doc:${created.id}`);
     await expect(store.open(created.id)).rejects.toMatchObject({
       code: 'missing-document',
     });

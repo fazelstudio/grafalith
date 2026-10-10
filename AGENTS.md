@@ -6,12 +6,12 @@ If a task instruction contradicts this document or an established project constr
 
 ## 1. Project
 
-OpenNary is a lightweight and efficient canvas drawing engine similar to Excalidraw and TLDraw.
+Grafalith is a lightweight and efficient canvas drawing engine similar to Excalidraw and TLDraw.
 
 The engine is a Rust workspace under `crates/*` and is distributed through:
 
-* npm as `@fazelstudio/opennary` using `wasm-pack`
-* PyPI as `opennary` using `maturin`
+* npm as `@fazelstudio/grafalith` using `wasm-pack`
+* PyPI as `grafalith` using `maturin`
 
 The engine has zero framework dependencies. Engine crates must not import React, Vue, or other UI frameworks, and must not access the DOM or Canvas directly.
 
@@ -65,9 +65,9 @@ The following project constraints must be preserved.
 * Each user operation must produce one undoable, atomic history entry.
 * Element mutation follows the established validate-then-store flow.
 * Delete is a soft delete using `isDeleted = true`; elements are not removed from the scene map.
-* `opennary-core` must not depend on host bindings, renderers, DOM/Canvas APIs, React, or Tauri.
-* `opennary-bindings` is the only crate that owns the JSON-string protocol.
-* `opennary` and `opennary-python` are thin wrappers around `opennary-bindings`.
+* `grafalith-core` must not depend on host bindings, renderers, DOM/Canvas APIs, React, or Tauri.
+* `grafalith-bindings` is the only crate that owns the JSON-string protocol.
+* `grafalith` and `grafalith-python` are thin wrappers around `grafalith-bindings`.
 * Host adapters such as Tauri commands, browser JavaScript, and Python integration remain outside the engine crates.
 
 Do not change the element interfaces defined in `docs/ARCHITECTURE.md` without explicit user approval.
@@ -76,20 +76,20 @@ Do not change the element interfaces defined in `docs/ARCHITECTURE.md` without e
 
 ```text
 crates/
-  opennary-geometry/  # Pure 2D math: point, bounds, transform, hit, path, spatial, snap, viewport
-  opennary-core/      # Document domain and editor session
-  opennary-io/        # Interchange: versioned JSON schema, import pipeline, clipboard codec, PNG descriptors
-  opennary-bindings/  # Host boundary: JSON-string protocol, Engine facade, render/session DTOs
-  opennary/           # npm distribution through wasm-pack
-  opennary-python/    # PyPI distribution through maturin/PyO3
-  opennary-sdk/       # Rust SDK facade for extensions
-  opennary-text/      # Text measurement and shaping helpers
+  grafalith-geometry/  # Pure 2D math: point, bounds, transform, hit, path, spatial, snap, viewport
+  grafalith-core/      # Document domain and editor session
+  grafalith-io/        # Interchange: versioned JSON schema, import pipeline, clipboard codec, PNG descriptors
+  grafalith-bindings/  # Host boundary: JSON-string protocol, Engine facade, render/session DTOs
+  grafalith/           # npm distribution through wasm-pack
+  grafalith-python/    # PyPI distribution through maturin/PyO3
+  grafalith-sdk/       # Rust SDK facade for extensions
+  grafalith-text/      # Text measurement and shaping helpers
 
 apps/
   desktop/        # Tauri demo application and reference host
 
 packages/
-  opennary-sdk/       # TypeScript SDK: typed client, extension registry, overlays
+  grafalith-sdk/       # TypeScript SDK: typed client, extension registry, overlays
 
 examples/
   custom-button/  # One toolbar scenario on three hosts (Rust/JS/Python)
@@ -99,8 +99,8 @@ scripts/
   gen_command_bindings.py  # Single source for generated protocol bindings
 
 generated/
-  opennary-commands.d.ts  # Generated TS bindings (checked by CI)
-  opennary.pyi            # Generated Python stubs (checked by CI)
+  grafalith-commands.d.ts  # Generated TS bindings (checked by CI)
+  grafalith.pyi            # Generated Python stubs (checked by CI)
 
 docs/
   PRD.md              # Product scope and explicit in/out boundaries
@@ -113,15 +113,15 @@ docs/
 Dependency direction:
 
 ```text
-opennary / opennary-python
+grafalith / grafalith-python
         ↓
-opennary-bindings
+grafalith-bindings
         ↓
-opennary-io
+grafalith-io
         ↓
-opennary-core
+grafalith-core
         ↓
-opennary-geometry
+grafalith-geometry
 ```
 
 The `workspace_wiring` test enforces this dependency direction.

@@ -1,6 +1,6 @@
 # cargo-deny configuration.
 #
-# Scope: the ENGINE workspace (crates/opennary-*). The desktop host
+# Scope: the ENGINE workspace (crates/grafalith-*). The desktop host
 # (apps/desktop, untracked Tauri scaffold) is excluded: it is a separate
 # product with its own GUI-stack licenses (MPL-2.0 via wry, Unicode-3.0
 # via idna) that never ship in npm/PyPI engine artifacts. Engine policy
@@ -9,7 +9,7 @@
 
 [graph]
 targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
-exclude = ["opennary-desktop"]
+exclude = ["grafalith-desktop"]
 
 [advisories]
 db-path = "~/.cargo/advisory-dbs"
@@ -31,7 +31,7 @@ highlight = "all"
 # The desktop host manifest is untracked upstream scaffolding outside this
 # gate's scope (see [graph] exclude); its path-only deps stay untouched.
 [[bans.skip]]
-name = "opennary-desktop"
+name = "grafalith-desktop"
 
 [licenses]
 allow = [

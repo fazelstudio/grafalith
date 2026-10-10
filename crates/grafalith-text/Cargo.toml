@@ -1,0 +1,20 @@
+[package]
+name = "grafalith-text"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["fazelstudio"]
+description = "Text measurement and shaping helpers for the Grafalith Rust engine: measurement and line breaking behind the core TextMeasurer seam. Host-gated; grafalith-core never depends on this crate."
+repository = "https://github.com/fazelstudio/grafalith"
+homepage = "https://github.com/fazelstudio/grafalith"
+keywords = ["text", "typography", "layout", "measurement", "graphics"]
+categories = ["graphics", "text-processing"]
+
+[dependencies]
+grafalith-core = { version = "0.1.0", path = "../grafalith-core" }
+# Layout engine: shaping, line breaking, bidi. Pure Rust, WASM-safe;
+# hosts register fonts.
+parley = "0.11"
+
+[lints]
+workspace = true

@@ -20,6 +20,10 @@ const editor: EnDict['editor'] = {
     arrowDescription: 'Gambar panah',
     textDescription: 'Buat atau ubah teks',
     freedrawDescription: 'Gambar bebas',
+    sticky: 'Alat lengket',
+    stickyDescription: 'Biarkan alat aktif setelah membuat objek',
+    stickyOn: 'Alat lengket aktif: alat tetap aktif setelah membuat objek',
+    stickyOff: 'Alat lengket mati: kembali ke Pilih setelah membuat objek',
   },
   toolGroups: {
     selection: 'Seleksi',
@@ -118,7 +122,7 @@ const editor: EnDict['editor'] = {
     duplicateProject: 'Duplikat',
     duplicateProjectDescription: 'Duplikat proyek yang terbuka',
     installExtension: 'Pasang paket ekstensi',
-    installExtensionDescription: 'Pasang ekstensi dari berkas paket .onry',
+    installExtensionDescription: 'Pasang ekstensi dari berkas paket .grlt',
     contextTitle: 'Aksi pilihan',
   },
   quickSwitcher: {
@@ -189,6 +193,7 @@ const editor: EnDict['editor'] = {
     opacity: 'Opasitas',
     stroke: 'Garis tepi',
     strokeColor: 'Garis tepi',
+    borderColor: 'Bingkai',
     strokeWidth: 'Lebar garis',
     strokeStyle: 'Garis putus',
     dashSolid: 'Solid',

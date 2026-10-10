@@ -1,21 +1,21 @@
-# JavaScript / TypeScript Guide — OpenNary
+# JavaScript / TypeScript Guide — Grafalith
 
-Use the OpenNary engine from JavaScript or TypeScript through the npm/WASM build.
+Use the Grafalith engine from JavaScript or TypeScript through the npm/WASM build.
 
-Package: `@fazelstudio/opennary`. Source of truth: `crates/opennary/`.
+Package: `@fazelstudio/grafalith`. Source of truth: `crates/grafalith/`.
 
 ## Install
 
 ```bash
-npm install @fazelstudio/opennary
+npm install @fazelstudio/grafalith
 # or
-bun add @fazelstudio/opennary
+bun add @fazelstudio/grafalith
 ```
 
 ## Quick start
 
 ```typescript
-import { JsEngine, bindings_protocol_version } from '@fazelstudio/opennary';
+import { JsEngine, bindings_protocol_version } from '@fazelstudio/grafalith';
 
 // The bundler target initializes on import — no init() call needed.
 // (The Node.js target exports an async init() instead.)
@@ -63,5 +63,5 @@ bun run build:wasm
 bun run build:wasm:node
 ```
 
-Details: [`crates/opennary/README.md`](../../crates/opennary/README.md).
+Details: [`crates/grafalith/README.md`](../../crates/grafalith/README.md).
 Publishing: [`../../DEVELOPMENT.md`](../../DEVELOPMENT.md).

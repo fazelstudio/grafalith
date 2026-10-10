@@ -1377,6 +1377,94 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafalith"
+version = "0.1.0"
+dependencies = [
+ "grafalith-bindings",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "grafalith-bindings"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "grafalith-core",
+ "grafalith-io",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "grafalith-core"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "grafalith-geometry",
+ "i_overlay",
+ "proptest",
+]
+
+[[package]]
+name = "grafalith-desktop"
+version = "0.1.0"
+dependencies = [
+ "grafalith-bindings",
+ "grafalith-core",
+ "grafalith-sdk",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-snap-layout",
+]
+
+[[package]]
+name = "grafalith-geometry"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
+name = "grafalith-io"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "grafalith-core",
+ "proptest",
+ "serde",
+ "serde_json",
+ "usvg",
+]
+
+[[package]]
+name = "grafalith-py"
+version = "0.1.0"
+dependencies = [
+ "grafalith-bindings",
+ "pyo3",
+ "serde_json",
+]
+
+[[package]]
+name = "grafalith-sdk"
+version = "0.1.0"
+dependencies = [
+ "grafalith-core",
+]
+
+[[package]]
+name = "grafalith-text"
+version = "0.1.0"
+dependencies = [
+ "grafalith-core",
+ "parley",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2530,93 +2618,6 @@ name = "oorandom"
 version = "11.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
-
-[[package]]
-name = "opennary"
-version = "0.1.0"
-dependencies = [
- "opennary-bindings",
- "serde_json",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "opennary-bindings"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "opennary-core",
- "opennary-io",
- "serde",
- "serde_json",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "opennary-core"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "i_overlay",
- "opennary-geometry",
- "proptest",
-]
-
-[[package]]
-name = "opennary-desktop"
-version = "0.1.0"
-dependencies = [
- "opennary-bindings",
- "opennary-core",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-snap-layout",
-]
-
-[[package]]
-name = "opennary-geometry"
-version = "0.1.0"
-dependencies = [
- "proptest",
-]
-
-[[package]]
-name = "opennary-io"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "opennary-core",
- "proptest",
- "serde",
- "serde_json",
- "usvg",
-]
-
-[[package]]
-name = "opennary-py"
-version = "0.1.0"
-dependencies = [
- "opennary-bindings",
- "pyo3",
- "serde_json",
-]
-
-[[package]]
-name = "opennary-sdk"
-version = "0.1.0"
-dependencies = [
- "opennary-core",
-]
-
-[[package]]
-name = "opennary-text"
-version = "0.1.0"
-dependencies = [
- "opennary-core",
- "parley",
-]
 
 [[package]]
 name = "option-ext"

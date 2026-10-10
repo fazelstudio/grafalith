@@ -1,4 +1,4 @@
-# crates — OpenNary Rust engine
+# crates — Grafalith Rust engine
 
 The Rust workspace is the single source of truth for the engine. Hosts
 (browser JS, Python, Tauri desktop) are thin adapters over the JSON-string
@@ -7,9 +7,9 @@ protocol — all engine rules live here.
 ## Crate responsibilities (one-way dependency)
 
 ```text
-opennary  ─┐
-            ├─▶ opennary-bindings ─▶ opennary-io ─▶ opennary-core ─▶ opennary-geometry
-opennary-python ┘        │              │           │            │
+grafalith  ─┐
+            ├─▶ grafalith-bindings ─▶ grafalith-io ─▶ grafalith-core ─▶ grafalith-geometry
+grafalith-python ┘        │              │           │            │
                      │              │           │            │
                JSON string      envelope +   domain      pure math
                batch protocol   clipboard   (no DOM,     (no deps)
@@ -17,31 +17,69 @@ opennary-python ┘        │              │           │            │
                                            no Tauri)
 ```
 
-- **`opennary-geometry`** — pure 2D math, zero deps: `point`, `rect` (`Bounds`),
+- **`grafalith-geometry`** — pure 2D math, zero deps: `point`, `rect` (`Bounds`),
   `segment`, `rotation`, `hit`, `path`, `transform` (resize/rotate/handles),
   `spatial` (`SpatialGrid`), `snap`, `viewport`.
-- **`opennary-core`** — persistent domain + editor session (see the module map in
-  `opennary-core/src/lib.rs`): `domain`, `history`, `session`, `ops`, `view`,
+- **`grafalith-core`** — persistent domain + editor session (see the module map in
+  `grafalith-core/src/lib.rs`): `domain`, `history`, `session`, `ops`, `view`,
   `ext`. `Document` is the sole version/nonce authority; all mutation goes
   through `Command` (two-phase validate-then-store, one history entry per
-  intent).
-- **`opennary-io`** — interchange: `schema` (versioned DTOs, lenient-version /
+  intent). Text creation stays provisional inside the edit session's history
+  transaction, so committing empty text leaves no element or undo entry.
+- **`grafalith-io`** — interchange: `schema` (versioned DTOs, lenient-version /
   strict-data), `pipeline` (`export/import`, staged plan, PNG descriptors),
   `clipboard_codec` (versioned envelope + bare-array compatibility).
-- **`opennary-bindings`** — the only stateful surface (`Engine`):
+- **`grafalith-bindings`** — the only stateful surface (`Engine`):
   `protocol` (JSON-string `BatchOp`, `PROTOCOL_VERSION`), `engine` (dispatch,
   reuses the same command/io machinery), `render_dto`/`session` shapes,
   `wasm::JsEngine` (string-only), `tauri` (thin wrapper, no Tauri dep).
-- **`opennary`** — npm distribution (`wasm-pack`), published as
-  `@fazelstudio/opennary`. Thin, string-only.
-- **`opennary-python`** — PyPI distribution (`maturin`/PyO3), published as
-  `opennary`. Thin, dict-in/dict-out.
-- **`opennary-sdk`** — Rust SDK facade for extensions.
-- **`opennary-text`** — Text measurement and shaping helpers.
+- **`grafalith`** — npm distribution (`wasm-pack`), published as
+  `@fazelstudio/grafalith`. Thin, string-only.
+- **`grafalith-python`** — PyPI distribution (`maturin`/PyO3), published as
+  `grafalith`. Thin, dict-in/dict-out.
+- **`grafalith-sdk`** — Rust SDK facade for extensions.
+- **`grafalith-text`** — Text measurement and shaping helpers.
+
+The SDK facade re-exports the engine extension traits plus the host-side
+packaging   modules: `manifest` (`.grlt` validation mirroring the TS SDK),
+`discovery` (installed-package listing), `storage` (per-extension JSON
+storage), `notification` (toast routing DTOs), `status` (lifecycle states
+mirroring the desktop status machine), `dependency` (activation-order
+resolution: missing/blocked/circular reports). The Tauri host calls these
+from `apps/desktop/src-tauri/src/extensions.rs`.
+
+## Distribution channels
+
+| Registry | Package | Built from |
+|---|---|---|
+| npm | `@fazelstudio/grafalith` | `crates/grafalith` (wasm-pack `cdylib`) |
+| PyPI | `grafalith` | `crates/grafalith-python` (maturin) |
+| crates.io | `grafalith-geometry`, `grafalith-core`, `grafalith-io`, `grafalith-bindings`, `grafalith-sdk`, `grafalith-text` | the engine crates (`rlib` libraries) |
+
+Only the six engine crates above are publishable to crates.io. The other
+workspace members are build artifacts or hosts, not libraries Rust code can
+depend on, and are pinned with `publish = false` so a stray
+`cargo publish -p <name>` cannot claim a registry name:
+
+| Crate | Why `publish = false` |
+|---|---|
+| `grafalith` | wasm-pack `cdylib`, no `rlib` — the npm artifact |
+| `grafalith-py` | PyO3 extension module — the PyPI artifact |
+| `grafalith-desktop` | Tauri application host (`apps/desktop/src-tauri`) |
+| `ext-sticker` | out-of-workspace teaching example |
+
+Each channel keeps the same `0.1.0` version, and the crates.io publish order
+follows the dependency arrow: `grafalith-geometry` → `grafalith-core` →
+`grafalith-io` → `grafalith-bindings` / `grafalith-sdk` / `grafalith-text`.
+
+`bun run verify:packages` (CI) enforces all of the above: required registry
+metadata, the `publish = false` guards, a clean `cargo package --list` file
+set, and a topological publish order. Publishing commands live in
+[`../DEVELOPMENT.md`](../DEVELOPMENT.md#publishing).
 
 ## Main rules
 
-- `opennary-core` must not depend on any host binding, renderer, DOM/Canvas,
+- `grafalith-core` must not depend on any host binding, renderer, DOM/Canvas,
   React, or Tauri (enforced by the `workspace_wiring` test).
 - All fallible ops → `EngineResult<T, EngineError>`; `panic!` is reserved for
   must-never-fail invariants and never crosses an FFI boundary.
@@ -88,7 +126,7 @@ The engine is deliberately architected for a future public extension SDK (the
   for the future `executeCommand` protocol op; the SDK will re-export the
   registry surface so extension authors never touch engine internals.
 
-When the SDK ships, it will be a thin facade crate (`opennary-sdk`) over these
+When the SDK ships, it will be a thin facade crate (`grafalith-sdk`) over these
 public surfaces — no engine changes required.
 
 ## Feature map (engine)
@@ -102,8 +140,8 @@ public surfaces — no engine changes required.
 | Domain ops | `group`, `lock`, `zorder`, `style`, `frame`, `alignment`, `arrow_binding`, `constraints`, `auto_layout`, `clipboard`, `components`, `assets`, `path_edit` | follow-binding + constraint propagation inside the same transaction (no hidden `afterUpsert`) |
 | View | `hit_test`, `render_model`, `canvas_mode`, `theme` | render as deterministic DTO; frame-clip partition; instance resolve |
 | Extensions | `shape_registry`, `shape_extension`, `extension`, `command_extension`, `serializer` | instance-scoped, no globals |
-| Interchange | `opennary-io/*` | versioned schema, staged import, clipboard codec, PNG plan |
-| Host boundary | `opennary-bindings/*` | JSON-string batch, per-op atomic, error envelopes |
+| Interchange | `grafalith-io/*` | versioned schema, staged import, clipboard codec, PNG plan |
+| Host boundary | `grafalith-bindings/*` | JSON-string batch, per-op atomic, error envelopes |
 
 What stays host-side (by design, not a gap): Canvas2D rasterization, DOM
 (textarea overlay, OS clipboard, file download), pixel-exact text measuring

@@ -56,6 +56,8 @@ export interface AppCommandContext {
   windowAction?: (action: 'minimize' | 'maximizeRestore' | 'close') => void | Promise<void>;
   activateTool?: (id: string) => void;
   runViewCommand?: (id: string) => void | Promise<void>;
+  /** Toggle sticky (locked) tool mode; the toolbar double-click wires here. */
+  toggleStickyTool?: () => void;
   /** Targeted project for card-scoped commands (home menu, editor duplicate). */
   targetProjectId?: string;
   /** Targeted kind for project creation (design, whiteboard, diagram). */
@@ -66,7 +68,7 @@ export interface AppCommandContext {
   refreshHome?: () => void | Promise<void>;
   /** Open a settings section page (`#/settings/<section>`). */
   openSettingsSection?: (section: string) => void;
-  /** Pick one `.onry` package file (host file dialog or hidden input). */
+  /** Pick one `.grlt` package file (host file dialog or hidden input). */
   pickExtensionFile?: () => Promise<File | undefined>;
   /** Install one picked package from raw bytes. */
   installExtensionBytes?: (bytes: Uint8Array, name: string) => Promise<{ packageId?: string; errors: string[] }>;
@@ -321,11 +323,11 @@ const APP_COMMANDS: readonly AppCommandDefinition[] = [
     labelKey: 'editor.menu.installExtension',
     defaultLabel: 'Install extension package',
     descriptionKey: 'editor.menu.installExtensionDescription',
-    defaultDescription: 'Install a extension from an .onry package file',
+    defaultDescription: 'Install a extension from an .grlt package file',
     scope: 'application',
     category: 'dialog',
     surfaces: ['palette'],
-    keywords: ['extension', 'install', 'onry', 'package'],
+    keywords: ['extension', 'install', 'grlt', 'package'],
     icon: 'plus',
     canExecute: (ctx) =>
       ctx.pickExtensionFile !== undefined && ctx.installExtensionBytes !== undefined
@@ -344,6 +346,47 @@ const APP_COMMANDS: readonly AppCommandDefinition[] = [
         return { status: 'notApplicable', reason: errors.join('; ') };
       }
       if (packageId) ctx.notify?.(`Extension installed: ${packageId}`);
+      return { status: 'ok' };
+    },
+  },
+  {
+    id: 'extension.openManager',
+    labelKey: 'extensions.manager.open',
+    defaultLabel: 'Open Extension Manager',
+    descriptionKey: 'extensions.manager.openDescription',
+    defaultDescription: 'List, enable, disable, and inspect extensions',
+    scope: 'application',
+    category: 'dialog',
+    surfaces: ['palette'],
+    keywords: ['extension', 'manager', 'plugins', 'grlt'],
+    icon: 'plus',
+    canExecute: () => enabled(),
+    execute: async (ctx) => {
+      const { executeManagerCommand } = await import('../platform/extensions/extensionManager');
+      const filter = ctx.targetName === 'active' || ctx.targetName === 'failed' ? ctx.targetName : 'all';
+      await executeManagerCommand(
+        filter === 'all'
+          ? 'grafalith.extensions.manager.open'
+          : `grafalith.extensions.manager.show${filter === 'active' ? 'Active' : 'Failed'}`,
+      );
+      return { status: 'ok' };
+    },
+  },
+  {
+    id: 'output.showSystem',
+    labelKey: 'extensions.output.showSystem',
+    defaultLabel: 'Show system output',
+    descriptionKey: 'extensions.output.showSystemDescription',
+    defaultDescription: 'Open the extension system log',
+    scope: 'application',
+    category: 'dialog',
+    surfaces: ['palette'],
+    keywords: ['output', 'log', 'system', 'extensions'],
+    icon: 'list',
+    canExecute: () => enabled(),
+    execute: async () => {
+      const { executeManagerCommand } = await import('../platform/extensions/extensionManager');
+      await executeManagerCommand('grafalith.extensions.output.showSystem');
       return { status: 'ok' };
     },
   },
@@ -484,6 +527,20 @@ const APP_COMMANDS: readonly AppCommandDefinition[] = [
     icon: 'select',
     canExecute: (ctx) => needsCallback(ctx, 'activateTool'),
     execute: (ctx) => ctx.activateTool?.('select'),
+  },
+  {
+    id: 'tool.toggleSticky',
+    labelKey: 'editor.tools.sticky',
+    defaultLabel: 'Toggle sticky tool',
+    descriptionKey: 'editor.tools.stickyDescription',
+    defaultDescription: 'Keep the current tool active after creating an object',
+    scope: 'tool',
+    category: 'tool',
+    surfaces: ['palette'],
+    keywords: ['tool', 'sticky', 'lock', 'repeat'],
+    icon: 'select',
+    canExecute: (ctx) => needsCallback(ctx, 'toggleStickyTool'),
+    execute: (ctx) => ctx.toggleStickyTool?.(),
   },
   {
     id: 'view.fitContent',

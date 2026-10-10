@@ -56,6 +56,21 @@ describe('app command registry', () => {
     expect(searchAppCommands('panel').length).toBeGreaterThan(0);
   });
 
+  test('sticky tool toggles through the injected host callback', async () => {
+    expect(canExecuteAppCommand('tool.toggleSticky', {}).executable).toBe(false);
+    expect(
+      canExecuteAppCommand('tool.toggleSticky', { toggleStickyTool: () => undefined }).executable,
+    ).toBe(true);
+    let calls = 0;
+    const result = await executeAppCommand('tool.toggleSticky', {
+      toggleStickyTool: () => {
+        calls += 1;
+      },
+    });
+    expect(result).toEqual({ status: 'ok' });
+    expect(calls).toBe(1);
+  });
+
   test('project CRUD routes through injected store callbacks', async () => {
     const calls: string[] = [];
     const base = {

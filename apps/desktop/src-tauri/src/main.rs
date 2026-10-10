@@ -1,4 +1,4 @@
-//! OpenNary desktop binary entry point.
+//! Grafalith desktop binary entry point.
 
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
@@ -6,5 +6,5 @@
 )]
 
 fn main() {
-    opennary_desktop_lib::run()
+    grafalith_desktop_lib::run()
 }

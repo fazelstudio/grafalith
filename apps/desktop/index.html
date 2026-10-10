@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenNary</title>
+    <title>Grafalith</title>
     <style>
       html {
         background: #ffffff;
@@ -16,7 +16,7 @@
       try {
         var storedTheme = null;
         try {
-          storedTheme = localStorage.getItem('opennary:theme');
+          storedTheme = localStorage.getItem('grafalith:theme');
         } catch (storageError) {}
         var useDark =
           storedTheme === 'dark' ||
@@ -29,7 +29,7 @@
         } catch (schemeError) {}
         var storedLocale = null;
         try {
-          storedLocale = localStorage.getItem('opennary:locale');
+          storedLocale = localStorage.getItem('grafalith:locale');
         } catch (localeError) {}
         if (storedLocale === 'en' || storedLocale === 'id') {
           document.documentElement.lang = storedLocale;

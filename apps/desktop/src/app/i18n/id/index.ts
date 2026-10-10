@@ -8,6 +8,7 @@ import settings from './settings';
 import dialogs from './dialogs';
 import notifications from './notifications';
 import errors from './errors';
+import extensions from './extensions';
 
 /** Indonesian resources; the annotation keeps the shape tied to English. */
 const id: EnDict = {
@@ -20,6 +21,7 @@ const id: EnDict = {
   dialogs,
   notifications,
   errors,
+  extensions,
 };
 
 export default id;

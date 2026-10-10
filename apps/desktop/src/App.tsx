@@ -34,6 +34,9 @@ function Routes() {
         if (routeId === 'settings-shortcuts') {
           return <SettingsScreen section="shortcuts" onNavigate={navigate} />;
         }
+        if (routeId === 'settings-extensions') {
+          return <SettingsScreen section="extensions" onNavigate={navigate} />;
+        }
         return <HomeScreen onOpenProject={(id) => navigate(editorPath(id))} />;
       }}
     </AppShell>

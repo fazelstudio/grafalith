@@ -6,7 +6,7 @@ const settings: EnDict['settings'] = {
   general: {
     title: 'Umum',
     description: 'Bahasa dan preferensi dasar aplikasi.',
-    offlineNote: 'OpenNary bekerja luring. Preferensi disimpan secara lokal di perangkat ini.',
+    offlineNote: 'Grafalith bekerja luring. Preferensi disimpan secara lokal di perangkat ini.',
     localeLabel: 'Bahasa',
     localeDescription: 'Bahasa antarmuka. Diterapkan tanpa muat ulang.',
     localeNames: {
@@ -46,6 +46,11 @@ const settings: EnDict['settings'] = {
     searchPlaceholder: 'Cari pintasan…',
     empty: 'Tidak ada pintasan yang cocok.',
     fixedNote: 'Pintasan bersifat tetap pada rilis ini. Sistem perintah belum mendukung penimpaan yang aman.',
+  },
+  extensions: {
+    title: 'Ekstensi',
+    description: 'Pengaturan yang dideklarasikan ekstensi terpasang. Berlaku pada aktivasi berikutnya.',
+    empty: 'Belum ada ekstensi terpasang yang mendeklarasikan pengaturan.',
   },
   actions: {
     resetSection: 'Kembalikan ke bawaan',

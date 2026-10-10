@@ -1,6 +1,6 @@
-# OpenNary Desktop
+# Grafalith Desktop
 
-Reference Tauri host for the OpenNary canvas engine.
+Reference Tauri host for the Grafalith canvas engine.
 
 ## Design system boundaries
 
@@ -25,15 +25,25 @@ Reference Tauri host for the OpenNary canvas engine.
 - Editor tools, commands, menus, and panels are registry-driven; new editor
   surfaces should consume those registries rather than duplicate handlers.
   Engine intents live in `src/registries/commands.ts`; host chrome lives in
-  `src/registries/appCommands.ts`. Menu placement lives in
+  `src/registries/appCommands.ts`. Canonical `grafalith.*` ids alias both
+  (`src/platform/commands/canonicalIds.ts`). Menu placement lives in
   `src/registries/menus.ts`; every row renders through the single `ActionRow`
   template and icons resolve through `src/ui/iconRegistry.tsx`.
   Palette search is unified over engine, host, and extension commands
   (`src/registries/unified.ts`, category groups, MRU ranking).
+  Visibility gating reads central context keys with `when` clauses
+  (`src/platform/context/contextKeys.ts`); lifecycle events flow through
+  the typed bus (`src/platform/events/appEvents.ts`).
   Boot order lives in `src/platform/boot/startupQueue.ts` (project entry
-  never waits for extensions). Extension packaging (`.onry`), the SDK surface,
+  never waits for extensions). Extension packaging (`.grlt`), the SDK surface,
   and the desktop extension host are specified in
-  `docs/guides/extensions.md`.
+  `docs/guides/extensions.md`. The host isolates failures per extension
+  (toast + status + output-channel detail, app keeps running), tracks the
+  full status machine (persisted across restarts), resolves dependency
+  order, and offers the Extension Manager
+  (`src/features/extension-manager/`) with enable/disable/reload/uninstall
+  without restarting plus per-extension and system output channels
+  (`src/features/output-panel/`).
   The editor menubar is File/Edit/View only (File holds New, Save,
   Duplicate, and Back to home), and the titlebar quick-open
   pill (layer list, `>` for commands) reuses the command registry and the
@@ -62,7 +72,7 @@ Reference Tauri host for the OpenNary canvas engine.
 - Persistence is manual Save (File > Save or Ctrl+S) plus a debounced
   autosave (default 2000 ms) that can be toggled and re-tuned in
   Settings > Editor. Unsaved changes show a `*` after the project name in
-  the titlebar capsule and in the window title (`name* - OpenNary`). There
+  the titlebar capsule and in the window title (`name* - Grafalith`). There
   is no recovery banner; the close dialog stays the single unsaved-changes
   gate.
 - User-facing text belongs in `src/app/i18n/` and must keep English and
@@ -84,6 +94,26 @@ Reference Tauri host for the OpenNary canvas engine.
   and both surfaces stay in sync. The modal uses the wide dialog variant
   at a fixed 75% of the window with internal scrolling; its header carries
   the search and the close button, so no bottom actions are needed.
+
+## Canvas interaction contract
+
+Text editing is provisional: an outside click commits the current session
+once and does not create a second empty text placeholder. Empty sessions are
+rolled back without an undo entry. Move and resize previews are transient and
+coalesced in the host; the final pointer release is the only persistent
+command for the gesture.
+
+While a text session is active, the host shows only the live text and a
+theme-contrasted caret; it does not draw an editing rectangle. Focus is applied
+after the input overlay mounts, and its line height/height follow the selected
+font and current draft lines. After commit, selecting the text shows four
+corner handles; text height remains content-driven during resize.
+
+Committed text uses its stroke color as the glyph foreground and keeps the
+background fill independent. A transparent background therefore does not hide
+the text. The canvas renderer also isolates text paint state and preserves
+horizontal alignment, opacity, and the font fallback used by the editing
+overlay.
 
 ## Run
 

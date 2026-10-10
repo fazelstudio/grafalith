@@ -1,6 +1,6 @@
-# Development Guide — OpenNary
+# Development Guide — Grafalith
 
-Canonical reference for building, testing, and publishing OpenNary.
+Canonical reference for building, testing, and publishing Grafalith.
 `README.md` links here for anything beyond install + quick start;
 `CONTRIBUTING.md` links here for commands; `AGENTS.md` §7 is a quick
 summary of this file.
@@ -23,8 +23,8 @@ Related: [`README.md`](./README.md) (project overview) ·
 ## Setup
 
 ```bash
-git clone https://github.com/fazelstudio/opennary.git
-cd opennary
+git clone https://github.com/fazelstudio/grafalith.git
+cd grafalith
 
 # Desktop demo dependencies only (engine needs no JS install)
 bun install
@@ -67,17 +67,17 @@ Deterministic equivalents run in every `cargo test` (`adversarial_parsers`).
 
 ```bash
 cargo install cargo-fuzz
-cd crates/opennary-io/fuzz
+cd crates/grafalith-io/fuzz
 cargo +nightly fuzz run import_scene -- -max_total_time=120
 cargo +nightly fuzz run clipboard -- -max_total_time=60
 ```
 
 ## Artifacts
 
-### npm / WASM (`@fazelstudio/opennary`)
+### npm / WASM (`@fazelstudio/grafalith`)
 
-Requires `wasm-pack`. Source of truth: `crates/opennary/`
-(see [`crates/opennary/README.md`](./crates/opennary/README.md)).
+Requires `wasm-pack`. Source of truth: `crates/grafalith/`
+(see [`crates/grafalith/README.md`](./crates/grafalith/README.md)).
 
 ```bash
 # Browser bundler target (out: pkg/bundler)
@@ -87,10 +87,10 @@ bun run build:wasm
 bun run build:wasm:node
 ```
 
-### Python / PyPI (`opennary`)
+### Python / PyPI (`grafalith`)
 
-Requires `maturin`. Source of truth: `crates/opennary-python/`
-(see [`crates/opennary-python/README.md`](./crates/opennary-python/README.md)).
+Requires `maturin`. Source of truth: `crates/grafalith-python/`
+(see [`crates/grafalith-python/README.md`](./crates/grafalith-python/README.md)).
 
 ```bash
 # Dev install into the active venv (fast iteration)
@@ -114,18 +114,18 @@ bun run tauri:build
 
 ## Publishing
 
-### npm (`@fazelstudio/opennary`)
+### npm (`@fazelstudio/grafalith`)
 
 ```bash
 bun run build:wasm
 cd pkg/bundler && npm publish
 ```
 
-### PyPI (`opennary`)
+### PyPI (`grafalith`)
 
 PyPI has no scope concept — the name is flat and globally unique
-(`opennary`); branding is carried by the GitHub org links in
-`crates/opennary-python/pyproject.toml` plus PyPI's org verification badge.
+(`grafalith`); branding is carried by the GitHub org links in
+`crates/grafalith-python/pyproject.toml` plus PyPI's org verification badge.
 
 First-time checklist:
 
@@ -136,7 +136,7 @@ First-time checklist:
    ```bash
    maturin build --release
    twine upload --repository testpypi dist/*
-   pip install --index-url https://test.pypi.org/simple/ opennary
+   pip install --index-url https://test.pypi.org/simple/ grafalith
    ```
 
 4. Publish:
@@ -146,14 +146,49 @@ First-time checklist:
    twine upload dist/*
    ```
 
-Keep `crates/opennary-python/pyproject.toml` (`[project].version`) and
-`crates/opennary-python/Cargo.toml` in lockstep when bumping versions.
+Keep `crates/grafalith-python/pyproject.toml` (`[project].version`) and
+`crates/grafalith-python/Cargo.toml` in lockstep when bumping versions.
+
+### crates.io (`grafalith-*`)
+
+crates.io is the Rust registry, the same role npm plays for JavaScript and
+PyPI for Python: global unique names, first-come-first-served, and versions
+that cannot be deleted once published (yanking only stops new adoption).
+
+The Rust-facing packages are the six engine crates, in dependency order —
+each one must be published after its internal dependencies already exist:
+
+```bash
+cargo login                      # once per machine
+cargo publish -p grafalith-geometry
+cargo publish -p grafalith-core
+cargo publish -p grafalith-io
+cargo publish -p grafalith-bindings
+cargo publish -p grafalith-sdk
+cargo publish -p grafalith-text
+```
+
+`cargo publish -p <crate>` verifies the manifest, checks that every internal
+dependency is already on crates.io with a matching version, then uploads —
+which is why the order above is not optional.
+
+Not every workspace member is publishable. `publish = false` marks the four
+crates that are build artifacts or hosts rather than libraries
+(`grafalith` wasm cdylib, `grafalith-py` PyO3 module, `grafalith-desktop`
+Tauri app, `ext-sticker` example); see the distribution table in
+[`crates/README.md`](crates/README.md#distribution-channels).
+
+Current status: the crates are publish-ready (`cargo package --list` is clean
+and registry metadata is complete) but **no version has been published yet**.
+Publish the first version when the engine API surface is ready to be
+consumed — the crates.io names are still unclaimed, and
+`bun run verify:packages` re-checks readiness on every CI run.
 
 ## Troubleshooting
 
 - `wasm-pack` fails on Windows: retry with release profile
-  (`wasm-opt = true` only for publishes, see `crates/opennary/Cargo.toml`).
-- `cargo check -p opennary-python` is the fallback when no Python
+  (`wasm-opt = true` only for publishes, see `crates/grafalith/Cargo.toml`).
+- `cargo check -p grafalith-python` is the fallback when no Python
   interpreter is configured.
 - `bun run clean` removes build outputs and caches (`node_modules`,
   `target`, `pkg`, `dist`, wheels, `__pycache__`, `.venv`, coverage)

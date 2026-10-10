@@ -1,0 +1,39 @@
+[package]
+name = "grafalith"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+# npm-only artifact: this crate is a wasm-bindgen `cdylib` (no rlib), so it
+# cannot be used as a Rust dependency. `publish = false` keeps an accidental
+# `cargo publish -p grafalith` from claiming the bare `grafalith` name on
+# crates.io with a crate Rust projects cannot depend on.
+publish = false
+description = "WASM/npm distribution of the Grafalith Rust engine: wasm-bindgen facade over grafalith-bindings for browser and Node.js hosts. JSON-string protocol; string-only, never throws. Published to npm as @fazelstudio/grafalith."
+repository = "https://github.com/fazelstudio/grafalith"
+homepage = "https://github.com/fazelstudio/grafalith"
+keywords = ["canvas", "whiteboard", "wasm", "graphics", "editor"]
+
+[lib]
+crate-type = ["cdylib"]
+
+# wasm-opt is disabled by default: the prebuilt binary wasm-pack downloads
+# is not reliable on all Windows hosts. Enable it for release publishes
+# (`wasm-opt = true`) where the extra optimization pass is worth the risk.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = false
+
+[dependencies]
+grafalith-bindings = { version = "0.1.0", path = "../grafalith-bindings" }
+wasm-bindgen = "0.2"
+serde_json = "1"
+
+# Host-gated SVG import: forwards usvg through the bindings so the
+# default npm artifact stays lean.
+[features]
+svg = ["grafalith-bindings/svg"]
+
+[lints]
+workspace = true

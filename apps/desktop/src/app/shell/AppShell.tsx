@@ -13,6 +13,7 @@ import { useI18n } from '../i18n/resources';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useToast } from './ToastProvider';
 import { ExtensionDialogHost } from './ExtensionDialogHost';
+import { ExtensionPanelsHost } from './ExtensionPanelsHost';
 import { getExtensionHost } from '../../platform/extensions/extensionHost';
 import { revealWhenReady } from '../boot';
 import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
@@ -235,6 +236,7 @@ export function AppShell({ children }: ShellProps) {
         })}
       </div>
       <ExtensionDialogHost />
+      <ExtensionPanelsHost />
     </div>
   );
 }

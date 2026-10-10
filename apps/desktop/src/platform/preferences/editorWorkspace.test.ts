@@ -10,6 +10,7 @@ describe('editor workspace preferences', () => {
   test('falls back to the select tool with both panels open', () => {
     const workspace = loadEditorWorkspace();
     expect(workspace.activeTool).toBe('select');
+    expect(workspace.stickyTool).toBe(false);
     expect(workspace.openPanels).toEqual(['layers', 'inspector']);
     expect(workspace.leftPanelWidth).toBe(264);
     expect(workspace.rightPanelWidth).toBe(264);
@@ -21,6 +22,7 @@ describe('editor workspace preferences', () => {
     expect(() =>
       saveEditorWorkspace({
         activeTool: 'rectangle',
+        stickyTool: false,
         openPanels: ['layers'],
         leftPanelWidth: 200,
         rightPanelWidth: 300,

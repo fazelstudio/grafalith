@@ -1,5 +1,5 @@
 /** Recently-used command ids for palette ranking (MRU, capped). */
-const MRU_KEY = 'opennary:palette-mru';
+const MRU_KEY = 'grafalith:palette-mru';
 const MRU_LIMIT = 12;
 
 function readStored(): string[] {

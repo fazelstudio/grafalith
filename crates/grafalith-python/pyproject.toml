@@ -1,0 +1,51 @@
+[build-system]
+requires = ["maturin>=1.7"]
+build-backend = "maturin"
+
+[project]
+name = "grafalith"
+version = "0.1.0"
+description = "Python bindings for the Grafalith Rust canvas engine (PyO3/maturin)."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "fazelstudio" },
+]
+keywords = ["canvas", "whiteboard", "drawing", "2d", "engine", "excalidraw", "tldraw"]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://github.com/fazelstudio/grafalith"
+Repository = "https://github.com/fazelstudio/grafalith"
+Issues = "https://github.com/fazelstudio/grafalith/issues"
+
+[tool.maturin]
+bindings = "pyo3"
+features = ["pyo3/extension-module"]
+manifest-path = "Cargo.toml"
+module-name = "grafalith._grafalith"
+python-source = "python"
+# sdist hygiene: build artifacts must never leak into PyPI sdists.
+# (MANIFEST.in is intentionally absent — maturin ignores it; this is the equivalent.)
+# Wheels only ship python/ + the compiled extension by construction.
+exclude = [
+  "target/**",
+  "dist/**",
+  "**/__pycache__/**",
+  "**/*.egg-info/**",
+  ".venv/**",
+]

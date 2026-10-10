@@ -1,19 +1,20 @@
-//! OpenNary desktop application layer (Tauri host).
+//! Grafalith desktop application layer (Tauri host).
 //!
 //! Thin native host over the Rust engine: owns one instance-scoped
-//! [`Engine`](opennary_bindings::Engine) behind Tauri managed state and
+//! [`Engine`](grafalith_bindings::Engine) behind Tauri managed state and
 //! exposes it through Tauri commands. No domain logic lives here — hit
 //! testing, selection, transforms, history, geometry, and rendering rules
-//! all stay in `opennary-core` behind `opennary-bindings`.
+//! all stay in `grafalith-core` behind `grafalith-bindings`.
 //!
 //! Project files live beside the engine state: one directory per project
 //! holding a small metadata file and the full scene payload, so the home
 //! list reads metadata only and never parses scene documents.
 
+mod extensions;
 mod projects;
 
-use opennary_bindings::tauri as engine_ipc;
-use opennary_bindings::Engine;
+use grafalith_bindings::tauri as engine_ipc;
+use grafalith_bindings::Engine;
 use std::sync::Mutex;
 
 /// Tauri managed state: the single instance-scoped engine handle.
@@ -249,6 +250,41 @@ fn project_unfavorite(app: tauri::AppHandle, id: String) -> Result<String, Strin
         .map_err(|e| e.to_json())
 }
 
+#[tauri::command]
+fn extension_list(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = extensions::extensions_dir(&app)?;
+    let names = extensions::list_installed(&dir);
+    serde_json::to_string(&names).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn extension_validate_manifest(manifest_json: String) -> String {
+    let errors = extensions::validate_manifest_json(&manifest_json);
+    serde_json::to_string(&errors).unwrap_or_else(|_| "[\"serialization failed\"]".to_string())
+}
+
+#[tauri::command]
+fn extension_storage_get(
+    app: tauri::AppHandle,
+    extension_id: String,
+    key: String,
+) -> Result<String, String> {
+    let path = extensions::storage_path_for(&app, &extension_id)?;
+    Ok(extensions::storage_get(&path, &key))
+}
+
+#[tauri::command]
+fn extension_storage_set(
+    app: tauri::AppHandle,
+    extension_id: String,
+    key: String,
+    value_json: String,
+) -> Result<String, String> {
+    let path = extensions::storage_path_for(&app, &extension_id)?;
+    extensions::storage_set(&path, &key, &value_json)?;
+    Ok("{\"stored\":true}".to_string())
+}
+
 /// Starts the Tauri application with a fresh engine instance.
 pub fn run() {
     tauri::Builder::default()
@@ -292,6 +328,10 @@ pub fn run() {
             export_scene,
             import_scene,
             create_engine,
+            extension_list,
+            extension_validate_manifest,
+            extension_storage_get,
+            extension_storage_set,
             project_list,
             project_trash_list,
             project_purge_expired,

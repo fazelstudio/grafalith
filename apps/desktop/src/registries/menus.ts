@@ -67,6 +67,7 @@ const MENU_ITEMS: readonly MenuItemDefinition[] = [
   { id: 'settings.appearance', labelKey: 'settings.appearance.title', defaultLabel: 'Appearance', location: 'select.list', commandId: 'settings.openSection', commandKind: 'app', group: 0, order: 10 },
   { id: 'settings.editor', labelKey: 'settings.editor.title', defaultLabel: 'Editor', location: 'select.list', commandId: 'settings.openSection', commandKind: 'app', group: 0, order: 20 },
   { id: 'settings.shortcuts', labelKey: 'settings.shortcuts.title', defaultLabel: 'Shortcuts', location: 'select.list', commandId: 'settings.openSection', commandKind: 'app', group: 0, order: 30 },
+  { id: 'settings.extensions', labelKey: 'settings.extensions.title', defaultLabel: 'Extensions', location: 'select.list', commandId: 'settings.openSection', commandKind: 'app', group: 0, order: 40 },
 ];
 
 /** Validated lookup over contributed menu rows. */

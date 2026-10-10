@@ -11,8 +11,17 @@ import {
   type ProjectSummary,
 } from '../../platform/projects/types';
 import { filterProjects } from '../projects/search';
-import { projectTemplateRegistry } from '../projects/templateRegistry';
+import { buildBlankScene, projectTemplateRegistry } from '../projects/templateRegistry';
 import { projectKindRegistry, templateForKind } from '../projects/projectKinds';
+import {
+  homeWidgets,
+  interceptProjectCreate,
+  projectTemplates,
+} from '../../platform/extensions/homeContributions';
+import { getExtensionHost } from '../../platform/extensions/extensionHost';
+import { extensionPanelStore } from '../../platform/extensions/extensionPanels';
+import { getContextKeys } from '../../platform/context/contextKeys';
+import { ExtensionErrorBoundary } from '../extension-manager/ExtensionErrorBoundary';
 import { ChevronDownIcon, EditorIcon, GridViewIcon, ListViewIcon, PlusIcon } from '../../ui/icons';
 import { Button, EmptyState, LoadingState, SearchInput } from '../../ui/primitives/controls';
 import { Tooltip } from '../../ui/primitives/tooltip';
@@ -86,6 +95,19 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   }, [refresh]);
 
   useEffect(() => {
+    // Home owns the context keys while no editor is mounted so `when`
+    // clauses gate on live screen state.
+    getContextKeys().syncEditorState({
+      screen: 'home',
+      editorType: 'none',
+      hasActiveProject: false,
+      selectedCount: 0,
+      activeTool: 'select',
+      layerSelected: false,
+    });
+  }, []);
+
+  useEffect(() => {
     if (!createMenuOpen) return;
     createMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     function onPointerDown(event: PointerEvent): void {
@@ -132,8 +154,17 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     setDialogPending(true);
     setDialogError(null);
     try {
-      const template = projectTemplateRegistry.get(templateId) ?? projectTemplateRegistry.all()[0];
-      const created = await getProjectStore().create(name, template.buildScene(), template.kind);
+      const builtin = projectTemplateRegistry.get(templateId);
+      const extensionTemplate = builtin
+        ? undefined
+        : projectTemplates().find((template) => template.id === templateId);
+      const template = builtin ?? projectTemplateRegistry.all()[0];
+      const kind = extensionTemplate?.kind ?? template.kind;
+      const created = await getProjectStore().create(
+        name,
+        builtin ? template.buildScene() : buildBlankScene(),
+        kind,
+      );
       notify(t('projects.notifications.created', { name: created.name }));
       setDialog(null);
       onOpenProject(created.id);
@@ -149,7 +180,10 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
 
   function createOfKind(kind: ProjectKind): void {
     setCreateMenuOpen(false);
-    openDialog({ kind: 'create', templateId: templateForKind(kind).id });
+    // Extensions may redirect creation (custom template flow); otherwise
+    // the kind default template opens as before.
+    const redirect = interceptProjectCreate(kind);
+    openDialog({ kind: 'create', templateId: redirect ?? templateForKind(kind).id });
   }
 
   async function renameProject(id: string, name: string): Promise<void> {
@@ -311,6 +345,10 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   }
 
   const busy = openingId !== null;
+  function openExtensionWidget(extensionId: string): void {
+    getExtensionHost().showOutput(extensionId);
+    extensionPanelStore.openOutput(false);
+  }
   function changeViewMode(mode: HomeViewMode): void {
     setViewMode(mode);
     preferenceService.setHomeViewMode(mode);
@@ -429,6 +467,21 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
                     <span className="home__create-menu-title">{t(entry.labelKey)}</span>
                   </button>
                 ))}
+                {projectTemplates().map((template) => (
+                  <button
+                    key={`extension-template:${template.id}`}
+                    type="button"
+                    className="home__create-menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      openDialog({ kind: 'create', templateId: template.id });
+                    }}
+                  >
+                    <EditorIcon size={15} />
+                    <span className="home__create-menu-title">{template.title}</span>
+                  </button>
+                ))}
               </div>
             ) : null}
           </div>
@@ -454,6 +507,27 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
             name: projects.find((project) => project.id === openingId)?.name ?? '',
           })}
         </div>
+      ) : null}
+
+      {homeWidgets().length > 0 ? (
+        <ExtensionErrorBoundary surface="home widgets">
+          <section className="home__recent" aria-label={t('extensions.home.widgetsTitle')}>
+            <h2 className="home__section-title">{t('extensions.home.widgetsTitle')}</h2>
+            <div className="home__grid">
+              {homeWidgets().map((widget) => (
+                <button
+                  key={widget.id}
+                  type="button"
+                  className="home__recent-card"
+                  onClick={() => openExtensionWidget(widget.extensionId)}
+                  title={widget.extensionId}
+                >
+                  <span>{widget.title}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </ExtensionErrorBoundary>
       ) : null}
 
       {showRecentSection ? (

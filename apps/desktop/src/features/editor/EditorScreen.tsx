@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEngine, type FrameSnapshot } from '../../hooks/useEngine';
 import { useI18n } from '../../app/i18n/resources';
+import { useTheme } from '../../app/theme/ThemeProvider';
+import { themeTokens } from '../../app/theme/tokens';
 import { notifyBootDataReady } from '../../app/boot';
 import { Button, EmptyState, LoadingState } from '../../ui/primitives/controls';
 import { Dialog } from '../../ui/primitives/overlays';
@@ -22,6 +24,7 @@ import { CreateProjectDialog } from '../home/ProjectDialogs';
 import { SettingsModal } from '../settings/SettingsModal';
 import { getProjectStore } from '../../platform/projects/projectService';
 import { getExtensionHost } from '../../platform/extensions/extensionHost';
+import { getContextKeys } from '../../platform/context/contextKeys';
 import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
 import {
   normalizeProjectKind,
@@ -92,6 +95,7 @@ function sameViewport(a: ViewportState, b: ViewportState): boolean {
 export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorScreenProps) {
   const engine = useEngine();
   const { t } = useI18n();
+  const { resolved } = useTheme();
   const { notify } = useToast();
   const [workspace, setWorkspace] = useState<EditorWorkspace>(() => preferenceService.getWorkspace());
   const [frame, setFrame] = useState<FrameSnapshot | null>(null);
@@ -140,9 +144,22 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
     }
   }, [frame, session.kind]);
 
+  const documentOpenedRef = useRef(false);
   useEffect(() => {
-    if (session.kind === 'ready') getExtensionHost().emitDocument(projectId);
+    if (session.kind === 'ready') {
+      getExtensionHost().emitDocument(projectId);
+      documentOpenedRef.current = true;
+    }
+    return () => {
+      // Only close what this screen actually opened: opening→ready churn
+      // and unmounts before ready must not emit a phantom close.
+      if (documentOpenedRef.current) {
+        documentOpenedRef.current = false;
+        getExtensionHost().emitProjectClosed(projectId);
+      }
+    };
   }, [session.kind, projectId]);
+
   const { saveState, saveNow, flushForClose } = useProjectPersistence(
     engine,
     projectId,
@@ -158,10 +175,26 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
   const activeTool = workspace.activeTool;
 
   useEffect(() => {
+    // Keep central context keys current so `when` clauses, palette rows,
+    // and extension tools gate on live editor state.
+    if (session.kind !== 'ready') return;
+    const selectedCount = frame?.session.selection.length ?? 0;
+    getContextKeys().syncEditorState({
+      screen: 'editor',
+      editorType: projectKind,
+      hasActiveProject: true,
+      selectedCount,
+      activeTool,
+      layerSelected: selectedCount > 0,
+    });
+    getExtensionHost().emitActiveEditor(projectKind);
+  }, [session.kind, projectId, projectKind, activeTool, frame]);
+
+  useEffect(() => {
     preferenceService.setWorkspace(workspace);
   }, [workspace]);
 
-  // Window identity follows the localized app name ("<name>[*] - OpenNary")
+  // Window identity follows the localized app name ("<name>[*] - Grafalith")
   // while a project is open so the OS frame matches the titlebar capsule,
   // including the dirty marker.
   const appName = t('common.appName');
@@ -249,6 +282,23 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
     setWorkspace((prev) => (prev.activeTool === tool ? prev : { ...prev, activeTool: tool }));
   }, []);
 
+  const handleToggleSticky = useCallback(() => {
+    setWorkspace((prev) => ({ ...prev, stickyTool: !prev.stickyTool }));
+  }, []);
+
+  // Keep the engine's canvas-background token aligned with the desktop
+  // canvas: new text defaults contrast against this (stored per element,
+  // so existing objects never change when the theme switches).
+  useEffect(() => {
+    if (!engine.ready || session.kind !== 'ready') return;
+    const canvasBackground = themeTokens[resolved].colors.canvasBg;
+    void engine
+      .sendBatch([{ op: 'configure', theme: { colors: { canvasBackground } } }])
+      .catch(() => {
+        // Text defaults stay usable regardless; the next sync covers it.
+      });
+  }, [engine, engine.ready, session.kind, resolved]);
+
   const dismissHint = useCallback(() => {
     setWorkspace((prev) => ({ ...prev, hintDismissed: true }));
   }, []);
@@ -277,7 +327,7 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'opennary-scene.json';
+    link.download = 'grafalith-scene.json';
     link.click();
     URL.revokeObjectURL(url);
   }, [engine]);
@@ -496,6 +546,7 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
       },
       notify,
       activateTool: (id: string) => handleToolChange(id),
+      toggleStickyTool: () => handleToggleSticky(),
       runViewCommand: (id: string) => handleQuickExecute(id),
       pickExtensionFile: () =>
         new Promise<File | undefined>((resolve) => {
@@ -519,6 +570,7 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
       workspace.openPanels,
       notify,
       handleToolChange,
+      handleToggleSticky,
       openCommands,
       handleQuickExecute,
     ],
@@ -633,6 +685,7 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
         key={canvasKey}
         engine={engine}
         activeTool={activeTool}
+        stickyTool={workspace.stickyTool}
         onFrame={handleFrame}
         onRenderError={handleRenderError}
         commandContext={commandContext}
@@ -640,7 +693,15 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
         onToolChange={handleToolChange}
       />
     ),
-    toolbar: <EditorToolbar activeTool={activeTool} onToolChange={handleToolChange} />,
+    toolbar: (
+      <EditorToolbar
+        activeTool={activeTool}
+        onToolChange={handleToolChange}
+        kind={projectKind}
+        stickyTool={workspace.stickyTool}
+        onToggleSticky={handleToggleSticky}
+      />
+    ),
     overlays,
     leftDock: (
       <PanelHost
@@ -703,7 +764,7 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
       <input
         ref={extensionInputRef}
         type="file"
-        accept=".onry,application/zip"
+        accept=".grlt,application/zip"
         aria-label={t('editor.menu.installExtension')}
         style={{ display: 'none' }}
         onChange={(event) => {

@@ -1,19 +1,19 @@
-# Python Guide — OpenNary
+# Python Guide — Grafalith
 
-Use the OpenNary engine from Python through the PyPI build.
+Use the Grafalith engine from Python through the PyPI build.
 
-Package: `opennary`. Source of truth: `crates/opennary-python/`.
+Package: `grafalith`. Source of truth: `crates/grafalith-python/`.
 
 ## Install
 
 ```bash
-pip install opennary
+pip install grafalith
 ```
 
 ## Quick start
 
 ```python
-from opennary import Engine
+from grafalith import Engine
 
 engine = Engine()
 
@@ -55,5 +55,5 @@ bun run dev:python
 bun run build:python
 ```
 
-Details: [`crates/opennary-python/README.md`](../../crates/opennary-python/README.md).
+Details: [`crates/grafalith-python/README.md`](../../crates/grafalith-python/README.md).
 Publishing: [`../../DEVELOPMENT.md`](../../DEVELOPMENT.md).

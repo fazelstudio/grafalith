@@ -1,7 +1,7 @@
 {
-  "name": "opennary",
+  "name": "grafalith",
   "private": true,
-  "description": "OpenNary monorepo root — Rust canvas engine (crates/*) with Tauri desktop demo (apps/desktop). Engine distributed as @fazelstudio/opennary (npm/WASM) and opennary (PyPI).",
+  "description": "Grafalith monorepo root — Rust canvas engine (crates/*) with Tauri desktop demo (apps/desktop). Engine distributed as @fazelstudio/grafalith (npm/WASM) and grafalith (PyPI).",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -14,17 +14,18 @@
     "fmt:check": "cargo fmt --all -- --check",
     "build": "cargo build --workspace",
     "build:release": "cargo build --workspace --release",
-    "build:wasm": "wasm-pack build crates/opennary --target bundler --out-dir ../../pkg/bundler --scope fazelstudio",
-    "build:wasm:node": "wasm-pack build crates/opennary --target nodejs --out-dir ../../pkg/node --scope fazelstudio",
-    "build:python": "maturin build -m crates/opennary-python/Cargo.toml",
-    "publish:python": "maturin build -m crates/opennary-python/Cargo.toml && maturin upload dist/*",
-    "dev:python": "maturin develop -m crates/opennary-python/Cargo.toml",
+    "build:wasm": "wasm-pack build crates/grafalith --target bundler --out-dir ../../pkg/bundler --scope fazelstudio",
+    "build:wasm:node": "wasm-pack build crates/grafalith --target nodejs --out-dir ../../pkg/node --scope fazelstudio",
+    "build:python": "maturin build -m crates/grafalith-python/Cargo.toml",
+    "publish:python": "maturin build -m crates/grafalith-python/Cargo.toml && maturin upload dist/*",
+    "dev:python": "maturin develop -m crates/grafalith-python/Cargo.toml",
     "dev:desktop": "bun run --filter @fazelstudio/desktop dev",
     "tauri": "bun run --filter @fazelstudio/desktop tauri",
     "tauri:dev": "bun run --filter @fazelstudio/desktop tauri:dev",
     "tauri:build": "bun run --filter @fazelstudio/desktop tauri:build",
     "verify:docs": "python3 scripts/verify-docs.py",
     "verify:bindings": "python3 scripts/gen_command_bindings.py --check",
+    "verify:packages": "python3 scripts/verify_crate_publish.py",
     "i18n:verify": "bun run --filter @fazelstudio/desktop i18n:verify",
     "clean": "node scripts/clean.mjs"
   },

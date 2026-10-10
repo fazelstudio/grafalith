@@ -5,7 +5,7 @@ types, tools, commands, renderers, importer/exporters — without modifying
 engine sources, and (b) shipping desktop extensions without forking
 `apps/desktop`.
 
-> Vocabulary: an installable unit users download is an **Extension** (`.onry`,
+> Vocabulary: an installable unit users download is an **Extension** (`.grlt`,
 > see §6). `*Extension` names are also the engine capability traits
 > (`ShapeExtension`, `CommandExtension`, …) — the Rust interfaces a native
 > extension implements. Native (Rust) and desktop (TypeScript) extensions
@@ -22,7 +22,7 @@ No built-in UI or keymap is required.
 TypeScript (WASM), using the string protocol (`stable`):
 
 ```ts
-import { JsEngine } from "@fazelstudio/opennary";
+import { JsEngine } from "@fazelstudio/grafalith";
 
 const engine = new JsEngine();
 
@@ -41,7 +41,7 @@ undoButton.disabled = !state.results[0].data.canUndo;
 Python (`stable`):
 
 ```python
-from opennary import Engine
+from grafalith import Engine
 
 engine = Engine()
 # Custom button: activate the rectangle tool, then create a node
@@ -56,10 +56,10 @@ Rust (native embedding, `unstable` surface for direct `Document` access;
 prefer the batch protocol unless embedding natively):
 
 ```rust
-use opennary_bindings::Engine;
+use grafalith_bindings::Engine;
 
 let mut engine = Engine::new();
-let res = engine.apply_ops(vec![opennary_bindings::BatchOp::Select {
+let res = engine.apply_ops(vec![grafalith_bindings::BatchOp::Select {
     ids: vec!["rect-1".to_string()],
 }]);
 assert_eq!(res.applied, 1);
@@ -70,21 +70,21 @@ re-querying `view.renderModel` + `session.state` — one crossing per frame.
 
 ## 2. External Rust crate: new node type + tool + command
 
-1. Depend on `opennary-core` (path or published version) — never copy engine files.
+1. Depend on `grafalith-core` (path or published version) — never copy engine files.
 2. Implement `ShapeExtension` (behavior mirrors `extension_example.rs`):
 
 ```rust
-use opennary_core::{ShapeExtension, Element, EngineResult};
+use grafalith_core::{ShapeExtension, Element, EngineResult};
 
 pub struct StickerShape;
 
 impl ShapeExtension for StickerShape {
     fn type_name(&self) -> &str { "acme.sticker" }
-    fn bounds(&self, el: &Element) -> Option<opennary_core::geometry::Bounds> {
+    fn bounds(&self, el: &Element) -> Option<grafalith_core::geometry::Bounds> {
         Some(el.bounds())
     }
     fn hit_test(&self, el: &Element, x: f64, y: f64) -> Option<bool> {
-        Some(opennary_core::hit_test::hit_test_element(el, x, y))
+        Some(grafalith_core::hit_test::hit_test_element(el, x, y))
     }
 }
 ```
@@ -95,7 +95,7 @@ impl ShapeExtension for StickerShape {
 4. Register without touching core:
 
 ```rust
-use opennary_core::{ExtensionRegistry, ShapeRegistry};
+use grafalith_core::{ExtensionRegistry, ShapeRegistry};
 
 let mut preg = ExtensionRegistry::new();
 preg.register(Box::new(AcmeExtension))?;
@@ -115,7 +115,7 @@ intent = one history entry (go through `Command`, never direct field mutation).
 ## 3. Renderer / importer / exporter capabilities
 
 - Renderer: consume `view.renderModel` DTOs host-side (Canvas2D today).
-  Never add raster code to `opennary-core`.
+  Never add raster code to `grafalith-core`.
 - Importer/exporter: implement `SerializerExtension`/`ImporterExtension`/
   `ExporterExtension`; JSON stays the interchange language.
 
@@ -126,13 +126,13 @@ intent = one history entry (go through `Command`, never direct field mutation).
   `cargo test --manifest-path examples/ext-sticker/Cargo.toml`.
 - `examples/custom-button/` — one toolbar scenario on three hosts, each
   against a real built artifact.
-- `generated/opennary-commands.d.ts` + `generated/opennary.pyi` — produced by
+- `generated/grafalith-commands.d.ts` + `generated/grafalith.pyi` — produced by
   `scripts/gen_command_bindings.py` from the single 79-op table
   (CI runs `--check`).
 
 ## 5. TypeScript SDK
 
-`packages/opennary-sdk` is the extension surface for TypeScript: `.onry`
+`packages/grafalith-sdk` is the extension surface for TypeScript: `.grlt`
 manifests (`manifest.ts`), the extension command bus (`commands.ts`),
 contribution validation (`contributions.ts`), window surfaces
 (`window.ts`: notifications, quick pick, input, dialogs, status bar),
@@ -140,16 +140,16 @@ workspace surfaces (`workspace.ts`: config, events, memento), activation
 (`extension.ts`: eager plus lazy `onStartup`/`onCommand`/`onView`), tool
 contributions, and overlay renderers over a typed engine client. It drives
 the real engine through the same JSON protocol — no engine changes, no
-  second module. Full authoring contract: [§6 below](#6-desktop-extension-packages-onry).
+  second module. Full authoring contract: [§6 below](#6-desktop-extension-packages-grlt).
 
 Boundary rule: TypeScript extensions contribute UI, tools, panels,
 overlays, and automation. New node types and history-integrated commands
-stay Rust (`crates/opennary-sdk`, `examples/ext-sticker`) because `Custom`
+stay Rust (`crates/grafalith-sdk`, `examples/ext-sticker`) because `Custom`
 payloads and `CommandExtension` never cross the JSON boundary.
 
 ---
 
-## 6. Desktop extension packages (`.onry`)
+## 6. Desktop extension packages (`.grlt`)
 
 Audience: third-party developers shipping desktop extensions without forking
 `apps/desktop`. The desktop owns all UI chrome; the engine owns document
@@ -157,15 +157,15 @@ state; extensions contribute through registries.
 
 ### 6.1. Package identity
 
-- Suffix: `.onry` (locked; `.opn` collides with manufacturing/chess
+- Suffix: `.grlt` (locked; `.opn` collides with manufacturing/chess
   software, `.ony` collides with the `ony` CLI/product family).
-- Format: zip archive. Root file: `opennary.extension.json` with
+- Format: zip archive. Root file: `grafalith.extension.json` with
   `formatVersion: 1` carried inside the content, never in the suffix.
 - Install: unpack per `publisher.id` into the user extension directory.
-  Validation lives in two lockstep mirrors: `packages/opennary-sdk/src/manifest.ts`
-  (`validateOnryManifest`, `satisfiesEngines`) for authors and
+  Validation lives in two lockstep mirrors: `packages/grafalith-sdk/src/manifest.ts`
+  (`validateGrltManifest`, `satisfiesEngines`) for authors and
   `apps/desktop/src/platform/extensions/extensionManifest.ts` for the host.
-  Both carry the same `ONRY_FORMAT_VERSION`.
+  Both carry the same `GRLT_FORMAT_VERSION`.
 
 Minimal manifest:
 
@@ -176,9 +176,11 @@ Minimal manifest:
   "publisher": "acme",
   "name": "Sticker Pack",
   "version": "1.0.0",
-  "engines": { "opennary": "^0.1.0" },
+  "engines": { "grafalith": "^0.1.0" },
   "main": "./dist/extension.js",
-  "activationEvents": ["onStartup"],
+  "priority": "normal",
+  "permissions": ["notifications"],
+  "activationEvents": ["onStartup", "onHome", "onEditor:diagram"],
   "contributes": {
     "commands": [{ "command": "acme.sticker.create", "title": "Create sticker" }],
     "menus": { "canvas.context": [{ "command": "acme.sticker.create" }] },
@@ -187,8 +189,14 @@ Minimal manifest:
 }
 ```
 
-`engines.opennary` uses caret semantics (`^0.1.0` means `>=0.1.0 <0.2.0`).
+`engines.grafalith` uses caret semantics (`^0.1.0` means `>=0.1.0 <0.2.0`).
 Incompatible extensions are refused at install, never half-loaded.
+Activation events: `onStartup`, `onHome`, `onProject`,
+`onEditor:*`, `onEditor:design`, `onEditor:whiteboard`,
+`onEditor:diagram`, `onCommand:<id>`, `onView:<id>` (see
+`docs/guides/extension-ecosystem.md` for the phase order, priority, and
+dependency rules). Permissions gate `clipboard`, `filesystem`, `network`,
+and `notifications` — undeclared access fails with a typed error.
 
 ### 6.2. Contribution points (all command-backed)
 
@@ -211,7 +219,7 @@ through `iconIds()` so a typo degrades to a text row. Menu rows support
 `parent` for menu/sub-menu nesting; the File > New submenu is kind-driven
 from `projectKindRegistry`.
 
-Relevance notes (OpenNary, not VSCode):
+Relevance notes (Grafalith, not VSCode):
 
 - Modal/dialog: yes — `dialog.openSettings` / `dialog.openQuickSwitcher`
   host commands plus SDK `showDialog`; the settings page and the editor
@@ -228,28 +236,56 @@ Relevance notes (OpenNary, not VSCode):
 
 ### 6.3. Host lifecycle (`apps/desktop/src/platform/extensions/`)
 
-- `extensionManifest.ts` — identity validation.
-- `onryArchive.ts` — dependency-free zip reader (stored + deflated) and
+- `extensionManifest.ts` — identity validation (plus `description`,
+  `license`, `categories`, `keywords`, `priority`, `dependencies`,
+  `permissions`, extended activation events).
+- `grltArchive.ts` — dependency-free zip reader (stored + deflated) and
   manifest/file extraction, plus a stored-zip builder for tests.
 - `extensionContributions.ts` — runtime stores: JS command handlers,
   extension menu rows per location, view-surface metadata, status text and
-  visibility, install records, per-extension configuration declarations.
+  visibility, install records, per-extension configuration declarations,
+  per-kind editor tools (`extensionEditorToolsFor`).
+- `homeContributions.ts` — Home widgets, project templates per kind, and
+  create-new interceptors (extensions extend Home without shell changes;
+  unload removes their entries).
 - `extensionContext.ts` — per-extension activation context in the SDK shape:
-  command bus, window (leveled toasts with one primary action, quick
-  pick, input, confirm dialogs, status bar items), workspace (namespaced
-  config with change events, selection/document event fan-out, memento).
+  command bus, window (leveled toasts with actions/duration/source,
+  `showToast`, `showProgress`, `showStatusMessage`, quick pick, input,
+  confirm dialogs, status bar items), workspace (namespaced config with
+  change events, selection/document/viewport/open/close/editor event
+  fan-out, memento aliased as `storage`), `env`, permission-gated
+  `clipboard`, sandboxed `fs` (denies without the manifest permission).
 - `extensionDialogs.ts` + `app/shell/ExtensionDialogHost.tsx` — single-flight
   modal queue rendered once in the application shell.
 - `extensionHost.ts` — `DesktopExtensionHost.install()` (validate + stage),
   `installFromBytes()` (unzip + load the `main` entry via blob import),
-  `activateByTrigger()` (startup/command/view), `executeCommand()` (lazy
+  `activateByTrigger()` (startup/home/project/editor/command/view, high
+  priority first then dependency order), `activateHome()`,
+  `activateProject()`, `activateEditor(kind)`, `executeCommand()` (lazy
   `onCommand` activation on first use), `enqueueStartupActivation()`
-  (normal priority, `extension` tag), `emitSelection`/`emitDocument` fan-out,
-  `disposeAll()` (reverse order). `getExtensionHost()` is the window-shared
-  singleton; the editor sets its toast notifier on mount.
+  (normal priority, `extension` tag), `emitSelection`/`emitDocument`/
+  `emitProjectClosed`/`emitActiveEditor` fan-out,
+  `deactivateEditorScope()` (unload editor-scoped extensions on return
+  Home, reverse order), `disposeAll()` (reverse order).
+  `getExtensionHost()` is the window-shared singleton; the editor sets its
+  toast notifier on mount.
+- `platform/context/contextKeys.ts` — central context-key service plus the
+  `when`-clause evaluator (`grafalith.context.screen`, `editorType`,
+  `hasActiveProject`, `selectedCount`, `activeTool`, `layerSelected`).
+- `platform/events/appEvents.ts` — typed `grafalith.*` lifecycle event bus
+  (app, home, project, editor, canvas, layer, settings families).
+- `platform/commands/canonicalIds.ts` — canonical
+  `grafalith.<scope>.<section>.<action>` ids aliased to the engine/app
+  registries (palette population, docs, diagnostics).
+- `app/shell/ToastProvider.tsx` — leveled toasts (`info`/`success`/
+  `warning`/`error`) with actions, duration, source attribution, and
+  dismiss-all (wired to `grafalith.view.notification.dismissAll`).
+- `src-tauri/src/extensions.rs` — native side: extension directory
+  discovery plus per-extension JSON storage (`extension_list`,
+  `extension_storage_get`, `extension_storage_set` Tauri commands).
 
 Installing from the UI: the palette command `extension.installFromFile`
-(`Install extension package`) opens an `.onry` file picker and stages the
+(`Install extension package`) opens an `.grlt` file picker and stages the
 package through `installFromBytes`; success and validation errors both
 report through toasts. Entry modules are plain ESM exposing `activate`
 (and optionally `deactivate`).
@@ -277,3 +313,74 @@ settings surface to render next.
 Entering the editor pauses the `extension` tag, drains `project` work first,
 then resumes extensions in the background. A slow extension therefore delays only
 itself, never project entry.
+
+### 6.5. Failure isolation, statuses, and output channels
+
+Every phase failure is per-extension: the host toasts the reason, marks a
+status, writes detail to the extension's output channel plus the system
+channel (`Grafalith — Extensions`), and keeps the app and every other
+extension running.
+
+Statuses (`platform/extensions/extensionStatus.ts`, persisted across
+restarts so known-bad extensions skip quietly next launch): `DISCOVERED →
+VALIDATING → VALID → LOADING → ACTIVE`, with `INVALID_MANIFEST`,
+`INCOMPATIBLE_VERSION`, `MISSING_DEPENDENCY`, `CIRCULAR_DEPENDENCY`
+(topological `dependencyResolver.ts`: missing/blocked/circular/version
+reports), `LOAD_FAILED`, `INVALID_ENTRY`, `ACTIVATION_FAILED`,
+`ACTIVATION_TIMEOUT` (5 s deadline), `DISABLED` (user, stays skipped
+until re-enabled), `DEACTIVATED` (editor close / shutdown).
+`deactivate()` errors and timeouts (3 s) force-dispose subscriptions and
+continue teardown.
+
+Extension Manager (`platform/extensions/extensionManager.ts`,
+`features/extension-manager/ExtensionManagerPanel.tsx`): list with live
+status, `all/active/failed` filters, Enable / Disable / Reload /
+Uninstall / Output per row — all without restarting
+(`grafalith.extensions.manager.open`, `.manager.showAll/.manager.showActive`/
+`.manager.showFailed`, per-id `.enable:<id>` / `.disable:<id>` /
+`.reload:<id>` / `.uninstall:<id>` / `.showOutput:<id>`,
+`grafalith.extensions.output.showSystem`; the three-part
+`grafalith.extensions.showAll/.showActive/.showFailed` and
+`grafalith.output.showSystem` forms stay working as aliases).
+The shell mounts the manager and the output panel once
+(`app/shell/ExtensionPanelsHost.tsx`, driven by
+`platform/extensions/extensionPanels.ts`); palette entries
+(`extension.openManager`, `output.showSystem`) open the same dialog.
+Dev hot-reload (`watchForDevReload`, polling `devReloadWatcher.ts` with
+an injectable fingerprint source plus a Tauri-fs wiring snippet) re-activates
+on file change and leaves failures disabled with a toast until the next
+good reload.
+Extension-contributed UI mounts behind `ExtensionErrorBoundary` so one
+crashing widget unmounts to a retry card instead of taking down Home or
+the editor.
+
+Static manifest `contributes` auto-register at install
+(`platform/extensions/manifestContributions.ts`): menus, views/activity/
+panels/status/tools, per-kind editor tools (rendered in the toolbar via
+`features/editor/ExtensionTools.tsx`, command-backed with failure
+toasts), Home widgets (cards opening the owner's output) and project
+templates (create a blank scene of their kind; `interceptProjectCreate`
+redirects run first), plus a per-package catalog for themes/diagram
+nodes/asset providers. One invalid entry skips alone; disable/uninstall/
+editor-scope unload remove exactly their owner's rows. Commands still
+need handlers from `activate()`; keybindings stay inert until shortcut
+dispatch supports overrides. Extension `configuration` renders in
+Settings → Extensions (`settings.extensions.*` locale keys, `#/settings/
+extensions` route) bound to the same `extension:<package>:<key>`
+localStorage keys the context reads. The editor and Home keep central
+context keys synced (`syncEditorState` in `EditorScreen`/`HomeScreen`)
+so `when` clauses gate on live state; project open/close and editor-kind
+switches fan out to extension workspaces. Core bootstrap runs before
+`App` loads (`platform/boot/coreBootstrap.ts` + `main.tsx`): any Phase 1
+service failure renders the dependency-free fatal dialog
+(`app/shell/FatalBootDialog.tsx`, console-logged) and the app never
+proceeds half-broken.
+
+Output channels (`platform/extensions/outputChannel.ts`): extensions log
+via `context.createOutputChannel(name)`; the bottom `OutputPanel`
+switches between every extension channel and the system channel, which
+records discovery, validation, activation order, and every skip reason.
+Permissions: undeclared `clipboard`/`filesystem` access throws a typed
+deny (logged to the channel); undeclared `notifications` warns in the
+channel but still delivers so activation never crashes on a missing
+declaration.

@@ -11,13 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The TypeScript engine (`packages/core`, `packages/react`) has been fully
   removed. The Rust workspace (`crates/*`) is now the single source of truth
   for the engine.
-- The npm distribution is now `@fazelstudio/opennary` (WASM via `wasm-pack`),
-  replacing the old `@fazelstudio/opennary` TypeScript package.
-- The PyPI distribution is now `opennary` (via `maturin`/PyO3).
+- The npm distribution is now `@fazelstudio/grafalith` (WASM via `wasm-pack`),
+  replacing the old `@fazelstudio/grafalith` TypeScript package.
+- The PyPI distribution is now `grafalith` (via `maturin`/PyO3).
 
 ### Added
-- `crates/opennary` — npm distribution crate (`JsEngine`, string-only API).
-- `crates/opennary-python` — PyPI distribution crate (`PyEngine`, dict-in/dict-out API).
+- `crates/grafalith` — npm distribution crate (`JsEngine`, string-only API).
+- `crates/grafalith-python` — PyPI distribution crate (`PyEngine`, dict-in/dict-out API).
 - `path_edit` module — full vector path editing session (anchor/handle drag,
   symmetric Bezier handles with Alt-break, add/delete anchors, commit).
 - `ResizeSelection` command — proportional multi-select resize.

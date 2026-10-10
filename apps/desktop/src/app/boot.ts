@@ -2,8 +2,8 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from './i18n/locales';
 import { DEFAULT_THEME_MODE, isThemeMode, resolveThemeMode } from './theme/tokens';
 import { isTauriRuntime } from '../platform/projects/tauriAdapter';
 
-const THEME_KEY = 'opennary:theme';
-const LOCALE_KEY = 'opennary:locale';
+const THEME_KEY = 'grafalith:theme';
+const LOCALE_KEY = 'grafalith:locale';
 
 let revealed = false;
 let bootDataSettled = false;

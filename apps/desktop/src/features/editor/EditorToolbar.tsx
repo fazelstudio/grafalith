@@ -4,6 +4,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../app/i18n/resources';
 import { Tooltip } from '../../ui/primitives/tooltip';
+import { ExtensionTools } from './ExtensionTools';
 import {
   ArrowToolIcon,
   ChevronUpIcon,
@@ -19,14 +20,21 @@ import {
 interface EditorToolbarProps {
   activeTool: string;
   onToolChange: (tool: string) => void;
+  kind: 'design' | 'whiteboard' | 'diagram';
+  /** When true the tool stays active after commit (toggled by double-click). */
+  stickyTool: boolean;
+  onToggleSticky: () => void;
 }
 
 /**
  * Registry-driven toolbar: promoted tools and overflow tools derive from
  * descriptors, while action buttons derive from toolbar-surface commands.
  * Adding a tool or command does not require changing this component.
+ *
+ * Single-click activates a tool; double-click toggles sticky mode (the
+ * tool stays active after commit instead of returning to Select).
  */
-export function EditorToolbar({ activeTool, onToolChange }: EditorToolbarProps) {
+export function EditorToolbar({ activeTool, onToolChange, kind, stickyTool, onToggleSticky }: EditorToolbarProps) {
   const { t } = useI18n();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -47,7 +55,12 @@ export function EditorToolbar({ activeTool, onToolChange }: EditorToolbarProps) 
     const tool = toolRegistry.get(id);
     if (!tool) return id;
     const base = tool.descriptionKey ? t(tool.descriptionKey) : t(tool.labelKey);
-    return tool.shortcutHint ? `${base} (${tool.shortcutHint})` : base;
+    const hint = tool.shortcutHint ? ` (${tool.shortcutHint})` : '';
+    const sticky =
+      activeTool === id && id !== 'select'
+        ? ` — ${t(stickyTool ? 'editor.tools.stickyOn' : 'editor.tools.stickyOff')}`
+        : '';
+    return `${base}${hint}${sticky}`;
   }
 
   function toolIcon(id: string, size = 18) {
@@ -73,8 +86,15 @@ export function EditorToolbar({ activeTool, onToolChange }: EditorToolbarProps) 
             <button
               type="button"
               onClick={() => onToolChange(tool.id)}
+              onDoubleClick={() => {
+                if (tool.id !== 'select') {
+                  onToolChange(tool.id);
+                  onToggleSticky();
+                }
+              }}
               aria-pressed={activeTool === tool.id}
               aria-keyshortcuts={tool.shortcutHint}
+              data-sticky={activeTool === tool.id && stickyTool && tool.id !== 'select' ? 'true' : undefined}
               className="ui-button ui-button--sm ui-button--secondary editor-toolbar__tool"
             >
               {toolIcon(tool.icon)}
@@ -82,8 +102,8 @@ export function EditorToolbar({ activeTool, onToolChange }: EditorToolbarProps) 
             </button>
           </Tooltip>
         ))}
-        {additionalTools.length > 0 ? (
-          <div ref={moreRef} className="editor-toolbar__more">
+        <ExtensionTools kind={kind} />
+        {additionalTools.length > 0 ? (          <div ref={moreRef} className="editor-toolbar__more">
             <button
               type="button"
               className="ui-button ui-button--sm ui-button--secondary editor-toolbar__more-trigger"
@@ -106,6 +126,12 @@ export function EditorToolbar({ activeTool, onToolChange }: EditorToolbarProps) 
                     onClick={() => {
                       onToolChange(tool.id);
                       setMoreOpen(false);
+                    }}
+                    onDoubleClick={() => {
+                      if (tool.id !== 'select') {
+                        onToolChange(tool.id);
+                        onToggleSticky();
+                      }
                     }}
                   >
                     {toolIcon(tool.icon)}

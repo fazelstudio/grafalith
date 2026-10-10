@@ -18,6 +18,7 @@ interface SceneElement {
   opacity?: number;
   strokeColor?: string;
   backgroundColor?: { type?: string; color?: string };
+  borderColor?: string | null;
   text?: string;
   fontSize?: number;
   points?: [number, number][];
@@ -151,6 +152,16 @@ function drawElement(
       context.stroke();
     }
   } else if (element.type === 'text') {
+    const background = colorFor(element, 'transparent');
+    if (background !== 'transparent') {
+      context.fillStyle = background;
+      context.fillRect(0, 0, pw, ph);
+    }
+    const border = typeof element.borderColor === 'string' ? element.borderColor.trim() : '';
+    if (border !== '' && border.toLowerCase() !== 'transparent') {
+      context.strokeStyle = element.borderColor as string;
+      context.strokeRect(0, 0, pw, ph);
+    }
     context.fillStyle = element.strokeColor ?? FALLBACK_STROKE;
     context.font = `${Math.max(8, finite(element.fontSize, 16) * scale)}px sans-serif`;
     context.textBaseline = 'top';

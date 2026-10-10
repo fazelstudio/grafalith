@@ -18,8 +18,8 @@
 
 ## Environment
 
-- OpenNary version / commit:
-- Host: (npm `@fazelstudio/opennary` / PyPI `opennary` / desktop app / other)
+- Grafalith version / commit:
+- Host: (npm `@fazelstudio/grafalith` / PyPI `grafalith` / desktop app / other)
 - OS:
 - Browser (if applicable):
 

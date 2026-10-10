@@ -15,7 +15,7 @@
 //! fails. Only v1 scenes are readable today; newer envelopes are rejected
 //! with `unsupported-version` instead of being silently overwritten.
 
-use opennary_core::document::SCHEMA_VERSION;
+use grafalith_core::document::SCHEMA_VERSION;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
@@ -826,7 +826,7 @@ mod tests {
     fn test_base() -> PathBuf {
         let n = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
-            "opennary-projects-test-{}-{}-{n}",
+            "grafalith-projects-test-{}-{}-{n}",
             std::process::id(),
             now_ms()
         ));

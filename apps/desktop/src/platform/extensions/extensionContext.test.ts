@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 function context() {
-  const notifications: { message: string; options?: { level?: string; action?: { label: string; commandId: string } } }[] = [];
+  const notifications: { message: string; options?: Record<string, unknown> }[] = [];
   const ctx = createExtensionContext({
     packageId: 'acme.sticker',
     notify: (message, options) => void notifications.push({ message, options }),
@@ -34,8 +34,35 @@ describe('extension context', () => {
       actions: [{ label: 'Open', command: 'acme.open' }],
     });
     expect(notifications).toEqual([
-      { message: 'Installed', options: { level: 'success', action: { label: 'Open', commandId: 'acme.open' } } },
+      {
+        message: 'Installed',
+        options: {
+          level: 'success',
+          action: { label: 'Open', commandId: 'acme.open' },
+          actions: [{ label: 'Open', commandId: 'acme.open' }],
+          duration: undefined,
+          source: 'acme.sticker',
+        },
+      },
     ]);
+  });
+
+  test('warning toasts, progress, and status messages resolve', async () => {
+    const { ctx, notifications } = context();
+    ctx.window.showToast('Heads up', { level: 'warning', duration: 0 });
+    expect(notifications[0].options).toMatchObject({ level: 'warning', duration: 0 });
+    let progressed = false;
+    await ctx.window.showProgress('Working', async () => void (progressed = true));
+    expect(progressed).toBe(true);
+    expect(notifications.map((entry) => entry.message)).toContain('Working');
+    const handle = ctx.window.showStatusMessage('Saved');
+    expect(handle.dispose).toBeTypeOf('function');
+  });
+
+  test('clipboard without permission is denied with a typed error', async () => {
+    const { ctx } = context();
+    await expect(ctx.clipboard.read()).rejects.toThrow(/lacks permission/);
+    await expect(ctx.fs.readFile('a.txt')).rejects.toThrow(/filesystem:read/);
   });
 
   test('status items write through the shared store', () => {

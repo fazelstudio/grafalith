@@ -1,7 +1,7 @@
 import type { EnDict } from '../en';
 
 const common: EnDict['common'] = {
-  appName: 'OpenNary',
+  appName: 'Grafalith',
   actions: {
     cancel: 'Batal',
     confirm: 'Konfirmasi',

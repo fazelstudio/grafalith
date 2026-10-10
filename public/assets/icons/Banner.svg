@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="420" height="176" viewBox="0 0 420 176"
+     fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Grafalith — One Core. Every Canvas.</title>
+  <desc id="desc">A compact rounded navy banner with the Grafalith symbol on the left and the name with tagline stacked on the right.</desc>
+
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="420" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172331"/>
+      <stop offset="1" stop-color="#0D151F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Compact rounded background, tightly framing the brand lockup -->
+  <rect width="420" height="176" rx="24" fill="url(#background)"/>
+
+  <!-- Grafalith symbol -->
+  <g id="grafalith-symbol" transform="translate(38 31) scale(1.8)">
+    <path d="M22 4H42L60 22V34H46V27L39 20H26L19 27V37L27 45H39L45 39V36H34V28H60V44L44 60H21L4 43V21L22 4Z" fill="#F7FAFC"/>
+    <path d="M34 30H58V36H34V30Z" fill="#B9F447"/>
+  </g>
+
+  <!-- Name and tagline -->
+  <text x="166" y="92"
+        font-family="Inter, Manrope, 'Segoe UI', Arial, sans-serif"
+        font-size="48" font-weight="800" letter-spacing="-1.7"
+        fill="#F7FAFC">Grafalith</text>
+
+  <text x="168" y="121"
+        font-family="Inter, Manrope, 'Segoe UI', Arial, sans-serif"
+        font-size="16.5" font-weight="600" letter-spacing="0.35"
+        fill="#B8C4D2">One Core. Every Canvas.</text>
+</svg>

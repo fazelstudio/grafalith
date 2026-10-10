@@ -5,10 +5,10 @@
 use ext_sticker::{
     StickerExtension, StickerShape, STICKER_CREATE_COMMAND, STICKER_TOOL, STICKER_TYPE,
 };
-use opennary_core::editor::Editor;
-use opennary_core::element::{CustomElement, Element};
-use opennary_core::interaction::ToolId;
-use opennary_core::shape_extension::{dispatch_bounds, dispatch_hit_test};
+use grafalith_core::editor::Editor;
+use grafalith_core::element::{CustomElement, Element};
+use grafalith_core::interaction::ToolId;
+use grafalith_core::shape_extension::{dispatch_bounds, dispatch_hit_test};
 
 fn sticker_custom(editor: &Editor) -> CustomElement {
     let live = editor.document().get_all();

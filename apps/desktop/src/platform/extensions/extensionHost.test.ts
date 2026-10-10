@@ -16,7 +16,7 @@ import {
   validateExtensionForHost,
 } from './extensionContributions';
 import { DesktopExtensionHost } from './extensionHost';
-import { buildStoredZip } from './onryArchive';
+import { buildStoredZip } from './grltArchive';
 
 afterEach(() => {
   resetExtensionState();
@@ -29,7 +29,7 @@ function manifest() {
     publisher: 'acme',
     name: 'Sticker Pack',
     version: '1.0.0',
-    engines: { opennary: '^0.1.0' },
+    engines: { grafalith: '^0.1.0' },
     activationEvents: ['onStartup'],
     contributes: {
       commands: [{ command: 'acme.sticker.create', title: 'Create sticker' }],
@@ -147,7 +147,7 @@ describe('desktop extension host', () => {
   test('installFromBytes extracts, validates, and stages the entry', async () => {
     const host = new DesktopExtensionHost('0.1.0');
     const bytes = buildStoredZip({
-      'opennary.extension.json': JSON.stringify(manifest()),
+      'grafalith.extension.json': JSON.stringify(manifest()),
       'index.js': 'activate',
     });
     const result = await host.installFromBytes(bytes, async (files, main) => {

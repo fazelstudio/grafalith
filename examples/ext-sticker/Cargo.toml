@@ -3,11 +3,13 @@ name = "ext-sticker"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Out-of-workspace OpenNary extension example: a sticker node type with its own tool and command. No engine sources modified."
+# Teaching example, not a distributable crate.
+publish = false
+description = "Out-of-workspace Grafalith extension example: a sticker node type with its own tool and command. No engine sources modified."
 
 # Standalone workspace: this crate consumes the engine like an external
 # user would, never as a workspace member.
 [workspace]
 
 [dependencies]
-opennary-core = { version = "0.1.0", path = "../../crates/opennary-core" }
+grafalith-core = { version = "0.1.0", path = "../../crates/grafalith-core" }

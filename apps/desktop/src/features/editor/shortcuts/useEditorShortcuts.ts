@@ -94,6 +94,16 @@ export function useEditorShortcuts({ context, paletteOpen, onToolChange, notify,
       const result = await executeCommand(command.id, execCtx);
       const message = commandResultMessage(command.id, result, tRef.current);
       if (message) notifyRef.current(message);
+      // Esc with a non-Select tool and no text session returns to Select
+      // (the engine already cancelled the gesture or cleared the
+      // selection; the tool reset is host chrome state). Text sessions own
+      // Esc themselves via the overlay and never reach this dispatch.
+      if (command.id === 'escape' && result.status === 'ok') {
+        const live = ctxRef.current;
+        if (live.activeTool !== 'select' && live.textEditingId === null) {
+          toolRef.current('select');
+        }
+      }
     }
 
     window.addEventListener('keydown', onKeyDown);

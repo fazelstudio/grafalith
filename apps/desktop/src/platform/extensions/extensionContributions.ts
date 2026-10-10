@@ -2,7 +2,7 @@ import { appCommandRegistry } from '../../registries/appCommands';
 import { commandRegistry } from '../../registries/commands';
 import { menuLocations, type MenuLocation } from '../../registries/menus';
 import { iconIds } from '../../ui/iconRegistry';
-import { ONRY_FORMAT_VERSION, onryPackageId, type OnryManifest } from './extensionManifest';
+import { GRLT_FORMAT_VERSION, grltPackageId, type GrltManifest } from './extensionManifest';
 
 /** Handler behind one extension command id (JS-side intent, not an engine op). */
 export type ExtensionCommandHandler = (...args: unknown[]) => unknown | Promise<unknown>;
@@ -13,6 +13,8 @@ export interface ExtensionMenuRow {
   commandId: string;
   group: number;
   order: number;
+  /** Owning package (`publisher.id`) for per-extension unload; absent is host-owned. */
+  extensionId?: string;
 }
 
 /** View-surface metadata contributed by a extension (rail, dock, status, tool). */
@@ -25,6 +27,8 @@ export interface ExtensionViewContribution {
   command?: string;
   /** Dock side for panel contributions (default right). */
   location?: 'left' | 'right';
+  /** Owning package (`publisher.id`) for per-extension unload; absent is host-owned. */
+  extensionId?: string;
 }
 
 /** Namespaced configuration declared by installed extensions (`extensionId.key`). */
@@ -41,7 +45,7 @@ export function extensionConfigurations(): ExtensionConfiguration[] {
   for (const record of installed.values()) {
     for (const setting of record.manifest.contributes?.configuration ?? []) {
       configs.push({
-        extensionId: onryPackageId(record.manifest),
+        extensionId: grltPackageId(record.manifest),
         key: setting.key,
         title: setting.title,
         default: setting.default,
@@ -54,7 +58,7 @@ export function extensionConfigurations(): ExtensionConfiguration[] {
 /** Installed extension record kept by the host. */
 export interface InstalledExtension {
   packageId: string;
-  manifest: OnryManifest;
+  manifest: GrltManifest;
   active: boolean;
 }
 
@@ -67,13 +71,13 @@ const installed = new Map<string, InstalledExtension>();
  * Validate one manifest against this host (format, engines range, and
  * contribution surfaces). Returns one message per problem.
  */
-export function validateExtensionForHost(manifest: OnryManifest, hostVersion: string): string[] {
+export function validateExtensionForHost(manifest: GrltManifest, hostVersion: string): string[] {
   const problems: string[] = [];
-  if (manifest.formatVersion !== ONRY_FORMAT_VERSION) {
+  if (manifest.formatVersion !== GRLT_FORMAT_VERSION) {
     problems.push(`unsupported formatVersion ${manifest.formatVersion}`);
   }
-  if (!satisfiesEngines(manifest.engines.opennary, hostVersion)) {
-    problems.push(`engines.opennary "${manifest.engines.opennary}" incompatible with host ${hostVersion}`);
+  if (!satisfiesEngines(manifest.engines.grafalith, hostVersion)) {
+    problems.push(`engines.grafalith "${manifest.engines.grafalith}" incompatible with host ${hostVersion}`);
   }
   const declared = new Set((manifest.contributes?.commands ?? []).map((command) => command.command));
   for (const command of manifest.contributes?.commands ?? []) {
@@ -102,6 +106,14 @@ export function validateExtensionForHost(manifest: OnryManifest, hostVersion: st
     panels: manifest.contributes?.panels,
     status: manifest.contributes?.status,
     tools: manifest.contributes?.tools,
+    activityBarItems: manifest.contributes?.activityBarItems,
+    statusBarItems: manifest.contributes?.statusBarItems,
+    diagramNodes: manifest.contributes?.diagramNodes,
+    toolbarItems: manifest.contributes?.toolbarItems?.map((tool) => ({
+      id: tool.id,
+      title: tool.title,
+      icon: tool.icon,
+    })),
   };
   for (const [section, items] of Object.entries(sections)) {
     for (const item of items ?? []) {
@@ -110,6 +122,32 @@ export function validateExtensionForHost(manifest: OnryManifest, hostVersion: st
       if (item.icon !== undefined && !iconIds().includes(item.icon)) {
         problems.push(`unknown icon "${item.icon}" for ${section} "${item.id}"`);
       }
+    }
+  }
+  const plainSections: Record<string, readonly { id: string; title: string }[] | undefined> = {
+    homeWidgets: manifest.contributes?.homeWidgets,
+    modals: manifest.contributes?.modals,
+    assetProviders: manifest.contributes?.assetProviders,
+  };
+  for (const [section, items] of Object.entries(plainSections)) {
+    for (const item of items ?? []) {
+      if (item.id === '') problems.push(`contributed ${section} id must not be empty`);
+      if (item.title === '') problems.push(`contributed ${section} "${item.id}" needs a title`);
+    }
+  }
+  for (const [kind, tools] of Object.entries(manifest.contributes?.editorTools ?? {})) {
+    if (!['design', 'whiteboard', 'diagram'].includes(kind)) {
+      problems.push(`unknown editorTools kind "${kind}"`);
+    }
+    for (const tool of tools ?? []) {
+      if (tool.id === '') problems.push(`contributed editorTools.${kind} id must not be empty`);
+      if (tool.title === '') problems.push(`contributed editorTools.${kind} "${tool.id}" needs a title`);
+    }
+  }
+  for (const template of manifest.contributes?.projectTemplates ?? []) {
+    if (template.id === '') problems.push('contributed projectTemplates id must not be empty');
+    if (!['design', 'whiteboard', 'diagram'].includes(template.kind)) {
+      problems.push(`unknown projectTemplates kind "${template.kind}" for "${template.id}"`);
     }
   }
   return problems;
@@ -177,6 +215,13 @@ export function extensionMenuRowsFor(location: MenuLocation): readonly Extension
   return menuRows.filter((row) => row.location === location);
 }
 
+/** Remove every menu row owned by one package (disable/uninstall/unload). */
+export function removeExtensionMenuRows(packageId: string): void {
+  for (let index = menuRows.length - 1; index >= 0; index--) {
+    if (menuRows[index].extensionId === packageId) menuRows.splice(index, 1);
+  }
+}
+
 /** Register extension view-surface metadata (activity, panel, status, tool, view). */
 export function registerExtensionViews(views: readonly ExtensionViewContribution[]): void {
   for (const view of views) {
@@ -200,6 +245,57 @@ export function removeExtensionView(surface: ExtensionViewContribution['surface'
   hiddenStatus.delete(id);
 }
 
+/** Remove every view owned by one package (disable/uninstall/unload). */
+export function removeExtensionViews(packageId: string): void {
+  for (let index = viewContributions.length - 1; index >= 0; index--) {
+    const view = viewContributions[index];
+    if (view.extensionId === packageId) {
+      viewContributions.splice(index, 1);
+      statusTexts.delete(view.id);
+      hiddenStatus.delete(view.id);
+    }
+  }
+}
+
+/** One per-kind editor tool contributed by a extension. */
+export interface ExtensionEditorTool {
+  kind: 'design' | 'whiteboard' | 'diagram';
+  id: string;
+  title: string;
+  command: string;
+  extensionId: string;
+  icon?: string;
+}
+
+const editorTools: ExtensionEditorTool[] = [];
+
+/** Register per-kind editor tools (toolbar rendering per editor family). */
+export function registerExtensionEditorTools(tools: readonly ExtensionEditorTool[]): void {
+  for (const tool of tools) {
+    if (editorTools.some((entry) => entry.kind === tool.kind && entry.id === tool.id)) {
+      throw new Error(`duplicate extension editor tool "${tool.kind}:${tool.id}"`);
+    }
+    editorTools.push(tool);
+  }
+}
+
+/** Editor tools for one kind in registration order. */
+export function extensionEditorToolsFor(kind: ExtensionEditorTool['kind']): readonly ExtensionEditorTool[] {
+  return editorTools.filter((tool) => tool.kind === kind);
+}
+
+/** Reset editor-tool state (tests and full host teardown). */
+export function resetExtensionEditorTools(): void {
+  editorTools.length = 0;
+}
+
+/** Remove every editor tool owned by one package (disable/uninstall/unload). */
+export function removeExtensionEditorTools(packageId: string): void {
+  for (let index = editorTools.length - 1; index >= 0; index--) {
+    if (editorTools[index].extensionId === packageId) editorTools.splice(index, 1);
+  }
+}
+
 /** Update the click command of one extension view contribution. */
 export function updateExtensionViewCommand(
   surface: ExtensionViewContribution['surface'],
@@ -211,7 +307,7 @@ export function updateExtensionViewCommand(
 }
 
 /** Track one installed extension package. */
-export function trackInstalledExtension(packageId: string, manifest: OnryManifest): void {
+export function trackInstalledExtension(packageId: string, manifest: GrltManifest): void {
   if (installed.has(packageId)) throw new Error(`extension already installed: ${packageId}`);
   installed.set(packageId, { packageId, manifest, active: false });
 }
@@ -221,6 +317,11 @@ export function setExtensionActive(packageId: string, active: boolean): void {
   const record = installed.get(packageId);
   if (!record) throw new Error(`unknown extension: ${packageId}`);
   record.active = active;
+}
+
+/** Forget one installed extension package (uninstall path). */
+export function untrackInstalledExtension(packageId: string): void {
+  installed.delete(packageId);
 }
 
 /** Installed extension records in install order. */
@@ -236,6 +337,7 @@ export function resetExtensionState(): void {
   statusTexts.clear();
   hiddenStatus.clear();
   installed.clear();
+  resetExtensionEditorTools();
 }
 
 /** Dynamic status item text owned by extensions (default is the title). */

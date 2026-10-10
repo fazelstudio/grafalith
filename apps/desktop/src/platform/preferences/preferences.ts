@@ -1,8 +1,8 @@
 import { DEFAULT_THEME_MODE, isThemeMode, type ThemeMode } from '../../app/theme/tokens';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '../../app/i18n/locales';
 
-const THEME_KEY = 'opennary:theme';
-const LOCALE_KEY = 'opennary:locale';
+const THEME_KEY = 'grafalith:theme';
+const LOCALE_KEY = 'grafalith:locale';
 
 function readStorage(key: string): string | null {
   try {

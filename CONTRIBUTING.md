@@ -1,4 +1,4 @@
-# Contributing to OpenNary
+# Contributing to Grafalith
 
 Thank you for your interest in contributing!
 
@@ -8,8 +8,8 @@ Canonical commands live in [`DEVELOPMENT.md`](./DEVELOPMENT.md) — do not
 duplicate them here.
 
 ```bash
-git clone https://github.com/fazelstudio/opennary.git
-cd opennary
+git clone https://github.com/fazelstudio/grafalith.git
+cd grafalith
 bun install   # desktop demo dependencies only
 ```
 
@@ -21,20 +21,20 @@ Then follow `DEVELOPMENT.md`: `cargo test --workspace`,
 
 Short map (details in [`crates/README.md`](./crates/README.md)):
 
-- `crates/opennary-geometry/` — Pure 2D math (zero dependencies)
-- `crates/opennary-core/` — Document domain + editor session
-- `crates/opennary-io/` — Interchange (JSON schema, import pipeline, clipboard codec, PNG descriptors)
-- `crates/opennary-bindings/` — Host boundary (JSON-string batch protocol, `Engine` facade, DTOs)
-- `crates/opennary/` — npm distribution (`@fazelstudio/opennary`)
-- `crates/opennary-python/` — PyPI distribution (`opennary`)
-- `crates/opennary-sdk/` — Rust SDK facade for extensions
-- `crates/opennary-text/` — Text measurement and shaping helpers
+- `crates/grafalith-geometry/` — Pure 2D math (zero dependencies)
+- `crates/grafalith-core/` — Document domain + editor session
+- `crates/grafalith-io/` — Interchange (JSON schema, import pipeline, clipboard codec, PNG descriptors)
+- `crates/grafalith-bindings/` — Host boundary (JSON-string batch protocol, `Engine` facade, DTOs)
+- `crates/grafalith/` — npm distribution (`@fazelstudio/grafalith`)
+- `crates/grafalith-python/` — PyPI distribution (`grafalith`)
+- `crates/grafalith-sdk/` — Rust SDK facade for extensions
+- `crates/grafalith-text/` — Text measurement and shaping helpers
 - `apps/desktop/` — Tauri demo app (the reference host)
-- `packages/opennary-sdk/` — TypeScript SDK (typed client, extension registry)
+- `packages/grafalith-sdk/` — TypeScript SDK (typed client, extension registry)
 - `examples/` — Standalone usage and extension examples
 - `docs/` — Product scope, technical contract, and guides (`docs/guides/`)
 
-Dependency direction: `opennary`/`opennary-python` → `opennary-bindings` → `opennary-io` → `opennary-core` → `opennary-geometry`.
+Dependency direction: `grafalith`/`grafalith-python` → `grafalith-bindings` → `grafalith-io` → `grafalith-core` → `grafalith-geometry`.
 
 ## Rules
 

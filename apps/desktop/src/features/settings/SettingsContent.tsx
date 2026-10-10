@@ -35,6 +35,7 @@ import {
   type SettingSection,
   type SettingSectionDefinition,
 } from './settingsDescriptors';
+import { ExtensionSettings, extensionSettingsMatch } from './ExtensionSettings';
 import './settings.css';
 
 interface SettingsContentProps {
@@ -224,6 +225,7 @@ export function SettingsContent({ section, onSectionChange, header = true, query
     if (t(tab.labelKey).toLowerCase().includes(needle)) return true;
     if (t(`settings.${tab.id}.description`).toLowerCase().includes(needle)) return true;
     if (matchingSettings(tab).length > 0) return true;
+    if (tab.id === 'extensions' && extensionSettingsMatch(needle)) return true;
     return tab.id === 'shortcuts' && matchingShortcuts().length > 0;
   }
 
@@ -323,6 +325,7 @@ export function SettingsContent({ section, onSectionChange, header = true, query
                   <Divider />
                   {matchingSettings(tab).map(renderSetting)}
                   {tab.id === 'shortcuts' ? <ShortcutList rows={matchingShortcuts()} /> : null}
+                  {tab.id === 'extensions' ? <ExtensionSettings query={query} /> : null}
                 </div>
               ))
             )}
@@ -342,6 +345,7 @@ export function SettingsContent({ section, onSectionChange, header = true, query
             <Divider />
             {visible.map(renderSetting)}
             {section === 'shortcuts' ? <ShortcutBrowser /> : null}
+            {section === 'extensions' ? <ExtensionSettings /> : null}
             {resettable ? (
               <div className="settings__actions">
                 <Button variant="secondary" size="sm" onClick={() => resetSection(section)}>

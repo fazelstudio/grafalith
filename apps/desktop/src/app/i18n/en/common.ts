@@ -1,5 +1,5 @@
 const common = {
-  appName: 'OpenNary',
+  appName: 'Grafalith',
   actions: {
     cancel: 'Cancel',
     confirm: 'Confirm',

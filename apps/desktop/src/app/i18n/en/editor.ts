@@ -18,6 +18,10 @@ const editor = {
     arrowDescription: 'Draw an arrow',
     textDescription: 'Create or edit text',
     freedrawDescription: 'Draw freehand',
+    sticky: 'Sticky tool',
+    stickyDescription: 'Keep the current tool active after creating an object',
+    stickyOn: 'Sticky tool on: the tool stays active after creating an object',
+    stickyOff: 'Sticky tool off: return to Select after creating an object',
   },
   toolGroups: {
     selection: 'Selection',
@@ -116,7 +120,7 @@ const editor = {
     duplicateProject: 'Duplicate',
     duplicateProjectDescription: 'Duplicate the open project',
     installExtension: 'Install extension package',
-    installExtensionDescription: 'Install a extension from an .onry package file',
+    installExtensionDescription: 'Install a extension from an .grlt package file',
     contextTitle: 'Selection actions',
   },
   quickSwitcher: {
@@ -187,6 +191,7 @@ const editor = {
     opacity: 'Opacity',
     stroke: 'Stroke',
     strokeColor: 'Stroke',
+    borderColor: 'Border',
     strokeWidth: 'Stroke width',
     strokeStyle: 'Dash',
     dashSolid: 'Solid',

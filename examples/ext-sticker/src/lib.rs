@@ -1,22 +1,22 @@
-//! `ext-sticker`: an out-of-workspace OpenNary extension.
+//! `ext-sticker`: an out-of-workspace Grafalith extension.
 //!
 //! A third-party crate that adds a node type (`example.sticker`), a tool
 //! (`example.sticker`), and a command (`example.sticker.create`) without
-//! modifying engine sources. It depends on `opennary-core` only, through the
+//! modifying engine sources. It depends on `grafalith-core` only, through the
 //! public extension traits.
 
 use std::collections::HashMap;
 
-use opennary_core::command::CommandContext;
-use opennary_core::command_extension::CommandExtension;
-use opennary_core::element::{
+use grafalith_core::command::CommandContext;
+use grafalith_core::command_extension::CommandExtension;
+use grafalith_core::element::{
     BaseElement, CustomElement, Element, ElementFillStyle, FillStyle, PatchValue, StrokeAlign,
     StrokeCap, StrokeJoin, StrokeStyle,
 };
-use opennary_core::geometry::rect::Bounds;
-use opennary_core::extension::{Extension, ExtensionContext, ExtensionMetadata};
-use opennary_core::render_model::DrawEntry;
-use opennary_core::EngineResult;
+use grafalith_core::geometry::rect::Bounds;
+use grafalith_core::extension::{Extension, ExtensionContext, ExtensionMetadata};
+use grafalith_core::render_model::DrawEntry;
+use grafalith_core::EngineResult;
 
 /// Discriminator for sticker elements (namespaced to this extension).
 pub const STICKER_TYPE: &str = "example.sticker";
@@ -46,7 +46,7 @@ pub fn sticker_element(
     data.insert("label".to_string(), PatchValue::Text(label.into()));
     Element::Custom(CustomElement {
         base: BaseElement {
-            id: opennary_core::element::ElementId::of(id.into()),
+            id: grafalith_core::element::ElementId::of(id.into()),
             x,
             y,
             width: STICKER_SIZE,
@@ -82,7 +82,7 @@ pub fn sticker_element(
 /// Circle behavior for the square sticker box: corners miss.
 pub struct StickerShape;
 
-impl opennary_core::shape_extension::ShapeExtension for StickerShape {
+impl grafalith_core::shape_extension::ShapeExtension for StickerShape {
     fn type_name(&self) -> &str {
         STICKER_TYPE
     }

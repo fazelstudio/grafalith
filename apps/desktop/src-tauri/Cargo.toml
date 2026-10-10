@@ -1,11 +1,14 @@
 [package]
-name = "opennary-desktop"
+name = "grafalith-desktop"
 version = "0.1.0"
-description = "OpenNary desktop app — Tauri host for the Rust engine"
+description = "Grafalith desktop app — Tauri host for the Rust engine"
 edition = "2021"
+# Application binary, not a library: the desktop host is built with
+# `bun run tauri:build`, never published to crates.io.
+publish = false
 
 [lib]
-name = "opennary_desktop_lib"
+name = "grafalith_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -16,8 +19,9 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-snap-layout = "1"
-opennary-bindings = { path = "../../../crates/opennary-bindings" }
-opennary-core = { path = "../../../crates/opennary-core" }
+grafalith-bindings = { path = "../../../crates/grafalith-bindings" }
+grafalith-core = { path = "../../../crates/grafalith-core" }
+grafalith-sdk = { path = "../../../crates/grafalith-sdk" }
 
 [lints]
 workspace = true

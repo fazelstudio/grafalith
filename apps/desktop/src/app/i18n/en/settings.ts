@@ -4,7 +4,7 @@ const settings = {
   general: {
     title: 'General',
     description: 'Language and basic application preferences.',
-    offlineNote: 'OpenNary works offline. Preferences are stored locally on this device.',
+    offlineNote: 'Grafalith works offline. Preferences are stored locally on this device.',
     localeLabel: 'Language',
     localeDescription: 'Interface language. Applied without reload.',
     localeNames: {
@@ -44,6 +44,11 @@ const settings = {
     searchPlaceholder: 'Search shortcuts…',
     empty: 'No matching shortcuts.',
     fixedNote: 'Shortcuts are fixed in this release. The command system does not support safe overrides yet.',
+  },
+  extensions: {
+    title: 'Extensions',
+    description: 'Settings declared by installed extensions. Changes apply on next activation.',
+    empty: 'No installed extension declares settings yet.',
   },
   actions: {
     resetSection: 'Reset to defaults',

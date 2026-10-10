@@ -8,7 +8,7 @@ frozen (protocol v1); command IDs use `namespace.action`.
 `H` = history entry when the document changes. `Q` = read-only query (no
 history, observes prior ops in the same batch). Results are `ok/data` or a
 stable `code` (`invalidInput`, `notFound`, `invariantViolation`, `unsupported`,
-`parseError`) + message. Source of truth: `crates/opennary-bindings/src/protocol.rs`
+`parseError`) + message. Source of truth: `crates/grafalith-bindings/src/protocol.rs`
 (`BatchOp`, `op_name`) and `engine.rs` dispatch.
 
 ## Document & nodes

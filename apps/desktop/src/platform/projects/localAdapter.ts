@@ -15,8 +15,8 @@ import {
 } from './types';
 
 /** Browser-runtime index/document split mirroring the Tauri file layout. */
-const INDEX_KEY = 'opennary:projects:index:v1';
-const docKey = (id: string): string => `opennary:projects:doc:${id}`;
+const INDEX_KEY = 'grafalith:projects:index:v1';
+const docKey = (id: string): string => `grafalith:projects:doc:${id}`;
 
 interface StoredMeta {
   id: string;

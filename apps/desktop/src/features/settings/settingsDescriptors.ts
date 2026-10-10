@@ -9,7 +9,7 @@ import {
 import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
 
 /** Settings section; tab order follows `SETTING_SECTIONS`, not this union. */
-export type SettingSection = 'general' | 'appearance' | 'editor' | 'shortcuts';
+export type SettingSection = 'general' | 'appearance' | 'editor' | 'shortcuts' | 'extensions';
 
 /** Control rendered for one setting; `shortcutList` is read-only. */
 export type SettingControl = 'theme' | 'locale' | 'homeView' | 'switch' | 'number' | 'shortcutList';
@@ -89,6 +89,13 @@ const SECTIONS: readonly SettingSectionDefinition[] = [
     path: '#/settings/shortcuts',
     icon: 'shortcuts',
   },
+  {
+    id: 'extensions',
+    labelKey: 'settings.extensions.title',
+    defaultLabel: 'Extensions',
+    path: '#/settings/extensions',
+    icon: 'settings',
+  },
 ];
 
 /** Validated lookup over settings tabs in display order. */
@@ -107,7 +114,7 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultDescription: 'Interface language. Applied without reload.',
     control: 'locale',
     defaultValue: DEFAULT_LOCALE,
-    persistenceKey: 'opennary:locale',
+    persistenceKey: 'grafalith:locale',
     validate: isLocale,
   },
   {
@@ -119,7 +126,7 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultDescription: 'Follow the system or choose a fixed theme.',
     control: 'theme',
     defaultValue: DEFAULT_THEME_MODE,
-    persistenceKey: 'opennary:theme',
+    persistenceKey: 'grafalith:theme',
     validate: isThemeMode,
   },
   {
@@ -131,7 +138,7 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultDescription: 'Grid or list arrangement for projects on the home page.',
     control: 'homeView',
     defaultValue: DEFAULT_HOME_VIEW_MODE,
-    persistenceKey: 'opennary:editor-workspace',
+    persistenceKey: 'grafalith:editor-workspace',
     validate: isHomeViewMode,
   },
   {
@@ -143,7 +150,7 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultDescription: 'Show the getting-started hint on an empty canvas.',
     control: 'switch',
     defaultValue: true,
-    persistenceKey: 'opennary:editor-workspace',
+    persistenceKey: 'grafalith:editor-workspace',
     validate: (value) => typeof value === 'boolean',
   },
   {
@@ -155,7 +162,7 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultDescription: 'Reopen each project at its last canvas position.',
     control: 'switch',
     defaultValue: true,
-    persistenceKey: 'opennary:editor-workspace',
+    persistenceKey: 'grafalith:editor-workspace',
     validate: (value) => typeof value === 'boolean',
   },
   {
@@ -167,7 +174,7 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultDescription: 'Save the open project automatically after each change.',
     control: 'switch',
     defaultValue: true,
-    persistenceKey: 'opennary:editor-workspace',
+    persistenceKey: 'grafalith:editor-workspace',
     validate: (value) => typeof value === 'boolean',
   },
   {
@@ -179,7 +186,7 @@ const SETTINGS: readonly SettingDefinition[] = [
     defaultDescription: 'Wait after the last change before autosaving, in milliseconds.',
     control: 'number',
     defaultValue: AUTOSAVE_DELAY_MS.default,
-    persistenceKey: 'opennary:editor-workspace',
+    persistenceKey: 'grafalith:editor-workspace',
     min: AUTOSAVE_DELAY_MS.min,
     max: AUTOSAVE_DELAY_MS.max,
     step: 100,

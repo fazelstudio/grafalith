@@ -1,11 +1,11 @@
 /* Single tooltip primitive. Rendered in a portal with fixed positioning. */
 
-.opennary-tooltip-trigger {
+.grafalith-tooltip-trigger {
   display: inline-flex;
   min-width: 0;
 }
 
-.opennary-tooltip {
+.grafalith-tooltip {
   position: fixed;
   z-index: 200;
   max-width: min(240px, calc(100vw - 16px));
@@ -21,7 +21,7 @@
   transition: opacity var(--motion-fast);
 }
 
-.opennary-tooltip__text {
+.grafalith-tooltip__text {
   display: block;
   max-width: min(240px, calc(100vw - 16px));
   white-space: nowrap;
@@ -29,11 +29,11 @@
   text-overflow: ellipsis;
 }
 
-.opennary-tooltip[data-positioned='true'] {
+.grafalith-tooltip[data-positioned='true'] {
   opacity: 1;
 }
 
-.opennary-tooltip::after {
+.grafalith-tooltip::after {
   content: '';
   position: absolute;
   width: 6px;
@@ -42,7 +42,7 @@
   transform: rotate(45deg);
 }
 
-.opennary-tooltip[data-placement='top']::after {
+.grafalith-tooltip[data-placement='top']::after {
   left: 50%;
   bottom: -4px;
   margin-left: -3px;
@@ -50,7 +50,7 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.opennary-tooltip[data-placement='bottom']::after {
+.grafalith-tooltip[data-placement='bottom']::after {
   left: 50%;
   top: -4px;
   margin-left: -3px;
@@ -58,7 +58,7 @@
   border-top: 1px solid var(--border-subtle);
 }
 
-.opennary-tooltip[data-placement='left']::after {
+.grafalith-tooltip[data-placement='left']::after {
   top: 50%;
   right: -4px;
   margin-top: -3px;
@@ -66,7 +66,7 @@
   border-right: 1px solid var(--border-subtle);
 }
 
-.opennary-tooltip[data-placement='right']::after {
+.grafalith-tooltip[data-placement='right']::after {
   top: 50%;
   left: -4px;
   margin-top: -3px;
@@ -75,7 +75,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .opennary-tooltip {
+  .grafalith-tooltip {
     transition: none;
   }
 }

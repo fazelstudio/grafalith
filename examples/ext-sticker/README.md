@@ -1,13 +1,13 @@
 # ext-sticker — out-of-workspace extension example
 
-A third-party OpenNary extension that lives **outside** the engine workspace
+A third-party Grafalith extension that lives **outside** the engine workspace
 (`examples/` is excluded from `Cargo.toml` members). It adds:
 
 - node type `example.sticker` (circle sticker backed by `Element::Custom`),
 - tool `example.sticker` (host-owned; the core captures presses for it),
 - command `example.sticker.create` (history-tracked, undoable).
 
-It depends on `opennary-core` only, through the public extension traits
+It depends on `grafalith-core` only, through the public extension traits
 (`Extension`, `ShapeExtension`, `CommandExtension`) — no engine sources
 modified, no internals touched.
 
@@ -21,7 +21,7 @@ cargo test
 ## Use from a host
 
 ```rust
-use opennary_core::editor::Editor;
+use grafalith_core::editor::Editor;
 
 let mut editor = Editor::new();
 editor.register_extension(Box::new(ext_sticker::StickerExtension::new()))?;

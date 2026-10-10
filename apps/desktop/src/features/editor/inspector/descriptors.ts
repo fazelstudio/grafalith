@@ -285,6 +285,27 @@ const styleSection: InspectorSectionDefinition = {
         ]);
       },
     },
+    {
+      id: 'border',
+      labelKey: 'editor.inspector.borderColor',
+      defaultLabel: 'Border',
+      control: 'color',
+      read: (ctx) =>
+        mixedIf(
+          ctx.entries.map((entry) =>
+            entry.detail.type === 'text' ? (entry.detail.borderColor ?? 'transparent') : MIXED,
+          ),
+        ) as FieldValue,
+      write: async (value, ctx) => {
+        if (typeof value !== 'string' || value.trim() === '') {
+          return { status: 'validationError', message: 'Border must be a color string' };
+        }
+        return runWriteOp(ctx, 'setStyle', [
+          { op: 'setStyle', ids: [...ctx.selection], patch: { borderColor: value } },
+        ]);
+      },
+      visible: (ctx) => ctx.entries.some((entry) => entry.kind === 'text'),
+    },
     numberField(
       'strokeWidth',
       'editor.inspector.strokeWidth',

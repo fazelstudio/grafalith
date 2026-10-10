@@ -2,15 +2,15 @@
 
 ## Supported Versions
 
-OpenNary is distributed as a library (npm + PyPI) and as a desktop application
+Grafalith is distributed as a library (npm + PyPI) and as a desktop application
 (Tauri). Security fixes are applied to the latest released version of each
 artifact.
 
 | Artifact | Package | Supported |
 |----------|---------|-----------|
-| npm | `@fazelstudio/opennary` | Latest version |
-| PyPI | `opennary` | Latest version |
-| Desktop | `opennary-desktop` (Tauri) | Latest version |
+| npm | `@fazelstudio/grafalith` | Latest version |
+| PyPI | `grafalith` | Latest version |
+| Desktop | `grafalith-desktop` (Tauri) | Latest version |
 
 ## Reporting a Vulnerability
 
@@ -35,7 +35,7 @@ all legitimate reports and do our best to quickly fix the problem.
 
 ## Scope
 
-OpenNary is a client-side canvas engine: it processes scene JSON, clipboard
+Grafalith is a client-side canvas engine: it processes scene JSON, clipboard
 payloads, and user input. In scope for security reports:
 
 - Memory safety issues in the Rust engine crates (`crates/*`)

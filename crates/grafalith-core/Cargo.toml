@@ -1,0 +1,28 @@
+[package]
+name = "grafalith-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["fazelstudio"]
+description = "Document domain for the Grafalith Rust engine: elements, document store, history, registries. Framework-agnostic; depends only on grafalith-geometry."
+repository = "https://github.com/fazelstudio/grafalith"
+homepage = "https://github.com/fazelstudio/grafalith"
+keywords = ["canvas", "graphics", "whiteboard", "drawing", "engine"]
+categories = ["graphics"]
+
+[dependencies]
+grafalith-geometry = { version = "0.1.0", path = "../grafalith-geometry" }
+# Polygon boolean ops: pure Rust, WASM-safe, empty default features.
+i_overlay = { version = "9", default-features = false }
+
+# Benchmark and property harnesses for local runs.
+[dev-dependencies]
+criterion = "0.5"
+proptest = "1"
+
+[[bench]]
+name = "scale"
+harness = false
+
+[lints]
+workspace = true

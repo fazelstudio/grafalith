@@ -38,6 +38,7 @@ describe('settings sections', () => {
       'appearance',
       'editor',
       'shortcuts',
+      'extensions',
     ]);
   });
 
@@ -182,8 +183,8 @@ describe('settings persistence journey', () => {
       expect(preferenceService.getAutosaveEnabled()).toBe(false);
       expect(preferenceService.getAutosaveDelayMs()).toBe(500);
 
-      window.localStorage.setItem('opennary:locale', 'xx');
-      window.localStorage.setItem('opennary:theme', 'sepia');
+      window.localStorage.setItem('grafalith:locale', 'xx');
+      window.localStorage.setItem('grafalith:theme', 'sepia');
       expect(preferenceService.getLocale()).toBe('en');
       expect(preferenceService.getTheme()).toBe('system');
     } finally {
@@ -240,7 +241,7 @@ describe('settings persistence journey', () => {
     const restore = installMemoryWindow();
     try {
       window.localStorage.setItem(
-        'opennary:editor-workspace',
+        'grafalith:editor-workspace',
         JSON.stringify({ activeTool: 'select', openPanels: ['layers'], hintDismissed: false, viewports: {} }),
       );
       expect(loadEditorWorkspace().restoreViewport).toBe(true);
@@ -253,7 +254,7 @@ describe('settings persistence journey', () => {
     const restore = installMemoryWindow();
     try {
       window.localStorage.setItem(
-        'opennary:editor-workspace',
+        'grafalith:editor-workspace',
         JSON.stringify({ activeTool: 'select', openPanels: ['layers'], hintDismissed: false, viewports: {} }),
       );
       const workspace = loadEditorWorkspace();

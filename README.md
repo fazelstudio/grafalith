@@ -1,18 +1,18 @@
 <p align="center">
-  <img src="public/assets/icons/opennary.svg" width="120" alt="OpenNary logo" />
+  <img src="public/assets/icons/Grafalith.svg" width="120" alt="Grafalith logo" />
 </p>
 
-<h1 align="center">OpenNary</h1>
+<h1 align="center">Grafalith</h1>
 
 <p align="center">
   A lightweight, framework-agnostic canvas engine for building infinite whiteboard applications — written in Rust, distributed to npm (WASM) and PyPI (Python).
 </p>
 
 <p align="center">
-  <a href="https://github.com/fazelstudio/opennary/actions/workflows/ci.yml"><img src="https://github.com/fazelstudio/opennary/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://www.npmjs.com/package/@fazelstudio/opennary"><img src="https://img.shields.io/npm/v/@fazelstudio/opennary" alt="npm version" /></a>
-  <a href="https://pypi.org/project/opennary/"><img src="https://img.shields.io/pypi/v/opennary" alt="PyPI version" /></a>
-  <a href="https://github.com/fazelstudio/opennary/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@fazelstudio/opennary" alt="license" /></a>
+  <a href="https://github.com/fazelstudio/grafalith/actions/workflows/ci.yml"><img src="https://github.com/fazelstudio/grafalith/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@fazelstudio/grafalith"><img src="https://img.shields.io/npm/v/@fazelstudio/grafalith" alt="npm version" /></a>
+  <a href="https://pypi.org/project/grafalith/"><img src="https://img.shields.io/pypi/v/grafalith" alt="PyPI version" /></a>
+  <a href="https://github.com/fazelstudio/grafalith/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@fazelstudio/grafalith" alt="license" /></a>
 </p>
 
 ## Features
@@ -36,13 +36,13 @@
 ## Install
 
 ```bash
-npm install @fazelstudio/opennary
+npm install @fazelstudio/grafalith
 # or
-bun add @fazelstudio/opennary
+bun add @fazelstudio/grafalith
 ```
 
 ```bash
-pip install opennary
+pip install grafalith
 ```
 
 Usage: [`docs/guides/javascript.md`](./docs/guides/javascript.md) for
@@ -53,14 +53,14 @@ for Python.
 
 | Crate | Description |
 |----|-------------|
-| [`opennary-geometry`](./crates/opennary-geometry) | Pure 2D math — points, bounds, transforms, hit-testing, spatial grid, snapping, viewport |
-| [`opennary-core`](./crates/opennary-core) | Document domain — elements, document store, history/commands, editor session, clipboard, components, extensions |
-| [`opennary-io`](./crates/opennary-io) | Interchange — versioned JSON schema, staged import pipeline, clipboard codec, PNG export descriptors |
-| [`opennary-bindings`](./crates/opennary-bindings) | Host boundary — JSON-string batch protocol, `Engine` facade, render/session DTOs |
-| [`opennary`](./crates/opennary) | npm distribution — `wasm-pack` target, published as `@fazelstudio/opennary` |
-| [`opennary-python`](./crates/opennary-python) | PyPI distribution — `maturin`/PyO3 bindings, published as `opennary` |
+| [`grafalith-geometry`](./crates/grafalith-geometry) | Pure 2D math — points, bounds, transforms, hit-testing, spatial grid, snapping, viewport |
+| [`grafalith-core`](./crates/grafalith-core) | Document domain — elements, document store, history/commands, editor session, clipboard, components, extensions |
+| [`grafalith-io`](./crates/grafalith-io) | Interchange — versioned JSON schema, staged import pipeline, clipboard codec, PNG export descriptors |
+| [`grafalith-bindings`](./crates/grafalith-bindings) | Host boundary — JSON-string batch protocol, `Engine` facade, render/session DTOs |
+| [`grafalith`](./crates/grafalith) | npm distribution — `wasm-pack` target, published as `@fazelstudio/grafalith` |
+| [`grafalith-python`](./crates/grafalith-python) | PyPI distribution — `maturin`/PyO3 bindings, published as `grafalith` |
 
-Dependency direction: `opennary`/`opennary-python` → `opennary-bindings` → `opennary-io` → `opennary-core` → `opennary-geometry`.
+Dependency direction: `grafalith`/`grafalith-python` → `grafalith-bindings` → `grafalith-io` → `grafalith-core` → `grafalith-geometry`.
 
 ## Docs
 

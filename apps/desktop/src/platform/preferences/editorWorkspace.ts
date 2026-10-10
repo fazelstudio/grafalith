@@ -3,7 +3,7 @@ import { toolRegistry } from '../../registries/tools';
 import type { ViewportState } from '../../render/coords';
 import { persistenceConfig } from '../projects/persistenceConfig';
 
-const WORKSPACE_KEY = 'opennary:editor-workspace';
+const WORKSPACE_KEY = 'grafalith:editor-workspace';
 
 /** User-level editor dock sizing policy. */
 export const EDITOR_DOCK_WIDTHS = {
@@ -33,6 +33,8 @@ export function isHomeViewMode(value: unknown): value is HomeViewMode {
 /** Persisted editor chrome: tool, open panels, hint, viewports, and restore flag. */
 export interface EditorWorkspace {
   activeTool: string;
+  /** When true the creation tool stays active after commit (double-click toggles). */
+  stickyTool: boolean;
   openPanels: string[];
   leftPanelWidth: number;
   rightPanelWidth: number;
@@ -50,6 +52,7 @@ export interface EditorWorkspace {
 function defaultWorkspace(): EditorWorkspace {
   return {
     activeTool: 'select',
+    stickyTool: false,
     openPanels: panelRegistry.all().filter((panel) => panel.defaultOpen).map((panel) => panel.id),
     leftPanelWidth: EDITOR_DOCK_WIDTHS.default,
     rightPanelWidth: EDITOR_DOCK_WIDTHS.default,
@@ -128,6 +131,7 @@ export function loadEditorWorkspace(): EditorWorkspace {
   const leftPanelWidth = normalizeEditorDockWidth(record['leftPanelWidth']);
   const rightPanelWidth = normalizeEditorDockWidth(record['rightPanelWidth']);
   const hintDismissed = record['hintDismissed'] === true;
+  const stickyTool = record['stickyTool'] === true;
   const restoreViewport = record['restoreViewport'] === undefined ? true : record['restoreViewport'] === true;
   const autosaveEnabled =
     record['autosaveEnabled'] === undefined ? true : record['autosaveEnabled'] === true;
@@ -146,6 +150,7 @@ export function loadEditorWorkspace(): EditorWorkspace {
   }
   return {
     activeTool,
+    stickyTool,
     openPanels,
     leftPanelWidth,
     rightPanelWidth,

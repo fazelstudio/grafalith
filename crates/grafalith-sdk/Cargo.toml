@@ -1,0 +1,17 @@
+[package]
+name = "grafalith-sdk"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["fazelstudio"]
+description = "Public extension SDK facade for the Grafalith Rust engine: re-exports the extension traits and registry so third-party crates never touch engine internals."
+repository = "https://github.com/fazelstudio/grafalith"
+homepage = "https://github.com/fazelstudio/grafalith"
+keywords = ["canvas", "graphics", "extensions", "sdk", "engine"]
+categories = ["graphics", "api-bindings"]
+
+[dependencies]
+grafalith-core = { version = "0.1.0", path = "../grafalith-core" }
+
+[lints]
+workspace = true

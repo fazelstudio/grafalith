@@ -67,6 +67,13 @@ const ROUTES: readonly RouteDefinition[] = [
     navigationKey: 'settings.shortcuts.title',
     layout: 'settings',
   },
+  {
+    id: 'settings-extensions',
+    path: '#/settings/extensions',
+    titleKey: 'settings.extensions.title',
+    navigationKey: 'settings.extensions.title',
+    layout: 'settings',
+  },
 ];
 
 function validate(routes: readonly RouteDefinition[]): void {  const ids = new Set<string>();

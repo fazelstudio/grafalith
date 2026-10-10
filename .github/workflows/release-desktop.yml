@@ -75,7 +75,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: opennary-desktop-${{ matrix.os }}
+          name: grafalith-desktop-${{ matrix.os }}
           path: ${{ matrix.release-files }}
           if-no-files-found: error
 

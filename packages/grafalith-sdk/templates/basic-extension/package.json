@@ -1,0 +1,9 @@
+{
+  "name": "acme-hello-world",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc src/index.ts --outDir dist --module esnext --target es2020 --moduleResolution bundler --strict --skipLibCheck"
+  }
+}

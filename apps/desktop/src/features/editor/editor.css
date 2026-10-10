@@ -115,6 +115,11 @@
   color: var(--fg-primary);
 }
 
+/* Sticky (locked) tool: stays active after commit (double-click toggles). */
+.editor-toolbar__tool[data-sticky='true'] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .editor-workspace {
   position: relative;
   display: flex;

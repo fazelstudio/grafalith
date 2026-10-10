@@ -2,7 +2,7 @@
 // example, driven through the real wasm-pack `nodejs` artifact.
 //
 // Run after `bun run build:wasm:node`:  node examples/custom-button/button.mjs
-const { JsEngine } = require("../../pkg/node/nary.js");
+const { JsEngine } = require("../../pkg/node/grafalith.js");
 
 const engine = new JsEngine();
 const batch = (ops) => JSON.parse(engine.apply_batch(JSON.stringify(ops)));

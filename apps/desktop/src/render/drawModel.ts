@@ -23,8 +23,18 @@ export type GhostPreview =
   | { kind: 'freedraw'; trail: [number, number][] }
   /** Move drag: committed entries shifted by the snapped delta. */
   | { kind: 'move'; affected: string[]; dx: number; dy: number }
-  /** Resize drag: engine-computed box outline (content repaints on commit). */
-  | { kind: 'resize'; box: { x: number; y: number; width: number; height: number } }
+  /**
+   * Resize drag: box kinds repaint live inside the engine-computed box
+   * while the selection overlay morphs onto it; point kinds
+   * (line/arrow/freedraw/path) keep the dashed outline since their
+   * vertices need the commit.
+   */
+  | {
+      kind: 'resize';
+      id: string;
+      box: { x: number; y: number; width: number; height: number };
+      fontSize: number | null;
+    }
   /** Rotate drag: committed entry repainted at the preview angle. */
   | { kind: 'rotate'; id: string; rotation: number };
 
@@ -56,6 +66,8 @@ export function drawRenderModel(
   preview: GhostPreview = NO_PREVIEW,
   editingId: string | null = null,
   liveGuides: SnapGuideDto[] | null = null,
+  /** True when the selection is a single text element: corner handles show. */
+  textSingleSelection = false,
 ): void {
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
@@ -79,7 +91,36 @@ export function drawRenderModel(
   drawGhost(ctx, model, preview);
 
   if (model.selection) {
-    drawSelectionOverlay(ctx, model.selection, zoom);
+    // The box travels with the gesture for every drag kind: shifted by the
+    // move delta, morphed to the resize box, rotated to the preview angle.
+    // Object and box stay one unit while dragging, for every element kind.
+    if (preview.kind === 'move') {
+      drawSelectionOverlay(
+        ctx,
+        model.selection,
+        zoom,
+        textSingleSelection,
+        { dx: preview.dx, dy: preview.dy },
+      );
+    } else if (preview.kind === 'resize') {
+      drawSelectionOverlay(
+        ctx,
+        overlayForResize(model.selection, preview.box),
+        zoom,
+        textSingleSelection,
+        null,
+      );
+    } else if (preview.kind === 'rotate') {
+      drawSelectionOverlay(
+        ctx,
+        { ...model.selection, rotation: preview.rotation },
+        zoom,
+        textSingleSelection,
+        null,
+      );
+    } else {
+      drawSelectionOverlay(ctx, model.selection, zoom, textSingleSelection, null);
+    }
   }
 
   const guides = liveGuides ?? model.snapGuides;
@@ -97,6 +138,8 @@ function skippedIds(preview: GhostPreview, editingId: string | null): Set<string
     for (const id of preview.affected) skipped.add(id);
   } else if (preview.kind === 'rotate') {
     skipped.add(preview.id);
+  } else if (preview.kind === 'resize') {
+    skipped.add(preview.id);
   }
   return skipped;
 }
@@ -112,6 +155,32 @@ function findEntry(model: RenderModelDto, id: string): DrawEntryDto | null {
     }
   }
   return null;
+}
+
+/** Kinds painted from bounds alone (safe to repaint inside a preview box). */
+function isBoxKind(kind: string): boolean {
+  return (
+    kind === 'rectangle' ||
+    kind === 'ellipse' ||
+    kind === 'text' ||
+    kind === 'frame' ||
+    kind === 'image' ||
+    kind === 'instance' ||
+    kind === 'custom'
+  );
+}
+
+/** Entry repainted inside a preview box (text with the preview font size). */
+function resizedEntry(
+  entry: DrawEntryDto,
+  box: { x: number; y: number; width: number; height: number },
+  fontSize: number | null,
+): DrawEntryDto {
+  const bounds = { minX: box.x, minY: box.y, maxX: box.x + box.width, maxY: box.y + box.height };
+  if (entry.detail.type === 'text' && typeof fontSize === 'number' && Number.isFinite(fontSize)) {
+    return { ...entry, bounds, detail: { ...entry.detail, fontSize } };
+  }
+  return { ...entry, bounds };
 }
 
 // ---------------------------------------------------------------------------
@@ -349,16 +418,75 @@ function drawTextKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void 
     return;
   }
   withRotation(ctx, entry, () => {
-    applyPaint(ctx, entry);
+    // Text is a foreground paint, not a filled shape. Keep this path
+    // independent from the element background so a transparent fill cannot
+    // make committed glyphs disappear.
+    ctx.save();
+    ctx.globalAlpha = normalizedOpacity(entry.opacity);
+    ctx.globalCompositeOperation = 'source-over';
     const { bounds } = entry;
-    ctx.fillStyle = entry.strokeColor;
-    ctx.font = `${detail.fontSize}px ${detail.fontFamily}`;
+    const w = bounds.maxX - bounds.minX;
+    const h = bounds.maxY - bounds.minY;
+    // Background follows the content-driven box, so it grows with new lines.
+    ctx.beginPath();
+    ctx.rect(bounds.minX, bounds.minY, w, h);
+    fillPath(ctx, entry);
+    // Box outline keeps its own color while reusing the entry stroke
+    // width/style, leaving the stroke color free for the glyphs.
+    const border = detail.borderColor?.trim() ?? '';
+    if (border !== '' && border.toLowerCase() !== 'transparent') {
+      ctx.strokeStyle = detail.borderColor as string;
+      ctx.lineWidth = entry.strokeWidth;
+      applyDash(ctx, entry);
+      ctx.beginPath();
+      ctx.rect(bounds.minX, bounds.minY, w, h);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.fillStyle = textPaintColor(ctx, entry.strokeColor);
+    // Same stack as the overlay textarea: engine font first, system sans
+    // as fallback so a missing handwriting font never renders blank.
+    ctx.font = `${detail.fontSize}px ${detail.fontFamily}, sans-serif`;
     ctx.textBaseline = 'top';
+    ctx.textAlign = detail.align;
+    // Anchor follows the alignment like the overlay box does: centering
+    // around the left edge would push centered text out of its own box.
+    const anchorX =
+      detail.align === 'center'
+        ? (bounds.minX + bounds.maxX) / 2
+        : detail.align === 'right'
+          ? bounds.maxX
+          : bounds.minX;
     const lines = detail.text.split('\n');
     for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], bounds.minX, bounds.minY + i * detail.fontSize * 1.25);
+      ctx.fillText(lines[i], anchorX, bounds.minY + i * detail.fontSize * 1.25);
     }
+    ctx.restore();
   });
+}
+
+function normalizedOpacity(opacity: number): number {
+  return Number.isFinite(opacity) ? Math.max(0, Math.min(1, opacity / 100)) : 1;
+}
+
+function textPaintColor(ctx: CanvasRenderingContext2D, color: string): string {
+  if (color.trim() !== '' && color.toLowerCase() !== 'transparent') {
+    return color;
+  }
+
+  const parent = ctx.canvas.parentElement;
+  if (parent && typeof window !== 'undefined') {
+    const background = window.getComputedStyle(parent).backgroundColor;
+    const match = background.match(
+      /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i,
+    );
+    if (match) {
+      const luminance =
+        (0.2126 * Number(match[1]) + 0.7152 * Number(match[2]) + 0.0722 * Number(match[3])) / 255;
+      return luminance > 0.5 ? '#000000' : '#ffffff';
+    }
+  }
+  return CANVAS_OVERLAY.fallbackFill;
 }
 
 function drawPathKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void {
@@ -490,9 +618,20 @@ function drawGhost(ctx: CanvasRenderingContext2D, model: RenderModelDto, preview
       ctx.restore();
       return;
     }
-    case 'resize':
+    case 'resize': {
+      const entry = findEntry(model, preview.id);
+      if (entry && isBoxKind(entry.kind)) {
+        // Live content: the entry repaints inside the preview box (text
+        // with the preview font size), exactly as the commit will store it.
+        ctx.save();
+        ctx.globalAlpha = 0.75;
+        drawEntry(ctx, resizedEntry(entry, preview.box, preview.fontSize));
+        ctx.restore();
+        return;
+      }
       drawResizePreview(ctx, preview.box);
       return;
+    }
     case 'rotate': {
       const entry = findEntry(model, preview.id);
       if (!entry) return;
@@ -595,22 +734,62 @@ function drawResizePreview(
 // Overlays (drawn INSIDE the viewport transform — scene units)
 // ---------------------------------------------------------------------------
 
+/**
+ * Selection overlay morphed onto a resize preview box: corners and edges
+ * follow the box, the rotate handle keeps its offset above the top edge,
+ * and the rotation rides along (the draw applies it about the new center).
+ */
+function overlayForResize(
+  overlay: NonNullable<RenderModelDto['selection']>,
+  box: { x: number; y: number; width: number; height: number },
+): NonNullable<RenderModelDto['selection']> {
+  const handles: [number, number][] = [
+    [box.x, box.y],
+    [box.x + box.width / 2, box.y],
+    [box.x + box.width, box.y],
+    [box.x, box.y + box.height / 2],
+    [box.x + box.width, box.y + box.height / 2],
+    [box.x, box.y + box.height],
+    [box.x + box.width / 2, box.y + box.height],
+    [box.x + box.width, box.y + box.height],
+  ];
+  return {
+    bounds: { minX: box.x, minY: box.y, maxX: box.x + box.width, maxY: box.y + box.height },
+    handles,
+    rotateHandle: [
+      box.x + box.width / 2,
+      box.y + (overlay.rotateHandle[1] - overlay.bounds.minY),
+    ],
+    rotation: overlay.rotation,
+  };
+}
+
 function drawSelectionOverlay(
   ctx: CanvasRenderingContext2D,
   overlay: NonNullable<RenderModelDto['selection']>,
   zoom: number,
+  textSingleSelection = false,
+  shift: { dx: number; dy: number } | null = null,
 ): void {
   const { bounds, handles, rotateHandle, rotation } = overlay;
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   ctx.save();
+  // Scene-space shift first, so rotated boxes translate rigidly instead of
+  // along their rotated axes.
+  if (shift) ctx.translate(shift.dx, shift.dy);
   ctx.translate(cx, cy);
   ctx.rotate(rotation);
   ctx.translate(-cx, -cy);
   ctx.strokeStyle = SELECTION_COLOR;
   ctx.lineWidth = 1 / zoom;
   ctx.strokeRect(bounds.minX, bounds.minY, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
-  for (const [x, y] of handles) {
+  // Text boxes keep their content-driven height, but selected text still
+  // exposes the four familiar corner handles for horizontal resizing.
+  const visibleHandles = textSingleSelection
+    ? [handles[0], handles[2], handles[5], handles[7]]
+    : handles;
+  for (const [x, y] of visibleHandles) {
     ctx.fillStyle = CANVAS_OVERLAY.handleFill;
     ctx.strokeStyle = SELECTION_COLOR;
     ctx.lineWidth = 1 / zoom;

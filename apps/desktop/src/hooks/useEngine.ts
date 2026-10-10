@@ -40,7 +40,7 @@ export type PaintDto =
 
 export type DrawDetailDto =
   | { type: 'none' }
-  | { type: 'text'; text: string; fontSize: number; fontFamily: string }
+  | { type: 'text'; text: string; fontSize: number; fontFamily: string; align: 'left' | 'center' | 'right'; borderColor: string | null }
   | { type: 'image'; assetId: string; ready: boolean }
   | { type: 'frame'; name: string; clipContent: boolean }
   | { type: 'arrow'; hasStart: boolean; hasEnd: boolean }
@@ -132,6 +132,8 @@ export interface SessionStateDto {
   redoLen: number;
   enabledTools: string[] | null;
   assetGeneration: number;
+  /** Document mutation counter for model dirty-checking without a full fetch. */
+  sceneNonce: number;
 }
 
 export interface OpResult {

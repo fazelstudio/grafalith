@@ -257,7 +257,7 @@ export function Tooltip({
     : (
       <span
         ref={setTrigger}
-        className="opennary-tooltip-trigger"
+        className="grafalith-tooltip-trigger"
         onMouseEnter={scheduleShow}
         onMouseLeave={hide}
         onFocusCapture={scheduleShow}
@@ -278,11 +278,11 @@ export function Tooltip({
             role="tooltip"
             aria-hidden="true"
             data-placement={actual}
-            className="opennary-tooltip"
+            className="grafalith-tooltip"
             data-positioned={positioned ? 'true' : 'false'}
             style={{ left: coords.x, top: coords.y }}
           >
-            <span className="opennary-tooltip__text">{content}</span>
+            <span className="grafalith-tooltip__text">{content}</span>
           </div>,
           document.body,
         )

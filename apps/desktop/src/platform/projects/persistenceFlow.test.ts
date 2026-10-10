@@ -74,11 +74,11 @@ describe('phase 05 persistence acceptance', () => {
     await expect(store.open('p-missing')).rejects.toMatchObject({ code: 'not-found' });
 
     const created = await store.create('Fragile', buildBlankSceneEnvelope());
-    backing.setItem(`opennary:projects:doc:${created.id}`, '{not json');
+    backing.setItem(`grafalith:projects:doc:${created.id}`, '{not json');
     await expect(store.open(created.id)).rejects.toMatchObject({ code: 'invalid-data' });
 
     backing.setItem(
-      `opennary:projects:doc:${created.id}`,
+      `grafalith:projects:doc:${created.id}`,
       '{"schemaVersion":999,"version":999,"elements":[]}',
     );
     await expect(store.open(created.id)).rejects.toMatchObject({ code: 'unsupported-version' });

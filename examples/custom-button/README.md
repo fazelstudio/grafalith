@@ -5,7 +5,7 @@ a **real built artifact** (not mocks):
 
 | Host | Entry | Prerequisite | Run |
 |---|---|---|---|
-| Rust (native) | `crates/opennary-bindings/examples/custom_button.rs` | none | `cargo run -p opennary-bindings --example custom_button` |
+| Rust (native) | `crates/grafalith-bindings/examples/custom_button.rs` | none | `cargo run -p grafalith-bindings --example custom_button` |
 | JS (wasm) | `button.cjs` | `bun run build:wasm:node` | `node examples/custom-button/button.cjs` |
 | Python (native ext) | `button.py` | install the wheel from `maturin build` | `python examples/custom-button/button.py` |
 
