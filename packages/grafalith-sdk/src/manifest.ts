@@ -53,7 +53,7 @@ export interface GrltToolbarContribution {
   readonly icon?: string;
 }
 
-/** One per-kind editor tool (design | whiteboard | diagram). */
+/** One per-kind editor tool (design | whiteboard | slides). */
 export interface GrltEditorToolContribution {
   readonly id: string;
   readonly title: string;
@@ -92,7 +92,7 @@ export interface GrltProjectTemplateContribution {
   readonly id: string;
   readonly title: string;
   /** Editor kind the template creates. */
-  readonly kind: "design" | "whiteboard" | "diagram";
+  readonly kind: "design" | "whiteboard" | "slides";
 }
 
 /** One modal/dialog contribution. */
@@ -213,7 +213,7 @@ export function validateGrltManifest(raw: unknown): { manifest?: GrltManifest; e
     "onEditor:*",
     "onEditor:design",
     "onEditor:whiteboard",
-    "onEditor:diagram",
+    "onEditor:slides",
   ];
   if (Array.isArray(raw["activationEvents"])) {
     for (const entry of raw["activationEvents"] as unknown[]) {

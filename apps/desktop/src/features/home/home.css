@@ -150,6 +150,14 @@
   gap: var(--space-sm);
 }
 
+.home__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+
 .home__section-title {
   font: var(--font-section);
   margin-bottom: var(--space-xs);
@@ -389,6 +397,33 @@
   flex-direction: column;
   gap: var(--space-md);
   margin-bottom: var(--space-lg);
+}
+
+/* Create dialog keeps one width for every kind and canvas mode (only the
+   height follows the content); canvas options stretch edge to edge. */
+.ui-dialog.home-dialog--create {
+  width: min(440px, calc(100vw - 48px));
+}
+
+.home-dialog--create .ui-segmented {
+  display: flex;
+  width: 100%;
+}
+
+.home-dialog--create .ui-segmented__option {
+  flex: 1;
+  justify-content: center;
+}
+
+.home-dialog__row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+}
+
+.home-dialog__row > * {
+  flex: 1;
+  min-width: 0;
 }
 
 .home-dialog__error {

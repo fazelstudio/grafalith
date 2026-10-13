@@ -121,7 +121,7 @@ export function registerManifestContributions(packageId: string, manifest: GrltM
     }
   }
   for (const [kind, tools] of Object.entries(contributes.editorTools ?? {})) {
-    if (kind !== 'design' && kind !== 'whiteboard' && kind !== 'diagram') {
+    if (kind !== 'design' && kind !== 'whiteboard' && kind !== 'slides') {
       problems.push(`unknown editorTools kind "${kind}"`);
       continue;
     }

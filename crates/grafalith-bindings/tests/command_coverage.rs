@@ -55,6 +55,13 @@ fn all_ops() -> Vec<Value> {
         json!({"op": "reorder", "order": ["cov-2", "cov-1", "cov-3"]}),
         json!({"op": "group", "ids": ["cov-1", "cov-3"]}),
         json!({"op": "ungroup", "groupId": "group-404"}),
+        json!({"op": "renameGroup", "groupId": "group-404", "name": "G"}),
+        json!({"op": "reparentGroup", "groupId": "group-404", "parentGroupId": null}),
+        json!({"op": "moveToGroup", "ids": ["cov-1"], "groupId": null}),
+        json!({"op": "setGroupLocked", "ids": ["group-404"], "locked": true}),
+        json!({"op": "renameNode", "id": "cov-1", "name": "Layer 1"}),
+        json!({"op": "reparentNodes", "ids": ["cov-1"], "parentGroupId": null}),
+        json!({"op": "duplicateNodes", "ids": ["cov-1"]}),
         json!({"op": "select", "ids": ["cov-1"]}),
         json!({"op": "setTool", "tool": "rectangle"}),
         json!({"op": "copy", "ids": ["cov-1"]}),
@@ -70,6 +77,7 @@ fn all_ops() -> Vec<Value> {
         json!({"op": "pointerMove", "x": 12, "y": 12}),
         json!({"op": "pointerUp", "x": 12, "y": 12, "button": "left"}),
         json!({"op": "pointerCancel"}),
+        json!({"op": "commitDraw", "requestId": "cov-draw-1", "shape": "rectangle", "origin": {"x": 0, "y": 0}, "current": {"x": 50, "y": 40}}),
         json!({"op": "keyDown", "key": "Delete"}),
         json!({"op": "wheel", "dx": 0, "dy": 10, "x": 5, "y": 5}),
         json!({"op": "startTextAt", "x": 400, "y": 400}),
@@ -111,6 +119,7 @@ fn all_ops() -> Vec<Value> {
         json!({"op": "configure", "theme": {}}),
         json!({"op": "notifyAssetsChanged"}),
         json!({"op": "renderModel", "canvasWidth": 800, "canvasHeight": 600}),
+        json!({"op": "planPngExport"}),
         json!({"op": "previewMove", "ids": [], "from": {"x": 0, "y": 0}, "to": {"x": 1, "y": 1}}),
         json!({"op": "previewResize", "id": "cov-1", "handle": "bottom-right", "x": 5, "y": 5}),
         json!({"op": "previewRotate", "id": "cov-1", "anchor": {"x": 0, "y": 0}, "current": {"x": 1, "y": 1}}),
@@ -159,13 +168,14 @@ fn every_op_has_a_unique_well_formed_wire_name() {
         .iter()
         .map(|op| serde_json::from_value(op.clone()).expect("every coverage op parses"))
         .collect();
-    // 71 built-ins plus executeCommand (72), plus nine boolean-support
-    // creates and seven boolean ops (88), plus fit/fill (90).
-    // With the `svg` feature the importSvg op makes 91 occurrences.
+    // Base occurrences plus seven hierarchy ops (rename/reparent/move,
+    // group lock, node rename, node reparent, hierarchy duplicate) plus the
+    // PNG export plan op.
+    // With the `svg` feature the importSvg op adds one more occurrence.
     #[cfg(not(feature = "svg"))]
-    assert_eq!(ops.len(), 90);
+    assert_eq!(ops.len(), 99);
     #[cfg(feature = "svg")]
-    assert_eq!(ops.len(), 91);
+    assert_eq!(ops.len(), 100);
 
     let mut names: Vec<&str> = ops.iter().map(op_name).collect();
     for name in &names {
@@ -173,14 +183,13 @@ fn every_op_has_a_unique_well_formed_wire_name() {
     }
     names.sort_unstable();
     names.dedup();
-    // 71 built-ins plus executeCommand (72), plus four boolean ops (76),
-    // plus fit/fill viewport (78). With the `svg` feature, importSvg
-    // makes 79. Setup ops reuse names on purpose; uniqueness is per wire
-    // name.
+    // Base unique names plus the seven hierarchy wires plus the PNG export
+    // plan wire. With the `svg` feature, importSvg adds one more. Setup ops
+    // reuse names on purpose; uniqueness is per wire name.
     #[cfg(not(feature = "svg"))]
-    assert_eq!(names.len(), 78);
+    assert_eq!(names.len(), 87);
     #[cfg(feature = "svg")]
-    assert_eq!(names.len(), 79);
+    assert_eq!(names.len(), 88);
     for required in [
         "executeCommand",
         "booleanUnion",

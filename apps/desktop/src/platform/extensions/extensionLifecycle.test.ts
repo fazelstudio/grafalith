@@ -20,20 +20,24 @@ function manifest(overrides: Record<string, unknown> = {}) {
 }
 
 describe('phase-based activation', () => {
-  test('onHome and onEditor:diagram activate in their phases', async () => {
+  test('onHome and onEditor:whiteboard activate in their phases', async () => {
     const host = new DesktopExtensionHost('0.1.0');
     const started: string[] = [];
     host.install(manifest({ id: 'home-ext', activationEvents: ['onHome'] }), {
       activate: () => void started.push('home'),
     });
-    host.install(manifest({ id: 'diagram-ext', activationEvents: ['onEditor:diagram'] }), {
-      activate: () => void started.push('diagram'),
+    host.install(manifest({ id: 'board-ext', activationEvents: ['onEditor:whiteboard'] }), {
+      activate: () => void started.push('board'),
+    });
+    host.install(manifest({ id: 'deck-ext', activationEvents: ['onEditor:slides'] }), {
+      activate: () => void started.push('deck'),
     });
     expect(await host.activateByTrigger({ kind: 'startup' })).toEqual([]);
     expect(await host.activateHome()).toEqual(['acme.home-ext']);
     expect(await host.activateEditor('design')).toEqual([]);
-    expect(await host.activateEditor('diagram')).toEqual(['acme.diagram-ext']);
-    expect(started).toEqual(['home', 'diagram']);
+    expect(await host.activateEditor('whiteboard')).toEqual(['acme.board-ext']);
+    expect(await host.activateEditor('slides')).toEqual(['acme.deck-ext']);
+    expect(started).toEqual(['home', 'board', 'deck']);
     await host.disposeAll();
   });
 

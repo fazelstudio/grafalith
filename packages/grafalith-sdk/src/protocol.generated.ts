@@ -18,6 +18,13 @@ export type SdkBatchOp =
   | { op: "reorder"; order: string[] } // node.reorder
   | { op: "group"; ids: string[] } // node.group
   | { op: "ungroup"; groupId: string } // node.ungroup
+  | { op: "renameGroup"; groupId: string; name: string } // group.rename
+  | { op: "reparentGroup"; groupId: string; parentGroupId?: string | null } // group.reparent
+  | { op: "moveToGroup"; ids: string[]; groupId?: string | null; index?: number } // node.moveToGroup
+  | { op: "setGroupLocked"; ids: string[]; locked: boolean } // group.setLocked
+  | { op: "renameNode"; id: string; name: string } // node.rename
+  | { op: "reparentNodes"; ids: string[]; parentGroupId?: string | null; index?: number } // node.reparent
+  | { op: "duplicateNodes"; ids: string[] } // node.duplicateHierarchy
   | { op: "select"; ids: string[] } // selection.set
   | { op: "setTool"; tool: string } // tool.activate
   | { op: "copy"; ids: string[] } // clipboard.copy
@@ -35,12 +42,13 @@ export type SdkBatchOp =
   | { op: "pointerMove"; x: number; y: number; modifiers?: SdkModifiers } // tool.pointerMove
   | { op: "pointerUp"; x: number; y: number; button: string; modifiers?: SdkModifiers } // tool.pointerUp
   | { op: "pointerCancel" } // tool.pointerCancel
+  | { op: "commitDraw"; requestId?: string; shape: string; origin: SdkPoint; current: SdkPoint; trail?: SdkPoint[] } // tool.commitDraw
   | { op: "keyDown"; key: string; modifiers?: SdkModifiers } // tool.key
   | { op: "wheel"; dx: number; dy: number; zoomGesture?: boolean; x: number; y: number } // view.wheel
   | { op: "setViewport"; scrollX: number; scrollY: number; zoom: number } // view.setViewport
   | { op: "fitViewport"; canvasWidth: number; canvasHeight: number; padding?: number; ids?: string[] } // view.fit
   | { op: "fillViewport"; canvasWidth: number; canvasHeight: number; padding?: number; ids?: string[] } // view.fill
-  | { op: "configure"; enabledTools?: string[] | null; theme?: unknown; snap?: unknown } // session.configure
+  | { op: "configure"; enabledTools?: string[] | null; theme?: unknown; snap?: unknown; canvasMode?: unknown } // session.configure
   | { op: "notifyAssetsChanged" } // asset.notifyChanged
   | { op: "startTextAt"; x: number; y: number } // text.startAt
   | { op: "textInput"; text: string } // text.input
@@ -75,7 +83,7 @@ export type SdkBatchOp =
   | { op: "pathEditRelease" } // path.release
   | { op: "pathEditCommit" } // path.commit
   | { op: "pathEditCancel" } // path.cancel
-  | { op: "renderModel"; canvasWidth: number; canvasHeight: number; showGrid?: boolean; gridSize?: number; readyImages?: string[] } // view.renderModel
+  | { op: "renderModel"; canvasWidth: number; canvasHeight: number; showGrid?: boolean; gridSize?: number; readyImages?: string[]; viewport?: unknown } // view.renderModel
   | { op: "previewMove"; ids: string[]; from: SdkPoint; to: SdkPoint; axisLock?: boolean } // view.previewMove
   | { op: "previewResize"; id: string; handle: string; x: number; y: number; lockAspect?: boolean } // view.previewResize
   | { op: "previewRotate"; id: string; anchor: SdkPoint; current: SdkPoint; snap?: boolean } // view.previewRotate
@@ -87,6 +95,7 @@ export type SdkBatchOp =
   | { op: "booleanSubtract"; ids: string[] } // boolean.subtract
   | { op: "booleanIntersect"; ids: string[] } // boolean.intersect
   | { op: "booleanExclude"; ids: string[] } // boolean.exclude
+  | { op: "planPngExport"; options?: unknown } // export.planPng
 
-export type SdkOpName = "create" | "delete" | "move" | "setBounds" | "setRotation" | "setStyle" | "setLocked" | "reorder" | "group" | "ungroup" | "select" | "setTool" | "copy" | "paste" | "duplicate" | "cut" | "nudge" | "deleteSelected" | "undo" | "redo" | "importScene" | "importSvg" | "exportScene" | "pointerDown" | "pointerMove" | "pointerUp" | "pointerCancel" | "keyDown" | "wheel" | "setViewport" | "fitViewport" | "fillViewport" | "configure" | "notifyAssetsChanged" | "startTextAt" | "textInput" | "textBackspace" | "textDelete" | "textSetCaret" | "compositionStart" | "compositionUpdate" | "compositionEnd" | "commitText" | "cancelText" | "bringToFront" | "sendToBack" | "bringForward" | "sendBackward" | "align" | "distribute" | "applyAutoLayout" | "resizeSelection" | "penBegin" | "penClick" | "penDragHandle" | "penCommit" | "penCancel" | "cropStart" | "cropDrag" | "cropCommit" | "cropCancel" | "pathEditBegin" | "pathEditPress" | "pathEditDrag" | "pathEditRelease" | "pathEditCommit" | "pathEditCancel" | "renderModel" | "previewMove" | "previewResize" | "previewRotate" | "contextMenu" | "drainEvents" | "sessionState" | "executeCommand" | "booleanUnion" | "booleanSubtract" | "booleanIntersect" | "booleanExclude";
+export type SdkOpName = "create" | "delete" | "move" | "setBounds" | "setRotation" | "setStyle" | "setLocked" | "reorder" | "group" | "ungroup" | "renameGroup" | "reparentGroup" | "moveToGroup" | "setGroupLocked" | "renameNode" | "reparentNodes" | "duplicateNodes" | "select" | "setTool" | "copy" | "paste" | "duplicate" | "cut" | "nudge" | "deleteSelected" | "undo" | "redo" | "importScene" | "importSvg" | "exportScene" | "pointerDown" | "pointerMove" | "pointerUp" | "pointerCancel" | "commitDraw" | "keyDown" | "wheel" | "setViewport" | "fitViewport" | "fillViewport" | "configure" | "notifyAssetsChanged" | "startTextAt" | "textInput" | "textBackspace" | "textDelete" | "textSetCaret" | "compositionStart" | "compositionUpdate" | "compositionEnd" | "commitText" | "cancelText" | "bringToFront" | "sendToBack" | "bringForward" | "sendBackward" | "align" | "distribute" | "applyAutoLayout" | "resizeSelection" | "penBegin" | "penClick" | "penDragHandle" | "penCommit" | "penCancel" | "cropStart" | "cropDrag" | "cropCommit" | "cropCancel" | "pathEditBegin" | "pathEditPress" | "pathEditDrag" | "pathEditRelease" | "pathEditCommit" | "pathEditCancel" | "renderModel" | "previewMove" | "previewResize" | "previewRotate" | "contextMenu" | "drainEvents" | "sessionState" | "executeCommand" | "booleanUnion" | "booleanSubtract" | "booleanIntersect" | "booleanExclude" | "planPngExport";
 

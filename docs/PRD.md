@@ -1,188 +1,148 @@
-# PRD — Grafalith
+# Product Requirements — Grafalith
 
-**Product Requirements Document**
-Status: v4 (Professional-Grade) · Owner: (fill in your name) · Last updated: 2026-10-01
+> This document defines product intent, requirements, boundaries, and acceptance expectations. It is not the source of truth for whether a feature is currently implemented. Verify implementation status against the code, tests, API/command reference, and release notes.
 
----
+## 1. Product summary
 
-## 1. Summary
+Grafalith is a lightweight, framework-agnostic 2D graphics engine written in Rust. It is designed to be embedded into applications and to provide shared graphics/document capabilities without requiring consumers to use a particular UI framework.
 
-Grafalith is a **professional-grade 2D canvas engine for design & prototyping** (Figma/TLDraw/Excalidraw class), built as a headless library that can be embedded into other applications. The product goal has evolved over time — brief history:
+The surrounding product includes three principal workflows:
 
-- **v1-v2**: Lightweight canvas engine like Excalidraw/TLDraw with basic drawing + full customization (theme, UI overrides, custom shapes).
-- **v3**: Headless architecture — the engine can be used fully without any built-in UI, through a public `Editor` API + event system.
-- **v4 (current)**: Step up to a **professional engine** — every feature's behavior must match established tools (Figma/TLDraw) exactly, plus professional-class features (vector path editing, boolean operations, component/instance system, constraints & auto-layout), plus support for infinite OR bounded canvas.
+- **Design** — visual design on an infinite canvas or a bounded/artboard-style canvas.
+- **Slides** — presentation documents composed of ordered slides and slide-level visual content, including PPTX interoperability where supported.
+- **Whiteboard** — open-ended spatial work for sketching, diagrams, and arranging connected ideas.
 
-Core principles remain the same across all versions:
+These workflows may reuse graphics primitives and editing infrastructure, but they do not have to share every document rule. Presentation navigation, whiteboard connections, and design-artboard behavior belong to their appropriate domain.
 
-1. **Lightweight** — small bundle size, no heavy framework dependency for the core engine.
-2. **Efficient** — handles thousands of elements without frame drops, low memory footprint.
-3. **Feature-rich on par with professional tools** — no longer "enough for basic drawing" (v1), but approaching Figma/Illustrator capability for design & prototyping needs (see §4 and §12).
-4. **Behavior conformance** — every interaction must feel familiar to users already used to professional design tools, not just "functional".
+## 2. Goals
 
-## 2. Problem Being Solved
+1. Provide a reusable 2D graphics foundation that can be embedded in different hosts.
+2. Keep the core independent of React, Tauri, the DOM, and host-specific rendering APIs.
+3. Support deterministic document operations, rendering data, and reproducible tests.
+4. Preserve responsive interactions and bounded memory/resource use as document size grows.
+5. Expose a documented, stable public API to Rust, JavaScript/WASM, Python, and other supported integrations.
+6. Provide a practical path from basic canvas drawing to professional vector-editing capabilities without making every consumer pay for unused features.
+7. Keep the Design, Slides, and Whiteboard workflows coherent while allowing mode-specific behavior where required.
 
-Tools like Excalidraw/TLDraw are good, but:
-- Hard to embed lightly into other applications without carrying many dependencies.
-- Their data structures & rendering are optimized for their general use case, not our specific needs.
-- We want an engine we **fully understand** — easy to extend, easy to debug, not a black box.
+## 3. Target users
 
-## 3. Target Users
+- Developers embedding Grafalith into their own applications or building custom hosts.
+- Users creating designs, visual documents, presentations, diagrams, and whiteboard content in applications powered by Grafalith.
+- Contributors extending the engine, its file interoperability, or its host integrations.
 
-- **Primary**: Developers (including the makers of this product) who want to embed canvas drawing into their own applications.
-- **Secondary**: End users who use the resulting embedded application to create simple diagrams/sketches/wireframes.
+## 4. Product principles
 
-## 4. Feature Scope (v1)
+- **Lightweight:** avoid unnecessary runtime dependencies and work on hot paths.
+- **Framework-agnostic core:** UI framework choices remain in hosts or optional integration packages.
+- **Explicit state transitions:** document mutations, commands, event publication, and cache invalidation must have clear contracts.
+- **One source of truth:** do not maintain competing document or hierarchy state in multiple layers.
+- **Headless-capable:** all domain capabilities needed by a custom UI must be exposed through a documented engine API or protocol; UI components must not be the only place where core logic exists.
+- **Composable customization:** allow supported customization through explicit configuration or extension points without global mutable state.
+- **Undoable operations:** user-visible mutations should be atomic and undoable under the established history contract.
+- **Behavioral consistency:** interactions should follow established graphics-tool conventions where applicable. When a convention is ambiguous, document the chosen behavior rather than claiming universal parity with another product.
+- **Measured performance:** performance requirements must be verified with repeatable benchmarks, not assumptions.
 
-> **Status: v1 is complete.** The scope below is the baseline that has been implemented. For v2 features (element organization, precision tools, image/media, and the **Customization API**), see §4.5.
+## 5. Shared engine capability areas
 
-### 4.1 Must Have — v1, DONE
-- [x] Basic shapes: rectangle, ellipse/circle, line, arrow, freehand draw (pen)
-- [x] Text element (with in-place editing)
-- [x] Single & multi select (rubber-band selection)
-- [x] Move, resize, rotate elements
-- [x] Copy, paste, duplicate, cut, delete
-- [x] Style: solid colors, gradient colors (linear), border (width, style: solid/dashed), fill opacity
-- [x] Undo/redo
-- [x] Pan & zoom (infinite canvas)
-- [x] Grouping/ungroup elements
-- [x] Layering (bring to front/back, send forward/backward)
-- [x] Export to PNG and JSON (scene serialization)
-- [x] Import from JSON
+The engine capability scope includes the following areas. Listing an area here defines product scope, not implementation status.
 
-### 4.2 Should Have
-- [x] Crop for image element
-- [x] Arrow binding (arrow sticks to & follows connected elements)
-- [x] Snap-to-grid / snap-to-object while dragging
-- [x] Standard keyboard shortcuts (Ctrl+C/V/D/Z/Y, Delete, Arrow keys for nudge)
-- [x] Alignment tools (align left/center/right, distribute)
+### 5.1 Document and element model
 
-### 4.3 Nice to Have (v2+, not v1 priority)
-- [ ] Real-time collaboration (multiplayer)
-- [x] Image upload & embed
-- [x] Custom shape extension API
-- [x] Component library/templates
+- Stable element identities and serializable element data.
+- Shape and path primitives, text, image, line/arrow, and container-like elements as supported by the domain.
+- Scene/document coordinate space, transforms, bounds, and geometry queries.
+- Validation, versioning/invalidation, document lifecycle, and schema compatibility.
 
-### 4.4 Explicitly Out of Scope
-- Real-time collaboration (CRDT/sync complexity is separate from core rendering — do not mix before the foundation is solid)
-- 3D rendering / full WebGL pipeline
-- Mobile native app (web-first; touch-friendly but not native)
+### 5.2 Editing and organization
 
-### 4.5 v2 Scope — Professional Features & Customization API
+- Single and multi-selection, hit testing, transforms, and selection-aware commands.
+- Layers/z-order, group and ungroup, reparent/reorder, lock/unlock, frames/containers where supported.
+- Clipboard operations such as copy, cut, paste, and duplicate, including remapping of identities and references.
+- Atomic undo/redo with deterministic command semantics.
+- Alignment, distribution, snapping, and precision controls.
 
-Added after v1 evaluation: the engine was functional but did not "feel professional" compared to TLDraw/Excalidraw/Figma, and could not be customized by consumers (developers embedding this engine). v2 closes both gaps:
+### 5.3 Graphics and vector editing
 
-**A. Full Customization** (highest priority — see §10)
-Developers embedding Grafalith must be able to change theme, icon set, color picker, font, UI size/position, and add/replace shapes themselves — **without forking the engine source code**. This is not an ordinary feature, it is an architecture layer that affects how all other features are built.
+- Fill, stroke, opacity, gradients, line styles, and other supported visual properties.
+- Path construction and editing, anchor nodes and curve handles.
+- Boolean/path operations such as union, subtraction, intersection, exclusion, division, and path splitting where supported.
+- Masks, clipping, and effects only where the document model and renderer can define their behavior consistently.
 
-**B. Element organization**: grouping/ungroup, layer management, lock elements, frame/container.
+### 5.4 Text, images, and rendering
 
-**C. Precision tools**: alignment (left/center/right/distribute), snap-to-grid, snap-to-object, smart guides, numeric input for position/size/rotation.
+- Text editing, measurement/shaping, alignment, and font-related behavior supported by the host contract.
+- Image placement, crop, transform, and serialization/interchange behavior.
+- Deterministic render data, viewport culling, spatial queries, cache invalidation, and host rendering integration.
 
-**D. Image & media**: upload/paste/drag-drop images, crop, resize with aspect-ratio lock.
+### 5.5 Extensions and reuse
 
-**E. Scalability & robustness**: schema versioning for old files, large-paste handling.
+- Public APIs for supported custom shapes, tools, commands, serializers, or other extension points.
+- Reusable components/instances and overrides if they are part of the accepted product design.
+- Constraints and auto-layout for the document/container types that explicitly support them.
 
-## 5. Performance Targets (Non-Negotiable)
+## 6. Workflow-specific requirements
 
-This is not aspiration — it is a **pass/fail criterion** that must be verified with real profiling, not assumptions:
+### 6.1 Design
+
+- Support free spatial placement on an infinite canvas and bounded/artboard-style documents where configured.
+- Provide object-level selection, transform, hierarchy, and styling operations.
+- Keep stacking order, grouping, locking, and export behavior deterministic.
+
+### 6.2 Slides
+
+- Represent a presentation and its ordered slides separately from the objects on each slide.
+- Support slide insertion, deletion, duplication, reordering, and navigation in the presentation domain.
+- Keep slide dimensions and object coordinates well-defined.
+- Treat PPTX import/export as format interoperability, not as a substitute for the internal presentation model. Unsupported PPTX features must be preserved where practical or reported explicitly rather than silently discarded.
+
+### 6.3 Whiteboard
+
+- Support free spatial placement and navigation over a large or infinite canvas.
+- Support diagram-like objects and relationships/connectors where required.
+- Keep interactions responsive when the visible portion of a large document changes.
+
+## 7. Non-functional requirements
+
+### 7.1 Performance targets
+
+The current target values are:
 
 | Metric | Target |
-|---|---|
-| Elements in scene before FPS drops below 60fps during pan/zoom | ≥ 5,000 elements |
-| Render time for 1 frame (viewport culled) | < 16ms |
-| Hit-test (click to select) on a 5,000-element scene | < 5ms |
-| Core engine bundle size (without UI wrappers) | < 150KB gzipped |
-| Time from cold start to interactive canvas | < 500ms |
+|---|---:|
+| Scene size for common pan/zoom interactions before sustained 60 FPS degradation | 5,000+ elements |
+| Render preparation/render frame budget for the agreed benchmark | under 16 ms |
+| Hit-test latency on a 5,000-element test scene | under 5 ms |
+| Core engine bundle size without host UI | under 150 KB gzipped |
+| Cold-start-to-interactive time | under 500 ms |
 
-## 6. Architecture Principles (Summary — details in ARCHITECTURE.md)
+These targets are not self-verifying. The repository should define benchmark hardware/runtime, scene distribution, measurement method, warm-up, and regression thresholds in a dedicated performance guide or benchmark suite. Heavy explicit operations such as Boolean geometry may have separate latency budgets, provided they do not burden ordinary interaction/render paths.
 
-1. **Core engine framework-agnostic.** Canvas logic (scene, rendering, hit-test) is written in Rust, independent of React/Vue. UI toolbar can use any framework in a separate layer.
-2. **Render as data** — the engine produces a deterministic `RenderModel` (culled, z-ordered draw entries); hosts rasterize (Canvas2D, Skia, etc.).
-3. **Data-oriented, not over-object-oriented.** Elements are plain serializable data, not classes with embedded behavior.
-4. **Command pattern history** — every mutation is one undoable, atomic step; inversion uses exact snapshots (no version drift).
-5. **Instance-scoped state** — no global singletons; many engines coexist in one process (multi-canvas, multi-document).
-6. **JSON-string host boundary** — Rust domain types never cross the host boundary; everything is typed in one versioned protocol.
+### 7.2 Reliability and compatibility
 
-## 7. Product Success Metrics
+- Invalid operations must fail predictably without partially corrupting document state.
+- Generated bindings and protocol definitions must remain synchronized with their source of truth.
+- Persistent formats must be versioned and migrated deliberately.
+- Error results must be explicit at public host boundaries; do not leak internal Rust types through the protocol.
+- Instances must not share mutable editor/document state unintentionally.
 
-- Engine can be embedded into an example application (demo app) in < 30 minutes of setup by a new developer.
-- All §4.1 features pass manual QA checklist.
-- No performance regression below §5 targets after each completed phase.
+## 8. Out of scope unless separately approved
 
-## 8. Milestones & Work Order
+- Full 3D modeling/rendering pipeline.
+- Native mobile applications as a separate platform deliverable.
+- Real-time multiplayer/CRDT synchronization unless its domain, data model, and consistency requirements are separately approved.
+- Any broad media-editing pipeline that requires a separate rendering architecture, unless added through a separately scoped product requirement.
 
-1. Foundation — data types & project setup
-2. Render model, viewport, camera
-3. Shape primitives & hit-testing
-4. Selection & transform (move/resize/rotate)
-5. Style system (colors, gradient, border)
-6. Text & arrow (+ binding)
-7. Clipboard & history (undo/redo)
-8. Spatial index, performance optimization, export/import
-9. Customization API: Theme & Design Tokens
-10. Customization API: UI Overrides (icons, components, layout)
-11. Customization API: Custom Shape Registry
-12. Element organization (grouping, layer, lock, frame)
-13. Precision tools (alignment, snapping, smart guides, numeric input)
-14. Image & media (upload, crop, resize)
-15. Robustness (schema versioning, large-paste handling)
-16. Public Editor API (stable contract for all engine operations)
-17. Event/Subscription System (reactivity for external UI)
-18. Headless Mode Audit & Independent Custom UI Example
-19. Behavior Conformance Audit (MANDATORY first in v4)
-20. Canvas Mode: Infinite vs Bounded
-21. Path Editing & Boolean Operations
-22. Component/Instance System
-23. Constraints & Auto-layout
+## 9. Acceptance expectations
 
-## 9. Research References
+A feature is ready when:
 
-Architecture decisions in this document are based on study of:
-- Excalidraw (dual-canvas architecture, sceneNonce cache invalidation, viewport culling) — https://github.com/excalidraw/excalidraw
-- TLDraw (extensibility patterns — per-shape behavior + configure() for customization without subclassing, UI overrides separate from core, theme system) — used as the main reference for the v2 Customization API architecture.
-- Spatial indexing research (grid hashing vs quadtree vs R-tree) for large-scale hit-testing.
-- TLDraw's `Editor` API pattern (one public object as a stable contract for all operations, separate from React UI components that are merely "consumers" of the Editor) — used as the reference for headless architecture.
+1. User-visible behavior and edge cases are defined.
+2. The domain implementation has one clear source of truth and follows established crate boundaries.
+3. Success and failure cases are tested, including invalid input and interactions with history/state synchronization.
+4. Performance-sensitive paths have complexity/resource implications considered; material claims are measured.
+5. Public API/protocol changes, generated bindings, and relevant guides are updated together.
+6. Host behavior is verified when the feature affects host input, rendering, or UI integration.
 
-## 10. Full Customization Principles (v2 — Non-Negotiable)
+## 10. Implementation status and roadmap
 
-This product requirement is **as important as the §5 performance targets**, not a complementary feature:
-
-> Developers embedding Grafalith must have full control over the engine's default look and behavior — theme/colors, icons, fonts, color picker, UI element size & position, and shapes — **without forking or modifying the engine source code**.
-
-Derived principles:
-1. **No hardcoded values** for anything a developer might want to replace (colors, font, icon sizes, UI components) — everything must go through overridable tokens/config.
-2. **Override through composition, not modification.** Developers pass config/props objects to the engine (`theme={...}`, `components={...}`, `shapeUtils={...}`), NOT by editing files in `node_modules` or forking the repo.
-3. **Defaults must remain complete and good.** The Customization API must not force developers to fill in every configuration just to use the engine — all overrides are optional with sensible defaults.
-4. **No performance burden for non-customizers.** Developers who do no customization must still get full §5 performance — the indirection layer for customization must not become permanent overhead.
-
-## 11. Headless / Full Control Principles (v3 — Non-Negotiable)
-
-**This is not an extension of §10, it is a deeper level of control.** §10 (v2) assumes developers still use the built-in UI and only replace parts of it. §11 (v3) assumes developers **may not use the built-in UI at all** — they build their own UI from scratch (React, Vue, vanilla JS, even native mobile via WebView) and only call engine logic.
-
-> The engine must be 100% usable WITHOUT any built-in UI. Every capability a UI needs to function fully — creating elements, selecting tools, setting styles, undo/redo, knowing when something changed — must be available through one **documented, stable public Editor API**, not through internal functions that happen to be accessible.
-
-Derived principles:
-1. **The built-in UI is a CONSUMER of the Editor API, not the place where logic lives.** If there is logic only accessible through UI components (not through the `Editor` object), that is an architecture error that must be fixed.
-2. **Full UI control means granular, not just component replacement.** Developers must be able: to enable/disable individual tools (not just replace the whole Toolbar), to place UI elements in free positions (not just choose from preset layouts), to style granularly per UI element, and to call engine operations from any custom UI trigger (custom buttons, custom gestures, custom shortcuts).
-3. **Event system is mandatory** — headless architecture is useless if external UIs don't know when to re-render. The `Editor` must expose subscriptions for all relevant state changes (scene changed, selection changed, active tool changed, etc.).
-4. **Proven with a real example, not claims.** The Definition of Done for the headless phase requires an example UI truly built from scratch WITHOUT the built-in UI, purely calling the engine.
-
-## 12. Professional-Grade & Behavior Conformance Principles (v4 — Non-Negotiable)
-
-This is a level shift, not just new features:
-
-> Grafalith must no longer be enough to "work like a simple draw tool" — every interaction must feel EXACTLY THE SAME as conventions already established in professional design tools (Figma, TLDraw, Illustrator). New features (path editing, boolean ops, component/instance, constraints/auto-layout) must match the capability of those class tools, not simplified/limited versions.
-
-Derived principles:
-1. **Behavior conformance is NOT optional.** Before any new feature is added in v4, OLD features must be audited and fixed first so their behavior matches professional conventions — a shaky foundation makes new features on top feel foreign/unnatural.
-2. **Behavior references are established tools, not new assumptions.** For every ambiguous interaction design decision, check how Figma/TLDraw/Illustrator handle it before deciding on your own — consistency with experienced users' expectations matters more than originality.
-3. **Canvas mode flexible for derivative product needs.** Because Grafalith will be used to build web applications (not just used directly), the engine must support both infinite mode (whiteboard) AND bounded/artboard mode (fixed size, for needs like thumbnail editors, social media templates, etc.) — chosen by the developer at initialization.
-4. **New features must not sacrifice §5 performance targets** — all features in §12 (especially boolean ops and component/instance which are computationally heavy) must keep large scenes (5,000+ elements) from dropping below 60fps for normal operations (heavy features like boolean ops may have their own reasonable latency for explicit operations, but must not burden the render loop/general interaction).
-
-### New v4 Features
-
-- **Path Editing & Boolean Operations**: vector pen tool (anchor + Bezier handle), union/subtract/intersect/exclude between any shapes.
-- **Component/Instance System**: reusable components with instances auto-synced from the master, granular per-property overrides without locking other properties.
-- **Constraints & Auto-layout**: constraints (pin/stretch/scale) for elements in normal frames when resized; auto-layout (flexbox-like) for frames that automatically arrange their children.
-- **Canvas Mode**: choice of infinite (unbounded whiteboard) or bounded (fixed width×height, still freely zoomable/pannable) — determined at initialization.
+Do not infer completion from this PRD. Keep implementation status, milestones, and work ordering in a separate roadmap or tracking artifact that is reconciled with the current source and tests. Update this PRD only when product requirements, priorities, or scope boundaries change.

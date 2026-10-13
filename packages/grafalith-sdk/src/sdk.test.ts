@@ -119,8 +119,8 @@ describe("activation", () => {
     expect(activationMatches("onHome", { kind: "home" })).toBe(true);
     expect(activationMatches("onProject", { kind: "project" })).toBe(true);
     expect(activationMatches("onEditor:*", { kind: "editor", editorType: "design" })).toBe(true);
-    expect(activationMatches("onEditor:diagram", { kind: "editor", editorType: "diagram" })).toBe(true);
-    expect(activationMatches("onEditor:diagram", { kind: "editor", editorType: "design" })).toBe(false);
+    expect(activationMatches("onEditor:whiteboard", { kind: "editor", editorType: "whiteboard" })).toBe(true);
+    expect(activationMatches("onEditor:whiteboard", { kind: "editor", editorType: "design" })).toBe(false);
     expect(activationMatches("onCommand:acme.ping", { kind: "command", commandId: "acme.ping" })).toBe(true);
     expect(activationMatches("onCommand:acme.ping", { kind: "command", commandId: "other" })).toBe(false);
     expect(activationMatches("onView:acme.view", { kind: "view", viewId: "acme.view" })).toBe(true);
@@ -258,10 +258,10 @@ describe("extended manifest", () => {
       engines: { grafalith: "^0.1.0" },
       priority: "high",
       permissions: ["notifications"],
-      activationEvents: ["onStartup", "onHome", "onEditor:diagram"],
+      activationEvents: ["onStartup", "onHome", "onEditor:whiteboard"],
       contributes: {
         toolbarItems: [{ id: "acme.tool", title: "Tool", command: "acme.run" }],
-        editorTools: { diagram: [{ id: "acme.node", title: "Node", command: "acme.run" }] },
+        editorTools: { whiteboard: [{ id: "acme.node", title: "Node", command: "acme.run" }] },
         projectTemplates: [{ id: "acme.poster", title: "Poster", kind: "design" }],
       },
     });

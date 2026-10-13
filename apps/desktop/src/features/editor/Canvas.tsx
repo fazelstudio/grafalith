@@ -7,7 +7,7 @@ import type {
   SessionStateDto,
   SnapGuideDto,
 } from '../../hooks/useEngine';
-import { lastResultData, parseBatchResult } from '../../hooks/useEngine';
+import { lastResultData, lastResultEntry, parseBatchResult } from '../../hooks/useEngine';
 import { canExecuteCommand, executeCommand, type CommandContext, type ViewActions } from '../../registries';
 import { executeExtensionCommand, hasExtensionCommand, extensionMenuRowsFor } from '../../platform/extensions/extensionContributions';
 import { commandResultMessage } from './engineGaps';
@@ -31,13 +31,18 @@ import { useTheme } from '../../app/theme/ThemeProvider';
 import { DESKTOP_TIMING, themeTokens } from '../../app/theme/tokens';
 import { FitIcon, FitSelectionIcon, MinusIcon, PlusIcon } from '../../ui/icons';
 import { Tooltip } from '../../ui/primitives/tooltip';
-import { contentBounds, selectionBounds } from './navigator';
-import { fitViewport, zoomViewport } from './viewport';
+import { zoomViewport } from './viewport';
+import type { FillPreview } from '../../render/drawModel';
 interface CanvasProps {
   engine: Engine;
   activeTool: string;
   /** When true the creation tool stays active after commit instead of returning to Select. */
   stickyTool: boolean;
+  /**
+   * Uncommitted fill preview (inspector stop drag), shared by ref so drags
+   * repaint without re-rendering. Canvas clears nothing; the writer owns it.
+   */
+  fillPreviewRef: { current: FillPreview | null };
   /** Throttled snapshots for panels and chrome sharing engine state. */
   onFrame?: (snapshot: FrameSnapshot) => void;
   /** Recoverable renderer failure; the last good frame stays visible. */
@@ -58,16 +63,45 @@ interface ContextMenuState {
 
 const DRAW_TOOLS = new Set(['rectangle', 'ellipse', 'line', 'arrow', 'frame', 'image']);
 const DRAW_CURSOR_TOOLS = new Set([...DRAW_TOOLS, 'freedraw']);
-// Quiet-canvas poll cadence: inputs flag the next frame directly, so this
-// only covers engine-external changes (extensions) while idle.
-const IDLE_POLL_MS = 100;
 // Grace after user caret motion during which the mirror never snaps back.
 const USER_CARET_GRACE_MS = 250;
+// Transport retry delay after a failed frame fetch (error path only).
+const RETRY_POLL_MS = 250;
+
+/** Fixed-page chrome: dim outside the bounds, hairline on the boundary. */
+function paintCanvasBounds(
+  ctx: CanvasRenderingContext2D,
+  snapshot: FrameSnapshot,
+  cssWidth: number,
+  cssHeight: number,
+): void {
+  const mode = snapshot.session.canvasMode;
+  const width = mode?.width ?? 0;
+  const height = mode?.height ?? 0;
+  if (mode?.mode !== 'bounded' || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return;
+  }
+  const viewport = snapshot.session.viewport;
+  const [x, y] = sceneToScreen([0, 0], viewport);
+  const [right, bottom] = sceneToScreen([width, height], viewport);
+  ctx.save();
+  // Veil colors match the engine theme defaults so both themes read the same.
+  ctx.beginPath();
+  ctx.rect(0, 0, cssWidth, cssHeight);
+  ctx.rect(x, y, right - x, bottom - y);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+  ctx.fill('evenodd');
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, right - x - 1, bottom - y - 1);
+  ctx.restore();
+}
 
 export function Canvas({
   engine,
   activeTool,
   stickyTool,
+  fillPreviewRef,
   onFrame,
   onRenderError,
   commandContext,
@@ -91,6 +125,31 @@ export function Canvas({
   const paintTickRef = useRef(0);
   const trailRef = useRef<[number, number][]>([]);
   const activePointerRef = useRef<number | null>(null);
+  // Press origin in scene units, stored at pointer-down so drag previews and
+  // move forwarding survive a stale frame (the watcher may still report the
+  // previous idle phase while the engine already holds the press).
+  const pressOriginRef = useRef<[number, number] | null>(null);
+  // Last session adopted synchronously from a pointer batch, so moves can
+  // gate on the press even before the watcher fetches it or when no frame
+  // exists yet. Refreshed by every pointer adoption and watcher poll.
+  const pressSessionRef = useRef<SessionStateDto | null>(null);
+  // Bumped on every chained input; the watcher discards a poll that started
+  // before the latest input instead of painting its stale session over it.
+  const inputGenRef = useRef(0);
+  // Tool held at press time. A release only commits when the live tool still
+  // matches it: switching tools mid-drag cancels the gesture engine-side,
+  // and the release must stay a cancel instead of storing a shape for a
+  // tool the user already left.
+  const pressToolRef = useRef<string | null>(null);
+  // Whether the current press is still unreleased. Guards the stateless
+  // draw commit below so a stray release (after cancel, blur, or tool
+  // switch) can never store a second shape.
+  const pressActiveRef = useRef(false);
+  // Gesture identity minted once per press. The release echoes it as the
+  // commit request id, so a transport retry or a duplicate release returns
+  // the stored shape instead of storing a second one (the engine remembers
+  // the latest commit per id).
+  const pressRequestRef = useRef<string | null>(null);
   const previewInFlightRef = useRef(false);
   const previewGenerationRef = useRef(0);
   const pendingPreviewRef = useRef<{
@@ -145,6 +204,7 @@ export function Canvas({
   const onRenderErrorRef = useRef(onRenderError);
   onRenderErrorRef.current = onRenderError;
   const lastEmitRef = useRef<{ time: number; key: string }>({ time: 0, key: '' });
+  const pendingFrameRef = useRef<FrameSnapshot | null>(null);
   const failCountRef = useRef(0);
   const errorReportedRef = useRef(false);
   const [zoomLabel, setZoomLabel] = useState('100%');
@@ -196,9 +256,11 @@ export function Canvas({
     // Serialize input batches through a chain: rapid pointer moves must
     // reach the engine in DOM order (Tauri invokes otherwise race on the
     // thread pool). Read-only frame queries bypass the chain.
-    // Every input potentially dirties engine state, so the next frame
-    // re-polls instead of waiting for the idle cadence.
+    // Every input potentially dirties engine state, so the watcher wakes
+    // for exactly one fresh frame instead of polling on a timer.
+    inputGenRef.current += 1;
     needsPollRef.current = true;
+    kickRef.current();
     const work = chainRef.current.then(() => engine.sendBatch(ops));
     chainRef.current = work.then(() => undefined, () => undefined);
     return work;
@@ -210,6 +272,23 @@ export function Canvas({
     } catch {
       return null;
     }
+  }
+
+  // Gesture identity for exactly-once draw commits: stable for the press,
+  // unique across presses, so engine-side deduplication can tell a retry
+  // apart from a new gesture.
+  function mintRequestId(): string {
+    const cryptoObj = typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto
+      : undefined;
+    if (cryptoObj) {
+      try {
+        return cryptoObj.randomUUID();
+      } catch {
+        // Non-secure contexts reject: fall through to the local fallback.
+      }
+    }
+    return `draw-${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffffff).toString(36)}`;
   }
 
   function statusModelKey(session: SessionStateDto): string {
@@ -232,6 +311,7 @@ export function Canvas({
     const session = snapshot.session;
     const childCount = snapshot.model.frames.reduce((sum, pass) => sum + pass.children.length, 0);
     return JSON.stringify([
+      session.sceneNonce,
       session.selection,
       session.tool,
       Math.round(session.viewport.scrollX * 10) / 10,
@@ -249,16 +329,30 @@ export function Canvas({
   // Panels and chrome mirror engine state without their own polling: the
   // canvas already crosses once per frame, so it forwards snapshots whose
   // visible state changed, throttled to keep React renders off the pointer path.
+  // Throttled-but-changed snapshots are never dropped: one trailing flush
+  // delivers the latest state when the window passes, so discrete clicks
+  // always land instead of stalling until the next mutation.
+  const trailingEmitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maybeEmitFrame = useCallback((snapshot: FrameSnapshot, force: boolean) => {
     const now = Date.now();
-    // Throttle first: the key stringifies the whole selection, so building
-    // it every frame would cost more than the renders it guards.
-    if (!force && now - lastEmitRef.current.time < DESKTOP_TIMING.frameMirrorThrottleMs) {
-      return;
-    }
     const key = frameKey(snapshot);
     if (!force && key === lastEmitRef.current.key) {
       lastEmitRef.current = { time: now, key };
+      return;
+    }
+    // Throttle first: the key stringifies the whole selection, so building
+    // it every frame would cost more than the renders it guards.
+    if (!force && now - lastEmitRef.current.time < DESKTOP_TIMING.frameMirrorThrottleMs) {
+      trailingEmitRef.current ??= setTimeout(() => {
+        trailingEmitRef.current = null;
+        const latest = pendingFrameRef.current;
+        pendingFrameRef.current = null;
+        if (latest && frameKey(latest) !== lastEmitRef.current.key) {
+          lastEmitRef.current = { time: Date.now(), key: frameKey(latest) };
+          onFrameRef.current?.(latest);
+        }
+      }, DESKTOP_TIMING.frameMirrorThrottleMs - (now - lastEmitRef.current.time));
+      pendingFrameRef.current = snapshot;
       return;
     }
     lastEmitRef.current = { time: now, key };
@@ -299,33 +393,54 @@ export function Canvas({
     await applyViewport(zoomViewport(session.viewport, 1 / session.viewport.zoom, width / 2, height / 2));
   }, [sendBatch]);
 
-  const fitModel = useCallback(async (model: RenderModelDto, boundsOf: (model: RenderModelDto) => { minX: number; minY: number; maxX: number; maxY: number } | null) => {
+  // Fit through the engine op so bounds come from the full document,
+  // never the viewport-culled frame model (culled content would fit to
+  // nothing or to a partial box). Padding mirrors the host fit helper:
+  // 48 screen px expressed in scene units at the current zoom.
+  const fitContent = useCallback(async () => {
     const { width, height } = sizeRef.current;
     if (!(width > 0 && height > 0)) return;
-    const viewport = fitViewport(boundsOf(model), width, height);
-    if (viewport) await applyViewport(viewport);
+    const zoom = frameRef.current?.session.viewport.zoom ?? 1;
+    await sendBatch([{
+      op: 'fitViewport',
+      canvasWidth: width,
+      canvasHeight: height,
+      padding: 48 / Math.max(zoom, 0.1),
+    }]);
   }, [sendBatch]);
 
-  const fitContent = useCallback(async () => {
-    const snapshot = frameRef.current;
-    if (!snapshot) return;
-    await fitModel(snapshot.model, contentBounds);
-  }, [fitModel]);
-
   const fitSelection = useCallback(async () => {
-    const snapshot = frameRef.current;
-    if (!snapshot || snapshot.session.selection.length === 0) return;
-    const selection = snapshot.session.selection;
-    await fitModel(snapshot.model, (model) => selectionBounds(model, selection));
-  }, [fitModel]);
+    const selection = frameRef.current?.session.selection;
+    if (!selection || selection.length === 0) return;
+    const { width, height } = sizeRef.current;
+    if (!(width > 0 && height > 0)) return;
+    const zoom = frameRef.current?.session.viewport.zoom ?? 1;
+    await sendBatch([{
+      op: 'fitViewport',
+      canvasWidth: width,
+      canvasHeight: height,
+      padding: 48 / Math.max(zoom, 0.1),
+      ids: [...selection],
+    }]);
+  }, [sendBatch]);
 
-  // View actions shared with view commands (one implementation, two surfaces).
+  // Frame watcher: demand-driven fetches only. The loop below sleeps while
+  // clean and wakes through kick() — every mutation crosses a sender that
+  // marks dirty first, so idle canvases cost zero crossings.
+  const needsPollRef = useRef(true);
+  const kickRef = useRef<() => void>(() => undefined);
+  // refreshFrame is the watcher kick for host-driven mutations (panels,
+  // menus, palette): it marks the loop dirty so one fresh frame follows.
+  const refreshFrame = useCallback(() => {
+    needsPollRef.current = true;
+    kickRef.current();
+  }, []);
   const onViewActionsRef = useRef(onViewActions);
   onViewActionsRef.current = onViewActions;
   useEffect(() => {
-    onViewActionsRef.current?.({ zoomStep, resetZoom, fitContent, fitSelection });
+    onViewActionsRef.current?.({ zoomStep, resetZoom, fitContent, fitSelection, refreshFrame });
     return () => onViewActionsRef.current?.(null);
-  }, [zoomStep, resetZoom, fitContent, fitSelection]);
+  }, [zoomStep, resetZoom, fitContent, fitSelection, refreshFrame]);
 
   const lastModelKeyRef = useRef<string | null>(null);
   const lastPaintKeyRef = useRef<string | null>(null);
@@ -338,22 +453,23 @@ export function Canvas({
     entry: null,
   });
   const overlayStyleKeyRef = useRef<string | null>(null);
-  // Adaptive cadence: inputs flag the next frame for re-polling, otherwise
-  // a slow idle cadence covers engine-external changes (extensions). Busy
-  // interaction therefore polls every frame; a quiet canvas sips.
-  const needsPollRef = useRef(true);
-  const lastPollRef = useRef(0);
+
 
   // Transient overlays never touch the document: assign through these so
-  // the paint key notices every preview change.
+  // the paint key notices every preview change. Every assignment also
+  // wakes the watcher for a paint-only pass (the fetch gate stays closed,
+  // so no crossing follows): without it, draw ghosts would never appear
+  // while the loop sleeps between inputs.
   function setGhost(ghost: GhostPreview): void {
     ghostRef.current = ghost;
     paintTickRef.current += 1;
+    kickRef.current();
   }
 
   function setGuides(guides: SnapGuideDto[] | null): void {
     guidesRef.current = guides;
     paintTickRef.current += 1;
+    kickRef.current();
   }
 
   // -- tool switching -------------------------------------------------------
@@ -375,6 +491,10 @@ export function Canvas({
     guidesRef.current = null;
     paintTickRef.current += 1;
     trailRef.current = [];
+    pressOriginRef.current = null;
+    pressSessionRef.current = null;
+    pressActiveRef.current = false;
+    pressRequestRef.current = null;
   }, [activeTool, canvasBackground, engine, sendBatch]);
 
   // -- frame loop: small session poll per tick, model + paint on dirty ----
@@ -406,11 +526,18 @@ export function Canvas({
     }
 
     resize();
-    window.addEventListener('resize', resize);
-    // A hidden tab keeps its last pixels: skip polling while hidden and
+    const onResize = () => {
+      resize();
+      kick();
+    };
+    window.addEventListener('resize', onResize);
+    // A hidden tab keeps its last pixels: skip work while hidden and
     // re-measure on return (the size may have changed underneath us).
     const onVisibility = () => {
-      if (!document.hidden) resize();
+      if (!document.hidden) {
+        resize();
+        kick();
+      }
     };
     document.addEventListener('visibilitychange', onVisibility);
 
@@ -437,6 +564,7 @@ export function Canvas({
         wheelAccumRef.current = { dx: e.deltaX, dy: e.deltaY, zoomGesture, x, y };
       }
       needsPollRef.current = true;
+      kickRef.current();
     }
     canvas.addEventListener('wheel', onWheelNative, { passive: false });
 
@@ -456,15 +584,25 @@ export function Canvas({
 
     let alive = true;
     let inFlight = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Watcher kick: schedule one loop iteration when none is running. The
+    // loop sleeps while clean, so idle canvases cost zero crossings.
+    function kick() {
+      if (alive && rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(frame);
+      }
+    }
+    kickRef.current = kick;
 
     async function frame() {
+      rafRef.current = null;
       if (!alive) return;
-      const now = Date.now();
-      const due = needsPollRef.current || now - lastPollRef.current >= IDLE_POLL_MS;
+      const due = needsPollRef.current;
       if (!inFlight && cssWidth > 0 && cssHeight > 0 && !document.hidden && due) {
         inFlight = true;
         needsPollRef.current = false;
-        lastPollRef.current = now;
+        const genAtStart = inputGenRef.current;
         try {
           // The wheel accumulator flushes first so the poll below observes
           // the post-scroll state in the same frame.
@@ -475,32 +613,51 @@ export function Canvas({
           // typing therefore stay cheap no matter how large the scene grows.
           const session = await engine.getSessionState();
           if (alive) {
-            failCountRef.current = 0;
-            const modelKey = statusModelKey(session);
-            if (modelKey !== lastModelKeyRef.current) {
-              lastModelKeyRef.current = modelKey;
-              const snapshot = await engine.getFrame(cssWidth, cssHeight);
-              if (snapshot && alive) {
-                frameRef.current = snapshot;
-                syncTextOverlay(snapshot);
-                maybeEmitFrame(snapshot, false);
-                syncChrome(snapshot);
+            // An input landed mid-fetch, so this snapshot predates it. Leave
+            // the synchronously adopted session alone and refetch fresh
+            // instead of painting the stale phase over the live press.
+            if (genAtStart !== inputGenRef.current) {
+              needsPollRef.current = true;
+            } else {
+              pressSessionRef.current = session;
+              failCountRef.current = 0;
+              const modelKey = statusModelKey(session);
+              if (modelKey !== lastModelKeyRef.current) {
+                lastModelKeyRef.current = modelKey;
+                const snapshot = await engine.getFrame(cssWidth, cssHeight);
+                if (snapshot && alive) {
+                  if (genAtStart !== inputGenRef.current) {
+                    needsPollRef.current = true;
+                  } else {
+                    frameRef.current = snapshot;
+                    pressSessionRef.current = snapshot.session;
+                    syncTextOverlay(snapshot);
+                    maybeEmitFrame(snapshot, false);
+                    syncChrome(snapshot);
+                  }
+                }
+              } else if (frameRef.current) {
+                frameRef.current = { ...frameRef.current, session };
+                const live = frameRef.current;
+                syncTextOverlay(live);
+                maybeEmitFrame(live, false);
+                syncChrome(live);
               }
-            } else if (frameRef.current) {
-              frameRef.current = { ...frameRef.current, session };
-              const live = frameRef.current;
-              syncTextOverlay(live);
-              maybeEmitFrame(live, false);
-              syncChrome(live);
             }
           }
         } catch {
-          // Transport hiccup: keep the last frame, retry next rAF. A long
-          // outage surfaces once as a recoverable error instead of a
-          // silently frozen canvas.
+          // Transport hiccup: keep the last frame and retry once after a
+          // beat. A long outage surfaces once as a recoverable error
+          // instead of a silently frozen canvas.
           failCountRef.current += 1;
           if (failCountRef.current >= 300) {
             reportRenderError();
+          } else if (retryTimer === null) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              needsPollRef.current = true;
+              kick();
+            }, RETRY_POLL_MS);
           }
         } finally {
           inFlight = false;
@@ -510,11 +667,20 @@ export function Canvas({
       const snapshot = frameRef.current;
       if (snapshot) {
         positionTextArea(snapshot);
+        // A fill preview never coincides with a canvas gesture (opening the
+        // color popover requires no press, and any press outside closes it),
+        // so it rides the gesture ghost slot instead of a second overlay.
+        const fillPreview = fillPreviewRef.current;
+        const ghost: GhostPreview =
+          fillPreview && ghostRef.current.kind === 'none'
+            ? { kind: 'fill', ids: fillPreview.ids, paint: fillPreview.paint }
+            : ghostRef.current;
         // Caret moves, draft typing, and panel-only changes leave this key
         // untouched, so the canvas is not repainted for them.
         const paintKey = JSON.stringify([
           lastModelKeyRef.current,
           paintTickRef.current,
+          fillPreview,
           cssWidth,
           cssHeight,
         ]);
@@ -526,11 +692,12 @@ export function Canvas({
               snapshot.model,
               cssWidth,
               cssHeight,
-              ghostRef.current,
+              ghost,
               editingIdRef.current,
               guidesRef.current,
               isSingleTextSelection(snapshot),
             );
+            paintCanvasBounds(ctx, snapshot, cssWidth, cssHeight);
           } catch {
             reportRenderError();
           }
@@ -538,7 +705,11 @@ export function Canvas({
       } else {
         ctx.clearRect(0, 0, cssWidth, cssHeight);
       }
-      rafRef.current = requestAnimationFrame(frame);
+      // Continue only while fresh work arrived mid-frame; otherwise the
+      // watcher sleeps until the next input, resize, or refresh request.
+      if (needsPollRef.current) {
+        kick();
+      }
     }
 
     function syncTextOverlay(snapshot: FrameSnapshot) {
@@ -703,16 +874,27 @@ export function Canvas({
       return max;
     }
 
-    rafRef.current = requestAnimationFrame(frame);
+    // First paint goes through the watcher like every other frame.
+    kick();
 
     return () => {
       alive = false;
-      window.removeEventListener('resize', resize);
+      kickRef.current = () => undefined;
+      window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisibility);
       canvas.removeEventListener('wheel', onWheelNative);
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer);
+      }
+      if (trailingEmitRef.current !== null) {
+        clearTimeout(trailingEmitRef.current);
+        trailingEmitRef.current = null;
+      }
+      pendingFrameRef.current = null;
     };
   }, [engine, maybeEmitFrame]);
 
@@ -863,8 +1045,9 @@ export function Canvas({
       const { fontSize, fontFamily, text } = entry.detail;
       measure.font = `${fontSize}px ${fontFamily}, sans-serif`;
       const lines = text.split('\n');
-      const row = lineRowForY(scene[1] - entry.bounds.minY, fontSize * 1.25, lines.length);
-      const caret = caretIndexAt(lines, row, scene[0] - entry.bounds.minX, (s) => measure.measureText(s).width);
+      const frame = entry.frame ?? entry.bounds;
+      const row = lineRowForY(scene[1] - frame.minY, fontSize * 1.25, lines.length);
+      const caret = caretIndexAt(lines, row, scene[0] - frame.minX, (s) => measure.measureText(s).width);
       await sendBatch([{ op: 'textSetCaret', caret }]);
     } catch {
       // The engine estimate stands.
@@ -885,6 +1068,17 @@ export function Canvas({
     const button = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
 
     const ops: unknown[] = [];
+    // A left draw press declares its own tool first: batch ops apply
+    // sequentially in one crossing, so the press always observes the tool
+    // the host shows even when an earlier tool switch raced engine creation,
+    // remounts, or slow transport. Without this a press can land on a stale
+    // Select while the toolbar shows a draw tool, and the release silently
+    // becomes a rubber band instead of a shape. Other buttons never capture
+    // a draw press engine-side, and select/text presses skip this to keep
+    // their paths (and the text outside-click flow) exactly as before.
+    if (button === 'left' && (DRAW_TOOLS.has(toolRef.current) || toolRef.current === 'freedraw')) {
+      ops.push({ op: 'setTool', tool: toolRef.current });
+    }
     if (toolRef.current === 'text') {
       // The default stroke contrasts with the canvas behind the click, so
       // the theme travels in the same batch: the press observes it and a
@@ -897,11 +1091,31 @@ export function Canvas({
       modifiers: getModifiers(e),
       clickCount: clickCountRef.current,
     });
+    pressToolRef.current = toolRef.current;
+    pressRequestRef.current = mintRequestId();
+    // Read the session back in the same batch (mirroring pointerUp): move
+    // handling gates on the host-known phase, so the press must be adopted
+    // synchronously instead of waiting for the next watcher fetch.
+    ops.push({ op: 'sessionState' });
     const raw = await sendBatch(ops);
     const batch = parseBatch(raw);
     const outcome = batch ? (lastResultData(batch, 'pointerDown') as {
       hit?: string | null; beganTextEdit?: string | null; beganTextEditNew?: boolean | null; committedText?: boolean;
     } | undefined) : undefined;
+    const pressSession = batch
+      ? (lastResultData(batch, 'sessionState') as SessionStateDto | undefined)
+      : undefined;
+    // Keep the press origin beside the adopted session: previews use it while
+    // the watcher still reports the previous phase, and the watcher never
+    // overwrites it with a stale fetch (generation guard in the frame loop).
+    pressOriginRef.current = sceneOf(pos);
+    if (pressSession) {
+      pressSessionRef.current = pressSession;
+      if (frameRef.current) {
+        frameRef.current = { ...frameRef.current, session: pressSession };
+        maybeEmitFrame(frameRef.current, true);
+      }
+    }
     const beganId = outcome?.beganTextEdit ?? null;
     const beganNew = outcome?.beganTextEditNew ?? null;
     if (toolRef.current === 'text' && beganId && beganNew === true && outcome?.committedText) {
@@ -965,6 +1179,7 @@ export function Canvas({
     }
 
     activePointerRef.current = e.pointerId;
+    pressActiveRef.current = true;
     try {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     } catch {
@@ -979,16 +1194,23 @@ export function Canvas({
     cursorRef.current = pos;
     const scene = sceneOf(pos);
     const modifiers = getModifiers(e);
-    const session = frameRef.current?.session;
+    const session = frameRef.current?.session ?? pressSessionRef.current;
     const phase = session?.pointerPhase;
-    const origin = phase?.originScene as [number, number] | undefined;
-
-    // Idle hover needs no crossing: the cursor already updated locally and
-    // an idle move mutates nothing engine-side.
-    if (!phase || phase.kind === 'idle') return;
+    // A press held locally is authoritative while the watcher catches up:
+    // its moves must reach the engine even when the last fetched phase still
+    // reads idle, otherwise the engine never crosses the drag threshold and
+    // the release commits nothing. Idle hover (no press held) still skips
+    // the crossing entirely.
+    const pointerHeld = activePointerRef.current !== null;
+    if (!phase || phase.kind === 'idle') {
+      if (!pointerHeld) return;
+    }
+    const origin = (phase?.originScene as [number, number] | undefined)
+      ?? pressOriginRef.current
+      ?? undefined;
 
     // A started drag takes over from a pending long-press.
-    if (phase.kind !== 'pressed' && longPressTimerRef.current !== null) {
+    if (phase?.kind !== 'pressed' && longPressTimerRef.current !== null) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
@@ -1001,22 +1223,29 @@ export function Canvas({
 
     // Choose the read-only preview query from the last-known phase (one
     // frame stale at most). Failures are ignored: the preview is a hint,
-    // the commit path stays authoritative.
+    // the commit path stays authoritative. While the watcher still reports
+    // the previous phase, a held press with a draw tool still paints a
+    // local ghost from the press origin; the engine commit stays the only
+    // writer, on release.
     let previewKind: GhostPreview['kind'] = 'none';
-    if (phase && origin) {
-      if (phase.kind === 'drawing' || phase.kind === 'pressed') {
-        const tool = toolRef.current;
-        if (DRAW_TOOLS.has(tool)) {
-          previewKind = 'draw';
-          setGhost({ kind: 'draw', shape: tool, origin, cursor: scene });
-        } else if (tool === 'freedraw') {
-          const trail = trailRef.current;
-          const last = trail[trail.length - 1];
-          if (!last || last[0] !== scene[0] || last[1] !== scene[1]) {
-            trail.push(scene);
-          }
-          setGhost({ kind: 'freedraw', trail: [...trail] });
+    const pressKind = phase?.kind;
+    if (origin && (pressKind === 'drawing' || pressKind === 'pressed' || (!pressKind && pointerHeld))) {
+      const tool = toolRef.current;
+      if (DRAW_TOOLS.has(tool)) {
+        previewKind = 'draw';
+        setGhost({ kind: 'draw', shape: tool, origin, cursor: scene });
+      } else if (tool === 'freedraw') {
+        const trail = trailRef.current;
+        const last = trail[trail.length - 1];
+        if (!last || last[0] !== scene[0] || last[1] !== scene[1]) {
+          trail.push(scene);
         }
+        setGhost({ kind: 'freedraw', trail: [...trail] });
+      }
+    }
+    if (phase && origin) {
+      if (pressKind === 'drawing' || pressKind === 'pressed') {
+        // Draw preview handled above; other gestures handled below.
       } else if (phase.kind === 'rubberBand') {
         previewKind = 'rubber';
         setGhost({ kind: 'rubber', origin, cursor: scene });
@@ -1079,6 +1308,7 @@ export function Canvas({
           } else if (next.kind === 'resize') {
             const data = lastResultData(batch, 'previewResize') as {
               changed?: boolean; x?: number; y?: number; width?: number; height?: number; fontSize?: number | null;
+              guides?: SnapGuideDto[];
             } | undefined;
             setGhost(data?.changed && data.x !== undefined && next.target
               ? {
@@ -1088,6 +1318,7 @@ export function Canvas({
                   fontSize: typeof data.fontSize === 'number' ? data.fontSize : null,
                 }
               : NO_PREVIEW);
+            setGuides(data?.guides ?? null);
           } else {
             const data = lastResultData(batch, 'previewRotate') as {
               changed?: boolean; rotation?: number;
@@ -1113,6 +1344,7 @@ export function Canvas({
     paintTickRef.current += 1;
     trailRef.current = [];
     pendingPreviewRef.current = null;
+    pressOriginRef.current = null;
   }, []);
 
   // A press, drag, or hold is over: the held hand must not stick around.
@@ -1135,50 +1367,133 @@ export function Canvas({
       clearTransient();
       clearLongPress();
       activePointerRef.current = null;
+      pressSessionRef.current = null;
+      pressActiveRef.current = false;
+      pressRequestRef.current = null;
       updateCursor();
       return;
     }
     const pos = getPos(e);
     cursorRef.current = pos;
     const button = e.button === 2 ? 'right' : e.button === 1 ? 'middle' : 'left';
-    const raw = await sendBatch([
-      {
-        op: 'pointerUp',
-        x: pos[0], y: pos[1], button,
-        modifiers: getModifiers(e),
-      },
-      { op: 'sessionState' },
-    ]);
-    const batch = parseBatch(raw);
+    const scene = sceneOf(pos);
+    const tool = toolRef.current;
+    const isDrawRelease =
+      button === 'left' &&
+      (DRAW_TOOLS.has(tool) || tool === 'freedraw') &&
+      pressActiveRef.current &&
+      pressToolRef.current === tool;
+    // Draw releases commit statelessly: the commit op releases the pointer
+    // capture itself, so a normal release never goes through cancellation
+    // and a stuck capture cannot block the store. The pointer phase is
+    // never consulted, so a lost threshold transition, a cancelled capture,
+    // or a stale tool can no longer swallow the shape; the commit still
+    // happens exactly once, here on release — never per move. The request
+    // id makes a retried or duplicate release return the stored shape
+    // instead of storing a second one. Other tools keep the pointer-up
+    // path below untouched.
+    const ops: unknown[] = isDrawRelease
+      ? [
+          {
+            op: 'commitDraw',
+            requestId: pressRequestRef.current ?? mintRequestId(),
+            shape: tool,
+            origin: {
+              x: pressOriginRef.current?.[0] ?? scene[0],
+              y: pressOriginRef.current?.[1] ?? scene[1],
+            },
+            current: { x: scene[0], y: scene[1] },
+            ...(tool === 'freedraw' && trailRef.current.length > 0
+              ? { trail: trailRef.current.map(([x, y]) => ({ x, y })) }
+              : {}),
+          },
+          { op: 'sessionState' },
+        ]
+      : [
+          {
+            op: 'pointerUp',
+            x: pos[0], y: pos[1], button,
+            modifiers: getModifiers(e),
+          },
+          { op: 'sessionState' },
+        ];
+    let batch = null;
+    let transportOk = true;
+    try {
+      batch = parseBatch(await sendBatch(ops));
+    } catch {
+      batch = null;
+      transportOk = false;
+    }
     const session = batch
       ? (lastResultData(batch, 'sessionState') as SessionStateDto | undefined)
       : undefined;
-    const outcome = batch
+    const outcome = !isDrawRelease && batch
       ? (lastResultData(batch, 'pointerUp') as { kind?: string; id?: string } | undefined)
       : undefined;
-    if (session && frameRef.current) {
-      frameRef.current = { ...frameRef.current, session };
-      // Commits change selection and history: push one snapshot now so
-      // panels never wait for the next throttled emission.
-      maybeEmitFrame(frameRef.current, true);
-      syncChrome(frameRef.current);
+    const commit = isDrawRelease && batch
+      ? (lastResultData(batch, 'commitDraw') as { id?: string | null } | undefined)
+      : undefined;
+    // The release commits (draw tools create one history entry here, never
+    // per move). Adopt the session synchronously so panels and the next
+    // press observe the post-commit state without waiting for the watcher.
+    if (session) {
+      pressSessionRef.current = session;
+      if (frameRef.current) {
+        frameRef.current = { ...frameRef.current, session };
+        // Commits change selection and history: push one snapshot now so
+        // panels never wait for the next throttled emission.
+        maybeEmitFrame(frameRef.current, true);
+        syncChrome(frameRef.current);
+      }
+    } else {
+      pressSessionRef.current = null;
     }
+    pressActiveRef.current = false;
+    pressRequestRef.current = null;
     clearTransient();
     clearLongPress();
     activePointerRef.current = null;
     updateCursor(pos);
     // After a completed creation gesture the tool returns to Select unless
     // sticky mode holds it (double-click the toolbar icon to toggle).
-    if (button === 'left' && outcome?.kind === 'shapeCreated' && outcome.id) {
+    const createdId = isDrawRelease ? commit?.id : outcome?.kind === 'shapeCreated' ? outcome.id : undefined;
+    if (button === 'left' && createdId) {
       if (!stickyRef.current) onToolChangeRef.current?.('select');
     }
-  }, [sendBatch, clearTransient, maybeEmitFrame]);
+    // A missing commit result means the crossing itself failed (transport
+    // or parse): below-minimum declines still report an id of null and stay
+    // silent, so only genuine loss surfaces. The console entry carries the
+    // raw op outcome for bug reports.
+    if (isDrawRelease && !commit) {
+      try {
+        console.error('[canvas] draw commit lost', {
+          transportOk,
+          entry: batch ? lastResultEntry(batch, 'commitDraw') ?? null : null,
+          applied: batch?.applied ?? null,
+          shape: tool,
+        });
+      } catch {
+        // Logging must never break the release path.
+      }
+      notify(tRef.current('editor.errors.drawCommitLost'));
+    }
+  }, [sendBatch, clearTransient, maybeEmitFrame, notify]);
 
   const handlePointerCancel = useCallback(async () => {
+    // Idempotent: a cancel after a completed release (including the
+    // implicit capture loss that follows a normal pointerup) is a no-op
+    // instead of a redundant crossing. A cancel racing an in-flight release
+    // is still safe: it queues behind the release through the input chain
+    // and only re-clears already-cleared state.
+    if (!pressActiveRef.current && activePointerRef.current === null) return;
     await sendBatch([{ op: 'pointerCancel' }]);
     clearTransient();
     clearLongPress();
     activePointerRef.current = null;
+    pressSessionRef.current = null;
+    pressActiveRef.current = false;
+    pressRequestRef.current = null;
     updateCursor();
   }, [sendBatch, clearTransient]);
 
@@ -1189,6 +1504,9 @@ export function Canvas({
       clearTransient();
       clearLongPress();
       activePointerRef.current = null;
+      pressSessionRef.current = null;
+      pressActiveRef.current = false;
+      pressRequestRef.current = null;
     }
   }, [sendBatch, clearTransient]);
 
@@ -1516,6 +1834,7 @@ export function Canvas({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerCancel}
         onBlur={handleBlur}
         onContextMenu={handleContextMenu}
         tabIndex={0}
@@ -1659,11 +1978,12 @@ function findEntryBounds(model: RenderModelDto, id: string): TextEntryBounds | n
   const fontSize = entry.detail.type === 'text' ? entry.detail.fontSize : 16;
   const fontFamily = entry.detail.type === 'text' ? entry.detail.fontFamily : 'sans-serif';
   const textAlign = entry.detail.type === 'text' ? entry.detail.align : 'left';
+  const frame = entry.frame ?? entry.bounds;
   return {
-    x: entry.bounds.minX,
-    y: entry.bounds.minY,
-    width: Math.max(entry.bounds.maxX - entry.bounds.minX, 10),
-    height: Math.max(entry.bounds.maxY - entry.bounds.minY, 10),
+    x: frame.minX,
+    y: frame.minY,
+    width: Math.max(frame.maxX - frame.minX, 10),
+    height: Math.max(frame.maxY - frame.minY, 10),
     fontSize,
     fontFamily,
     strokeColor: entry.strokeColor,

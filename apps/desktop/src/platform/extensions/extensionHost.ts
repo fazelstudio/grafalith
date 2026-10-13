@@ -54,7 +54,7 @@ export type ExtensionTrigger =
   | { readonly kind: 'startup' }
   | { readonly kind: 'home' }
   | { readonly kind: 'project'; readonly projectId?: string }
-  | { readonly kind: 'editor'; readonly editorType: 'design' | 'whiteboard' | 'diagram' | '*' }
+  | { readonly kind: 'editor'; readonly editorType: 'design' | 'whiteboard' | 'slides' | '*' }
   | { readonly kind: 'command'; readonly commandId: string }
   | { readonly kind: 'view'; readonly viewId: string };
 
@@ -562,7 +562,7 @@ export class DesktopExtensionHost {
   }
 
   /** Phase 4: editor mounted — `onEditor:*` plus the concrete kind. */
-  activateEditor(editorType: 'design' | 'whiteboard' | 'diagram'): Promise<string[]> {
+  activateEditor(editorType: 'design' | 'whiteboard' | 'slides'): Promise<string[]> {
     return this.activateByTrigger({ kind: 'editor', editorType });
   }
 
@@ -654,7 +654,7 @@ export class DesktopExtensionHost {
     }
   }
 
-  /** Fan out active-editor switches (design/whiteboard/diagram). */
+  /** Fan out active-editor switches (design/whiteboard/slides). */
   emitActiveEditor(editorType: string): void {
     for (const record of this.extensions.values()) {
       if (record.activated) {

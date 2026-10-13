@@ -100,9 +100,10 @@ fn project_create(
     name: String,
     scene_json: String,
     kind: Option<String>,
+    canvas: Option<projects::CanvasConfig>,
 ) -> Result<String, String> {
     let base = projects_base(&app)?;
-    projects::create_project(&base, &name, &scene_json, kind.as_deref())
+    projects::create_project(&base, &name, &scene_json, kind.as_deref(), canvas)
         .and_then(|summary| {
             serde_json::to_string(&summary).map_err(|e| projects::ProjectError {
                 code: "storage-unavailable".to_string(),

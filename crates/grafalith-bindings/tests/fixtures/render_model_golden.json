@@ -13,9 +13,19 @@
         "roundness": null,
         "type": "rectangle"
       },
+      "effectiveLocked": false,
       "fillHatch": "solid",
+      "frame": {
+        "maxX": 110.0,
+        "maxY": 70.0,
+        "minX": 10.0,
+        "minY": 20.0
+      },
+      "groupIds": [],
       "id": "r1",
       "kind": "rectangle",
+      "label": "",
+      "locked": false,
       "opacity": 100.0,
       "paint": {
         "color": "#112233",
@@ -41,9 +51,19 @@
         "roundness": null,
         "type": "rectangle"
       },
+      "effectiveLocked": false,
       "fillHatch": "solid",
+      "frame": {
+        "maxX": 420.0,
+        "maxY": 280.0,
+        "minX": 300.0,
+        "minY": 200.0
+      },
+      "groupIds": [],
       "id": "r2",
       "kind": "rectangle",
+      "label": "",
+      "locked": false,
       "opacity": 100.0,
       "paint": {
         "color": "#112233",
@@ -67,9 +87,19 @@
       "detail": {
         "type": "none"
       },
+      "effectiveLocked": false,
       "fillHatch": "solid",
+      "frame": {
+        "maxX": 590.0,
+        "maxY": 460.0,
+        "minX": 500.0,
+        "minY": 400.0
+      },
+      "groupIds": [],
       "id": "e1",
       "kind": "ellipse",
+      "label": "",
+      "locked": false,
       "opacity": 100.0,
       "paint": {
         "color": "#112233",
@@ -84,9 +114,22 @@
       "strokeWidth": 2.0
     }
   ],
+  "elementOrder": [
+    "r1",
+    "r2",
+    "e1"
+  ],
   "frames": [],
+  "groups": [],
+  "labels": [],
   "selection": {
     "bounds": {
+      "maxX": 110.0,
+      "maxY": 70.0,
+      "minX": 10.0,
+      "minY": 20.0
+    },
+    "frame": {
       "maxX": 110.0,
       "maxY": 70.0,
       "minX": 10.0,

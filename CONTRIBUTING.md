@@ -1,51 +1,47 @@
 # Contributing to Grafalith
 
-Thank you for your interest in contributing!
+Thank you for your interest in contributing to Grafalith.
+
+## Before you start
+
+- Read the [Code of Conduct](./CODE_OF_CONDUCT.md).
+- Check the [product scope](./docs/PRD.md) and the relevant architecture or crate guide before proposing a feature or changing a contract.
+- For security-sensitive issues, follow [SECURITY.md](./SECURITY.md) instead of opening a public issue.
+- Discuss substantial changes to public APIs, protocol/schema formats, dependency boundaries, or rendering architecture with the maintainers before investing in an implementation.
 
 ## Development setup
 
-Canonical commands live in [`DEVELOPMENT.md`](./DEVELOPMENT.md) — do not
-duplicate them here.
+The canonical setup, build, test, lint, and packaging commands live in [`DEVELOPMENT.md`](./DEVELOPMENT.md). Do not maintain a second command list here.
 
 ```bash
 git clone https://github.com/fazelstudio/grafalith.git
 cd grafalith
-bun install   # desktop demo dependencies only
+bun install  # Needed for desktop and repository tooling, not for Rust-only engine work.
 ```
 
-Then follow `DEVELOPMENT.md`: `cargo test --workspace`,
-`cargo clippy --workspace --all-targets -- -D warnings`,
-`cargo fmt --all`, `cargo build --workspace`.
+Use [`crates/README.md`](./crates/README.md) for the current Rust crate map and dependency boundaries. Use the applicable guide under [`docs/guides/`](./docs/README.md) for command protocol, host integration, extensions, or desktop behavior.
 
-## Project Structure
+## Contribution expectations
 
-Short map (details in [`crates/README.md`](./crates/README.md)):
+- Keep each change focused on the requested behavior; avoid unrelated refactors.
+- Follow the documented architecture and existing implementation patterns. Ask before changing established public contracts or dependency boundaries.
+- Add or update tests for behavior changes and regressions.
+- Update the relevant documentation in the same change. Regenerate protocol bindings and other generated artifacts using the repository's generator; do not edit generated outputs manually unless the repository explicitly designates them as source files.
+- Document public Rust APIs with Rustdoc appropriate to their contract, including important behavior, preconditions, errors, or invariants where needed.
+- Do not add dependencies without explaining why they are needed and their impact, especially on WASM/native compatibility and bundle size.
+- Do not claim checks passed unless they were run. Report any checks that could not be run and why.
 
-- `crates/grafalith-geometry/` — Pure 2D math (zero dependencies)
-- `crates/grafalith-core/` — Document domain + editor session
-- `crates/grafalith-io/` — Interchange (JSON schema, import pipeline, clipboard codec, PNG descriptors)
-- `crates/grafalith-bindings/` — Host boundary (JSON-string batch protocol, `Engine` facade, DTOs)
-- `crates/grafalith/` — npm distribution (`@fazelstudio/grafalith`)
-- `crates/grafalith-python/` — PyPI distribution (`grafalith`)
-- `crates/grafalith-sdk/` — Rust SDK facade for extensions
-- `crates/grafalith-text/` — Text measurement and shaping helpers
-- `apps/desktop/` — Tauri demo app (the reference host)
-- `packages/grafalith-sdk/` — TypeScript SDK (typed client, extension registry)
-- `examples/` — Standalone usage and extension examples
-- `docs/` — Product scope, technical contract, and guides (`docs/guides/`)
+## Pull requests
 
-Dependency direction: `grafalith`/`grafalith-python` → `grafalith-bindings` → `grafalith-io` → `grafalith-core` → `grafalith-geometry`.
+A pull request should explain:
 
-## Rules
+- **What changed** and the user-visible or technical reason for it.
+- **How it was verified**, including tests and relevant build, lint, or type checks.
+- **Which documentation or generated files changed**, where applicable.
+- **Known limitations or compatibility impact**, especially for public APIs, serialized data, or protocol changes.
 
-1. Engine crates must remain framework-agnostic (no React/Vue/DOM/Canvas/Tauri).
-2. All mutations go through `Document` (the sole version/nonce authority) as one undoable `Command` via `HistoryManager`.
-3. Run the checks in [`DEVELOPMENT.md`](./DEVELOPMENT.md) before submitting PRs.
-4. Follow existing code conventions (data-oriented, elements as plain data, behavior in separate functions).
-5. Every public item needs a short Rustdoc (1-2 lines).
-
-See [`DEVELOPMENT.md`](./DEVELOPMENT.md#publishing) for release publishing.
+Before submitting, review the diff for unrelated changes and follow the relevant checks in [`DEVELOPMENT.md`](./DEVELOPMENT.md).
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By submitting a contribution, you agree that it is provided under the repository's [MIT License](./LICENSE).

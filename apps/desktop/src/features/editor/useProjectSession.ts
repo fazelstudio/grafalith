@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import type { Engine } from '../../hooks/useEngine';
 import { getProjectStore } from '../../platform/projects/projectService';
 import {
+  normalizeProjectCanvas,
   normalizeProjectKind,
   parseProjectError,
+  type ProjectCanvas,
   type ProjectError,
   type ProjectKind,
 } from '../../platform/projects/types';
@@ -20,7 +22,7 @@ export type ProjectOpenStage =
 /** Explicit project opening pipeline states. */
 export type ProjectSession =
   | { kind: 'opening'; stage: ProjectOpenStage }
-  | { kind: 'ready'; name: string; projectKind: ProjectKind; empty: boolean }
+  | { kind: 'ready'; name: string; projectKind: ProjectKind; canvas: ProjectCanvas; empty: boolean }
   | { kind: 'failed'; error: ProjectError; stage: ProjectOpenStage };
 
 /** Maps a typed project error to the pipeline stage that produced it. */
@@ -112,6 +114,7 @@ export function useProjectSession(engine: Engine, projectId: string): {
           kind: 'ready',
           name: summary.name,
           projectKind: normalizeProjectKind(summary.kind),
+          canvas: normalizeProjectCanvas(summary.canvas),
           empty,
         });
       } catch (rawError) {

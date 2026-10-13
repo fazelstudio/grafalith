@@ -39,6 +39,8 @@ export interface DrawSnapshot {
   id: string;
   kind: string;
   bounds: DrawBounds;
+  /** Unrotated paint frame when the engine provides it (fallback: `bounds`). */
+  frame?: DrawBounds;
 }
 
 function asData(result: BatchResult, op: string): unknown {

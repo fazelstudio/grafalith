@@ -10,12 +10,6 @@ const common: EnDict['common'] = {
     maximize: 'Maksimalkan',
     restore: 'Pulihkan',
     retry: 'Coba lagi',
-    open: 'Buka',
-    back: 'Kembali',
-    save: 'Simpan',
-  },
-  states: {
-    loading: 'Memuat…',
   },
 };
 

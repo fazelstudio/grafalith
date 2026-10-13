@@ -1,5 +1,6 @@
 import type {
   DrawEntryDto,
+  PaintDto,
   RenderModelDto,
   SnapGuideDto,
   ViewportDto,
@@ -36,9 +37,27 @@ export type GhostPreview =
       fontSize: number | null;
     }
   /** Rotate drag: committed entry repainted at the preview angle. */
-  | { kind: 'rotate'; id: string; rotation: number };
+  | { kind: 'rotate'; id: string; rotation: number }
+  /**
+   * Fill drag: entries repainted with an uncommitted fill (inspector stop
+   * drag). The engine is untouched until release commits once, so this
+   * preview is the only live picture — painted at full opacity.
+   */
+  | { kind: 'fill'; ids: string[]; paint: PaintDto };
 
 export const NO_PREVIEW: GhostPreview = { kind: 'none' };
+
+/**
+ * Uncommitted fill preview shared from the inspector to the canvas loop by
+ * ref (never React state, so drags repaint without re-rendering). Cleared
+ * on commit, cancel, or popover close so no stale preview can stick.
+ */
+export interface FillPreview {
+  /** Entries repainted with the preview fill. */
+  ids: string[];
+  /** Uncommitted paint, same shape the committed entries carry. */
+  paint: PaintDto;
+}
 
 /**
  * Canvas overlay palette (single source).
@@ -140,6 +159,8 @@ function skippedIds(preview: GhostPreview, editingId: string | null): Set<string
     skipped.add(preview.id);
   } else if (preview.kind === 'resize') {
     skipped.add(preview.id);
+  } else if (preview.kind === 'fill') {
+    for (const id of preview.ids) skipped.add(id);
   }
   return skipped;
 }
@@ -176,11 +197,23 @@ function resizedEntry(
   box: { x: number; y: number; width: number; height: number },
   fontSize: number | null,
 ): DrawEntryDto {
-  const bounds = { minX: box.x, minY: box.y, maxX: box.x + box.width, maxY: box.y + box.height };
+  const frame = { minX: box.x, minY: box.y, maxX: box.x + box.width, maxY: box.y + box.height };
+  // The preview box is the unrotated frame; mirror it onto `bounds` too so
+  // legacy readers stay coherent (paint reads `frame`, culling reads `bounds`).
+  const bounds = { ...frame };
   if (entry.detail.type === 'text' && typeof fontSize === 'number' && Number.isFinite(fontSize)) {
-    return { ...entry, bounds, detail: { ...entry.detail, fontSize } };
+    return { ...entry, bounds, frame, detail: { ...entry.detail, fontSize } };
   }
-  return { ...entry, bounds };
+  return { ...entry, bounds, frame };
+}
+
+/**
+ * Paint/chrome frame for an entry: unrotated box when the engine provides
+ * it, `bounds` fallback for cached/legacy models. All shape extents paint
+ * from here; `bounds` stays the rotation-aware AABB for culling only.
+ */
+function paintFrame(entry: DrawEntryDto): DrawEntryDto['bounds'] {
+  return entry.frame ?? entry.bounds;
 }
 
 // ---------------------------------------------------------------------------
@@ -248,22 +281,15 @@ function fillPath(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void {
     ctx.fill();
     return;
   }
-  const { bounds } = entry;
-  const w = bounds.maxX - bounds.minX;
-  const h = bounds.maxY - bounds.minY;
-  const maxDim = Math.max(w, h);
+  // Gradient extents derive from the unrotated frame so the fill does not
+  // pulse when the element rotates (the AABB grows at non-90° angles).
+  const frame = paintFrame(entry);
+  const { x0, y0, x1, y1, cx, cy, radius } = gradientGeometry(frame, paint.type === 'linear' ? paint.angle : 0);
   let gradient: CanvasGradient;
   if (paint.type === 'linear') {
-    const angleRad = (paint.angle * Math.PI) / 180;
-    const half = maxDim / 2;
-    gradient = ctx.createLinearGradient(
-      -half * Math.cos(angleRad),
-      -half * Math.sin(angleRad),
-      half * Math.cos(angleRad),
-      half * Math.sin(angleRad),
-    );
+    gradient = ctx.createLinearGradient(x0, y0, x1, y1);
   } else {
-    gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, maxDim / 2);
+    gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
   }
   for (const stop of paint.stops) {
     gradient.addColorStop(stop.offset, stop.color);
@@ -272,10 +298,35 @@ function fillPath(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void {
   ctx.fill();
 }
 
+/**
+ * Gradient endpoints over an unrotated frame: linear runs center ±
+ * cos/sin(angle°) · max(w,h)/2 and radial spans center to max(w,h)/2,
+ * exactly the engine contract hosts must rebuild. Centered on the frame —
+ * endpoints around the scene origin would sample a clamped slice for any
+ * shape away from origin, so stop edits would not show on the object.
+ */
+export function gradientGeometry(
+  frame: { minX: number; minY: number; maxX: number; maxY: number },
+  angleDeg: number,
+): { cx: number; cy: number; x0: number; y0: number; x1: number; y1: number; radius: number } {
+  const cx = (frame.minX + frame.maxX) / 2;
+  const cy = (frame.minY + frame.maxY) / 2;
+  const radius = Math.max(frame.maxX - frame.minX, frame.maxY - frame.minY) / 2;
+  const safeAngle = Number.isFinite(angleDeg) ? angleDeg : 0;
+  const angleRad = (safeAngle * Math.PI) / 180;
+  const dx = Math.cos(angleRad) * radius;
+  const dy = Math.sin(angleRad) * radius;
+  return { cx, cy, x0: cx - dx, y0: cy - dy, x1: cx + dx, y1: cy + dy, radius };
+}
+
 function withRotation<T>(ctx: CanvasRenderingContext2D, entry: DrawEntryDto, body: () => T): T {
-  const { bounds, rotation } = entry;
-  const cx = (bounds.minX + bounds.maxX) / 2;
-  const cy = (bounds.minY + bounds.maxY) / 2;
+  // Rotate about the unrotated frame center (== AABB center for
+  // center-rotated boxes). Using the AABB center with AABB dims would
+  // double-apply the rotation and grow the shape at non-90° angles.
+  const frame = paintFrame(entry);
+  const cx = (frame.minX + frame.maxX) / 2;
+  const cy = (frame.minY + frame.maxY) / 2;
+  const { rotation } = entry;
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(rotation);
@@ -290,14 +341,14 @@ function withRotation<T>(ctx: CanvasRenderingContext2D, entry: DrawEntryDto, bod
 function drawBoxKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void {
   withRotation(ctx, entry, () => {
     applyPaint(ctx, entry);
-    const { bounds } = entry;
-    const w = bounds.maxX - bounds.minX;
-    const h = bounds.maxY - bounds.minY;
+    const frame = paintFrame(entry);
+    const w = frame.maxX - frame.minX;
+    const h = frame.maxY - frame.minY;
     ctx.beginPath();
-    ctx.rect(bounds.minX, bounds.minY, w, h);
+    ctx.rect(frame.minX, frame.minY, w, h);
     fillPath(ctx, entry);
     ctx.beginPath();
-    ctx.rect(bounds.minX, bounds.minY, w, h);
+    ctx.rect(frame.minX, frame.minY, w, h);
     ctx.stroke();
     if (entry.kind === 'image') {
       drawImagePlaceholder(ctx, entry);
@@ -312,11 +363,11 @@ function drawBoxKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void {
 function drawEllipseKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void {
   withRotation(ctx, entry, () => {
     applyPaint(ctx, entry);
-    const { bounds } = entry;
-    const cx = (bounds.minX + bounds.maxX) / 2;
-    const cy = (bounds.minY + bounds.maxY) / 2;
-    const rx = (bounds.maxX - bounds.minX) / 2;
-    const ry = (bounds.maxY - bounds.minY) / 2;
+    const frame = paintFrame(entry);
+    const cx = (frame.minX + frame.maxX) / 2;
+    const cy = (frame.minY + frame.maxY) / 2;
+    const rx = (frame.maxX - frame.minX) / 2;
+    const ry = (frame.maxY - frame.minY) / 2;
     ctx.beginPath();
     ctx.ellipse(cx, cy, Math.max(rx, 0), Math.max(ry, 0), 0, 0, Math.PI * 2);
     fillPath(ctx, entry);
@@ -348,14 +399,52 @@ function drawPolyline(ctx: CanvasRenderingContext2D, entry: DrawEntryDto, arrowh
     if (!arrowheads || entry.detail.type !== 'arrow') return;
     ctx.setLineDash([]);
     ctx.fillStyle = entry.strokeColor;
+    ctx.strokeStyle = entry.strokeColor;
     const n = points.length;
-    if (entry.detail.hasEnd && n >= 2) {
-      drawArrowhead(ctx, points[n - 2], points[n - 1], entry.strokeWidth);
+    if (entry.detail.end != null && n >= 2) {
+      drawArrowMarker(ctx, points[n - 2], points[n - 1], entry.strokeWidth, entry.detail.end);
     }
-    if (entry.detail.hasStart && n >= 2) {
-      drawArrowhead(ctx, points[1], points[0], entry.strokeWidth);
+    if (entry.detail.start != null && n >= 2) {
+      drawArrowMarker(ctx, points[1], points[0], entry.strokeWidth, entry.detail.start);
     }
   });
+}
+
+/**
+ * Head marker by wire style: triangle for `arrow`, a perpendicular tick
+ * for `bar`, a filled disc for `dot`. Unknown non-null markers stay
+ * visible as triangles rather than silently dropping the head.
+ */
+function drawArrowMarker(
+  ctx: CanvasRenderingContext2D,
+  from: [number, number],
+  tip: [number, number],
+  strokeWidth: number,
+  marker: string,
+): void {
+  const scale = Math.max(1, strokeWidth / 2);
+  if (marker === 'dot') {
+    ctx.beginPath();
+    ctx.arc(tip[0], tip[1], (ARROWHEAD_WIDTH * scale) / 2, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  if (marker === 'bar') {
+    const dx = tip[0] - from[0];
+    const dy = tip[1] - from[1];
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return;
+    const half = (ARROWHEAD_WIDTH * scale) / 2;
+    const nx = (-dy / len) * half;
+    const ny = (dx / len) * half;
+    ctx.lineWidth = strokeWidth;
+    ctx.beginPath();
+    ctx.moveTo(tip[0] - nx, tip[1] - ny);
+    ctx.lineTo(tip[0] + nx, tip[1] + ny);
+    ctx.stroke();
+    return;
+  }
+  drawArrowhead(ctx, from, tip, strokeWidth);
 }
 
 function drawArrowhead(
@@ -424,12 +513,12 @@ function drawTextKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void 
     ctx.save();
     ctx.globalAlpha = normalizedOpacity(entry.opacity);
     ctx.globalCompositeOperation = 'source-over';
-    const { bounds } = entry;
-    const w = bounds.maxX - bounds.minX;
-    const h = bounds.maxY - bounds.minY;
+    const frame = paintFrame(entry);
+    const w = frame.maxX - frame.minX;
+    const h = frame.maxY - frame.minY;
     // Background follows the content-driven box, so it grows with new lines.
     ctx.beginPath();
-    ctx.rect(bounds.minX, bounds.minY, w, h);
+    ctx.rect(frame.minX, frame.minY, w, h);
     fillPath(ctx, entry);
     // Box outline keeps its own color while reusing the entry stroke
     // width/style, leaving the stroke color free for the glyphs.
@@ -439,7 +528,7 @@ function drawTextKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void 
       ctx.lineWidth = entry.strokeWidth;
       applyDash(ctx, entry);
       ctx.beginPath();
-      ctx.rect(bounds.minX, bounds.minY, w, h);
+      ctx.rect(frame.minX, frame.minY, w, h);
       ctx.stroke();
     }
     ctx.setLineDash([]);
@@ -453,13 +542,13 @@ function drawTextKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void 
     // around the left edge would push centered text out of its own box.
     const anchorX =
       detail.align === 'center'
-        ? (bounds.minX + bounds.maxX) / 2
+        ? (frame.minX + frame.maxX) / 2
         : detail.align === 'right'
-          ? bounds.maxX
-          : bounds.minX;
+          ? frame.maxX
+          : frame.minX;
     const lines = detail.text.split('\n');
     for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], anchorX, bounds.minY + i * detail.fontSize * 1.25);
+      ctx.fillText(lines[i], anchorX, frame.minY + i * detail.fontSize * 1.25);
     }
     ctx.restore();
   });
@@ -515,18 +604,18 @@ function drawPathKind(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void 
 }
 
 function drawImagePlaceholder(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void {
-  const { bounds } = entry;
-  const w = bounds.maxX - bounds.minX;
-  const h = bounds.maxY - bounds.minY;
+  const frame = paintFrame(entry);
+  const w = frame.maxX - frame.minX;
+  const h = frame.maxY - frame.minY;
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.strokeStyle = CANVAS_OVERLAY.placeholderStroke;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(bounds.minX, bounds.minY);
-  ctx.lineTo(bounds.maxX, bounds.maxY);
-  ctx.moveTo(bounds.maxX, bounds.minY);
-  ctx.lineTo(bounds.minX, bounds.maxY);
+  ctx.moveTo(frame.minX, frame.minY);
+  ctx.lineTo(frame.maxX, frame.maxY);
+  ctx.moveTo(frame.maxX, frame.minY);
+  ctx.lineTo(frame.minX, frame.maxY);
   ctx.stroke();
   ctx.fillStyle = CANVAS_OVERLAY.placeholderStroke;
   ctx.font = '10px sans-serif';
@@ -534,7 +623,7 @@ function drawImagePlaceholder(ctx: CanvasRenderingContext2D, entry: DrawEntryDto
   const label = entry.detail.type === 'image' && entry.detail.assetId
     ? `image: ${entry.detail.assetId}`
     : 'image (no asset store in desktop)';
-  ctx.fillText(label, bounds.minX + 4, bounds.minY + 4, Math.max(w - 8, 0));
+  ctx.fillText(label, frame.minX + 4, frame.minY + 4, Math.max(w - 8, 0));
   void h;
   ctx.restore();
 }
@@ -546,7 +635,7 @@ function drawFrameLabel(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): voi
   ctx.fillStyle = CANVAS_OVERLAY.annotationMuted;
   ctx.font = '11px sans-serif';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(entry.detail.name, entry.bounds.minX + 2, entry.bounds.minY - 2);
+  ctx.fillText(entry.detail.name, paintFrame(entry).minX + 2, paintFrame(entry).minY - 2);
   ctx.restore();
 }
 
@@ -557,7 +646,7 @@ function drawTypeLabel(ctx: CanvasRenderingContext2D, entry: DrawEntryDto): void
   ctx.fillStyle = CANVAS_OVERLAY.annotationMuted;
   ctx.font = '10px sans-serif';
   ctx.textBaseline = 'top';
-  ctx.fillText(name, entry.bounds.minX + 4, entry.bounds.minY + 4);
+  ctx.fillText(name, paintFrame(entry).minX + 4, paintFrame(entry).minY + 4);
   ctx.restore();
 }
 
@@ -578,7 +667,9 @@ function drawFramePass(
   }
   ctx.save();
   ctx.beginPath();
-  ctx.rect(frame.bounds.minX, frame.bounds.minY, frame.bounds.maxX - frame.bounds.minX, frame.bounds.maxY - frame.bounds.minY);
+  // Clip to the unrotated frame; the AABB would over-clip at non-90° angles.
+  const clipFrame = frame.frame ?? frame.bounds;
+  ctx.rect(clipFrame.minX, clipFrame.minY, clipFrame.maxX - clipFrame.minX, clipFrame.maxY - clipFrame.minY);
   ctx.clip();
   for (const child of children) {
     if (skipped.has(child.id)) continue;
@@ -636,6 +727,16 @@ function drawGhost(ctx: CanvasRenderingContext2D, model: RenderModelDto, preview
       const entry = findEntry(model, preview.id);
       if (!entry) return;
       drawEntry(ctx, { ...entry, rotation: preview.rotation });
+      return;
+    }
+    case 'fill': {
+      // Uncommitted fill preview (inspector stop drag): repaint the affected
+      // committed entries with the preview paint at full fidelity.
+      for (const id of preview.ids) {
+        const entry = findEntry(model, id);
+        if (!entry) continue;
+        drawEntry(ctx, { ...entry, paint: preview.paint });
+      }
       return;
     }
   }
@@ -753,12 +854,14 @@ function overlayForResize(
     [box.x + box.width / 2, box.y + box.height],
     [box.x + box.width, box.y + box.height],
   ];
+  const overlayFrame = overlay.frame ?? overlay.bounds;
   return {
     bounds: { minX: box.x, minY: box.y, maxX: box.x + box.width, maxY: box.y + box.height },
+    frame: { minX: box.x, minY: box.y, maxX: box.x + box.width, maxY: box.y + box.height },
     handles,
     rotateHandle: [
       box.x + box.width / 2,
-      box.y + (overlay.rotateHandle[1] - overlay.bounds.minY),
+      box.y + (overlay.rotateHandle[1] - overlayFrame.minY),
     ],
     rotation: overlay.rotation,
   };
@@ -771,9 +874,13 @@ function drawSelectionOverlay(
   textSingleSelection = false,
   shift: { dx: number; dy: number } | null = null,
 ): void {
-  const { bounds, handles, rotateHandle, rotation } = overlay;
-  const cx = (bounds.minX + bounds.maxX) / 2;
-  const cy = (bounds.minY + bounds.maxY) / 2;
+  // Outline/handles derive from the unrotated frame; `bounds` is only the
+  // AABB extents. Painting the AABB rotated would double-apply the rotation
+  // (same enlargement bug as entries).
+  const frame = overlay.frame ?? overlay.bounds;
+  const { handles, rotateHandle, rotation } = overlay;
+  const cx = (frame.minX + frame.maxX) / 2;
+  const cy = (frame.minY + frame.maxY) / 2;
   ctx.save();
   // Scene-space shift first, so rotated boxes translate rigidly instead of
   // along their rotated axes.
@@ -783,7 +890,7 @@ function drawSelectionOverlay(
   ctx.translate(-cx, -cy);
   ctx.strokeStyle = SELECTION_COLOR;
   ctx.lineWidth = 1 / zoom;
-  ctx.strokeRect(bounds.minX, bounds.minY, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+  ctx.strokeRect(frame.minX, frame.minY, frame.maxX - frame.minX, frame.maxY - frame.minY);
   // Text boxes keep their content-driven height, but selected text still
   // exposes the four familiar corner handles for horizontal resizing.
   const visibleHandles = textSingleSelection

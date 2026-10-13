@@ -2,6 +2,7 @@ import type { EnDict } from '../en';
 
 const home: EnDict['home'] = {
   description: 'Proyek desain terbaru Anda, tersimpan secara lokal.',
+  empty: 'Belum ada proyek',
   actions: {
     create: 'Buat',
   },

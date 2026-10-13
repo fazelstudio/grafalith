@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Single source of truth for command signatures.
 
-The 79 wire ops (see docs/guides/commands.md and the
-`command_coverage` test, which pins the same count: 78 base + `importSvg`
+The 88 wire ops (see docs/guides/commands.md and the
+`command_coverage` test, which pins the same count: 87 base + `importSvg`
 behind the `svg` feature) are declared ONCE here.
 From this table the script generates:
 
@@ -39,6 +39,13 @@ COMMANDS: list[tuple[str, str, list[tuple[str, str, str, bool]]]] = [
     ("node.reorder", "reorder", [("order", "string[]", "list", True)]),
     ("node.group", "group", [("ids", "string[]", "list", True)]),
     ("node.ungroup", "ungroup", [("groupId", "string", "str", True)]),
+    ("group.rename", "renameGroup", [("groupId", "string", "str", True), ("name", "string", "str", True)]),
+    ("group.reparent", "reparentGroup", [("groupId", "string", "str", True), ("parentGroupId", "string | null", "str | None", False)]),
+    ("node.moveToGroup", "moveToGroup", [("ids", "string[]", "list", True), ("groupId", "string | null", "str | None", False), ("index", "number", "int", False)]),
+    ("group.setLocked", "setGroupLocked", [("ids", "string[]", "list", True), ("locked", "boolean", "bool", True)]),
+    ("node.rename", "renameNode", [("id", "string", "str", True), ("name", "string", "str", True)]),
+    ("node.reparent", "reparentNodes", [("ids", "string[]", "list", True), ("parentGroupId", "string | null", "str | None", False), ("index", "number", "int", False)]),
+    ("node.duplicateHierarchy", "duplicateNodes", [("ids", "string[]", "list", True)]),
     ("selection.set", "select", [("ids", "string[]", "list", True)]),
     ("tool.activate", "setTool", [("tool", "string", "str", True)]),
     ("clipboard.copy", "copy", [("ids", "string[]", "list", True)]),
@@ -56,12 +63,13 @@ COMMANDS: list[tuple[str, str, list[tuple[str, str, str, bool]]]] = [
     ("tool.pointerMove", "pointerMove", [("x", "number", "float", True), ("y", "number", "float", True), ("modifiers", "Modifiers", "dict", False)]),
     ("tool.pointerUp", "pointerUp", [("x", "number", "float", True), ("y", "number", "float", True), ("button", "string", "str", True), ("modifiers", "Modifiers", "dict", False)]),
     ("tool.pointerCancel", "pointerCancel", []),
+    ("tool.commitDraw", "commitDraw", [("requestId", "string", "str | None", False), ("shape", "string", "str", True), ("origin", "Point", "dict", True), ("current", "Point", "dict", True), ("trail", "Point[]", "list", False)]),
     ("tool.key", "keyDown", [("key", "string", "str", True), ("modifiers", "Modifiers", "dict", False)]),
     ("view.wheel", "wheel", [("dx", "number", "float", True), ("dy", "number", "float", True), ("zoomGesture", "boolean", "bool", False), ("x", "number", "float", True), ("y", "number", "float", True)]),
     ("view.setViewport", "setViewport", [("scrollX", "number", "float", True), ("scrollY", "number", "float", True), ("zoom", "number", "float", True)]),
     ("view.fit", "fitViewport", [("canvasWidth", "number", "float", True), ("canvasHeight", "number", "float", True), ("padding", "number", "float", False), ("ids", "string[]", "list", False)]),
     ("view.fill", "fillViewport", [("canvasWidth", "number", "float", True), ("canvasHeight", "number", "float", True), ("padding", "number", "float", False), ("ids", "string[]", "list", False)]),
-    ("session.configure", "configure", [("enabledTools", "string[] | null", "object", False), ("theme", "unknown", "dict", False), ("snap", "unknown", "dict", False)]),
+    ("session.configure", "configure", [("enabledTools", "string[] | null", "object", False), ("theme", "unknown", "dict", False), ("snap", "unknown", "dict", False), ("canvasMode", "unknown", "dict", False)]),
     ("asset.notifyChanged", "notifyAssetsChanged", []),
     ("text.startAt", "startTextAt", [("x", "number", "float", True), ("y", "number", "float", True)]),
     ("text.input", "textInput", [("text", "string", "str", True)]),
@@ -96,7 +104,7 @@ COMMANDS: list[tuple[str, str, list[tuple[str, str, str, bool]]]] = [
     ("path.release", "pathEditRelease", []),
     ("path.commit", "pathEditCommit", []),
     ("path.cancel", "pathEditCancel", []),
-    ("view.renderModel", "renderModel", [("canvasWidth", "number", "float", True), ("canvasHeight", "number", "float", True), ("showGrid", "boolean", "bool", False), ("gridSize", "number", "float", False), ("readyImages", "string[]", "list", False)]),
+    ("view.renderModel", "renderModel", [("canvasWidth", "number", "float", True), ("canvasHeight", "number", "float", True), ("showGrid", "boolean", "bool", False), ("gridSize", "number", "float", False), ("readyImages", "string[]", "list", False), ("viewport", "unknown", "dict", False)]),
     ("view.previewMove", "previewMove", [("ids", "string[]", "list", True), ("from", "Point", "dict", True), ("to", "Point", "dict", True), ("axisLock", "boolean", "bool", False)]),
     ("view.previewResize", "previewResize", [("id", "string", "str", True), ("handle", "string", "str", True), ("x", "number", "float", True), ("y", "number", "float", True), ("lockAspect", "boolean", "bool", False)]),
     ("view.previewRotate", "previewRotate", [("id", "string", "str", True), ("anchor", "Point", "dict", True), ("current", "Point", "dict", True), ("snap", "boolean", "bool", False)]),
@@ -108,9 +116,10 @@ COMMANDS: list[tuple[str, str, list[tuple[str, str, str, bool]]]] = [
     ("boolean.subtract", "booleanSubtract", [("ids", "string[]", "list", True)]),
     ("boolean.intersect", "booleanIntersect", [("ids", "string[]", "list", True)]),
     ("boolean.exclude", "booleanExclude", [("ids", "string[]", "list", True)]),
+    ("export.planPng", "planPngExport", [("options", "unknown", "dict", False)]),
 ]
 
-EXPECTED_COUNT = 79
+EXPECTED_COUNT = 88
 
 
 def render_dts() -> str:
@@ -118,7 +127,7 @@ def render_dts() -> str:
         "// Generated by scripts/gen_command_bindings.py — do not edit by hand.",
         "// Single source of truth: the COMMANDS table in that script,",
         "// mirroring crates/grafalith-bindings/src/protocol.rs (pinned by the",
-        "// command_coverage test: 79 unique wire names).",
+        "// command_coverage test: 88 unique wire names).",
         "",
         "export interface Point { x: number; y: number }",
         "export interface Modifiers { shift?: boolean; alt?: boolean; ctrlOrCmd?: boolean }",
@@ -174,7 +183,7 @@ def render_pyi() -> str:
         "",
         "Single source of truth: the COMMANDS table in that script, mirroring",
         "crates/grafalith-bindings/src/protocol.rs (pinned by the command_coverage",
-        "test: 79 unique wire names).",
+        "test: 88 unique wire names).",
         '"""',
         "",
         "from typing import Any, Union",

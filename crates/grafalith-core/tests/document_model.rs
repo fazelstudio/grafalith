@@ -264,6 +264,8 @@ fn apply_snapshot_skips_invalid_elements_individually() {
         legacy_version: 1,
         elements: vec![Element::Rectangle(valid), Element::Rectangle(broken)],
         element_order: vec![ElementId::of("valid"), ElementId::of("broken")],
+        groups: vec![],
+        labels: vec![],
     };
 
     let mut target = Document::new();
@@ -304,6 +306,8 @@ fn apply_snapshot_rejects_zero_valid_elements_without_mutation() {
         legacy_version: 1,
         elements: vec![Element::Rectangle(broken)],
         element_order: vec![ElementId::of("broken")],
+        groups: vec![],
+        labels: vec![],
     };
 
     let mut target = Document::new();
@@ -382,6 +386,8 @@ fn dangling_references_repair_to_none() {
         legacy_version: 1,
         elements: vec![Element::Arrow(arrow), Element::Text(text)],
         element_order: vec![ElementId::of("arrow-1"), ElementId::of("text-1")],
+        groups: vec![],
+        labels: vec![],
     };
 
     let mut doc = Document::new();
@@ -768,4 +774,56 @@ fn id_generator_counter_sequences_are_stable() {
     let nonce_first = gen.new_nonce();
     let nonce_second = gen.new_nonce();
     assert_ne!(nonce_first, nonce_second);
+}
+
+#[test]
+fn fresh_ids_skip_ids_imported_from_elsewhere() {
+    // Imported scenes, templates, and cross-document pastes arrive with
+    // their own `el-N` ids while the local counter still starts at 1.
+    // Minting must loop past occupied ids (tombstones included) instead of
+    // handing out an id `CreateElements` would reject — otherwise every
+    // creation path (draw, text, paste, pen) fails on such documents.
+    let mut gen = CounterIdGenerator::new();
+    let mut doc = Document::new();
+    for id in ["el-1", "el-2", "el-3"] {
+        let mut rect = create_rectangle(&mut gen);
+        rect.base.id = ElementId::of(id);
+        doc.upsert(Element::Rectangle(rect)).unwrap();
+    }
+    assert_eq!(doc.fresh_element_id().as_str(), "el-4");
+    // A soft-deleted id stays occupied: reuse would resurrect
+    // order/history confusion.
+    let mut fourth = create_rectangle(&mut gen);
+    fourth.base.id = ElementId::of("el-4");
+    doc.upsert(Element::Rectangle(fourth)).unwrap();
+    doc.soft_delete("el-4").unwrap();
+    assert_eq!(
+        doc.fresh_element_id().as_str(),
+        "el-5",
+        "tombstones count as occupied"
+    );
+
+    // Dedicated tombstone case: the counter still points at a soft-deleted
+    // id, so minting must skip it rather than resurrecting the slot.
+    let mut tomb = Document::new();
+    let mut only = create_rectangle(&mut gen);
+    only.base.id = ElementId::of("el-1");
+    tomb.upsert(Element::Rectangle(only)).unwrap();
+    tomb.soft_delete("el-1").unwrap();
+    assert_eq!(tomb.fresh_element_id().as_str(), "el-2");
+
+    // Group ids follow the same rule through their own namespace.
+    let mut grouped = Document::new();
+    for id in ["g-1", "g-2", "g-3", "g-4"] {
+        let mut rect = create_rectangle(&mut gen);
+        rect.base.id = ElementId::of(id);
+        grouped.upsert(Element::Rectangle(rect)).unwrap();
+    }
+    let first_group =
+        group_elements(&mut grouped, &[ElementId::of("g-1"), ElementId::of("g-2")]).unwrap();
+    assert_eq!(first_group.as_str(), "group-1");
+    let second_group =
+        group_elements(&mut grouped, &[ElementId::of("g-3"), ElementId::of("g-4")]).unwrap();
+    assert_eq!(second_group.as_str(), "group-2");
+    assert_eq!(grouped.fresh_group_id().as_str(), "group-3");
 }

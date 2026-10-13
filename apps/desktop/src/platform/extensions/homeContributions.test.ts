@@ -21,15 +21,15 @@ describe('home contributions', () => {
     registerProjectTemplates([{ id: 'acme.poster', title: 'Poster', kind: 'design', extensionId: 'acme.pack' }]);
     expect(homeWidgets().map((widget) => widget.id)).toEqual(['acme.recent']);
     expect(projectTemplates('design').map((template) => template.id)).toEqual(['acme.poster']);
-    expect(projectTemplates('diagram')).toEqual([]);
+    expect(projectTemplates('whiteboard')).toEqual([]);
     expect(() => registerHomeWidgets([{ id: 'acme.recent', title: 'Dup', extensionId: 'acme.pack' }])).toThrow(
       /duplicate home widget/,
     );
   });
 
   test('interceptors redirect creation and unload clears state', () => {
-    registerProjectCreateInterceptor((kind) => (kind === 'diagram' ? 'acme.flow-template' : undefined));
-    expect(interceptProjectCreate('diagram')).toBe('acme.flow-template');
+    registerProjectCreateInterceptor((kind) => (kind === 'whiteboard' ? 'acme.board-template' : undefined));
+    expect(interceptProjectCreate('whiteboard')).toBe('acme.board-template');
     expect(interceptProjectCreate('design')).toBeUndefined();
     registerHomeWidgets([{ id: 'acme.recent', title: 'Recent', extensionId: 'acme.pack' }]);
     removeHomeContributions('acme.pack');

@@ -1,58 +1,48 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-Grafalith is distributed as a library (npm + PyPI) and as a desktop application
-(Tauri). Security fixes are applied to the latest released version of each
-artifact.
+Security fixes target the latest supported release of each published Grafalith artifact. Confirm release status and artifact names against the current manifests and release configuration before publishing this policy.
 
-| Artifact | Package | Supported |
-|----------|---------|-----------|
-| npm | `@fazelstudio/grafalith` | Latest version |
-| PyPI | `grafalith` | Latest version |
-| Desktop | `grafalith-desktop` (Tauri) | Latest version |
+| Artifact | Package or location | Support policy |
+|---|---|---|
+| npm | `@fazelstudio/grafalith` | Latest supported release |
+| PyPI | `grafalith` | Latest supported release |
+| Desktop | Tauri application under `apps/desktop/` | Latest supported release, if distributed |
 
-## Reporting a Vulnerability
+Older releases may not receive security fixes. If a release-specific support window is adopted later, document it here explicitly.
 
-Please **do not** report security vulnerabilities through public GitHub
-issues, discussions, or pull requests.
+## Reporting a vulnerability
 
-Instead, report them privately:
+Please do not disclose security vulnerabilities through public issues, discussions, or pull requests.
 
-1. Open a **private vulnerability report** on GitHub
-   (Security → Advisories → "Report a vulnerability"), or
-2. Email the maintainers at [INSERT SECURITY CONTACT].
+1. If GitHub private vulnerability reporting is enabled for this repository, use the repository's **Security → Advisories → Report a vulnerability** flow.
+2. Otherwise, contact the maintainers privately through **[ADD A SECURITY CONTACT BEFORE PUBLISHING]**.
 
-Please include:
+Before publishing this policy, verify that at least one reporting route is active and monitored.
 
-- A description of the vulnerability and its impact
-- Steps to reproduce or a proof of concept
-- Affected versions/artifacts (npm package, PyPI package, desktop app)
-- Any suggested mitigation, if you have one
+Include, when possible:
 
-You can expect an acknowledgement within a few days. We will investigate
-all legitimate reports and do our best to quickly fix the problem.
+- A concise description of the issue and its potential impact.
+- Reproduction steps or a proof of concept.
+- Affected versions and artifacts.
+- Relevant logs or input samples, after removing secrets and personal data.
+- Any proposed mitigation, if known.
+
+Maintainers will acknowledge reports as soon as reasonably practicable. Investigation and remediation timing depends on severity, reproducibility, and maintainer capacity. Please allow an opportunity to investigate and coordinate a fix before making details public.
 
 ## Scope
 
-Grafalith is a client-side canvas engine: it processes scene JSON, clipboard
-payloads, and user input. In scope for security reports:
+Report security issues that materially affect Grafalith or its users, including:
 
-- Memory safety issues in the Rust engine crates (`crates/*`)
-- JSON/clipboard deserialization crashes or unbounded allocation
-- WASM binding boundary issues (panics crossing FFI, string handling)
-- Python binding boundary issues (panics crossing FFI, GIL handling)
+- Rust engine correctness or memory-safety issues.
+- Crashes, excessive resource use, or unbounded allocation triggered by untrusted scene JSON, import files, clipboard payloads, or other supported inputs.
+- WASM and Python binding boundary issues, including panic/unwind behavior, unsafe string handling, or incorrect error conversion.
+- Tauri/desktop host issues, including unsafe file handling, command exposure, permissions, or flaws that compromise the engine/host boundary.
+- Vulnerable dependencies when the vulnerability is exploitable in Grafalith or affects a shipped artifact.
 
-Out of scope:
+Non-security bugs, usage questions, and feature requests should use the repository's normal contribution or issue workflow. A vulnerability in an upstream dependency may also need to be reported to that project's maintainers; please still notify Grafalith maintainers when a released or development version of Grafalith is affected.
 
-- Vulnerabilities in third-party dependencies (report them upstream)
-- Issues requiring physical access to the user's machine
-- The desktop demo app's own UI code (unless it affects the engine boundary)
+## Engine boundary expectations
 
-## Notes on Engine Safety
-
-The engine is designed so that panics never cross the FFI boundary: all
-fallible operations return `EngineResult`, and the WASM/Python bindings
-convert failures into error envelopes / `ValueError` exceptions. If you
-find a way to trigger a panic across the boundary, please treat it as a
-security issue and report it as above.
+The architecture requires fallible engine operations to return structured errors and requires host bindings to translate failures into the relevant protocol error instead of allowing a panic or unwind to cross an FFI boundary. Report any reproducible violation of this contract as a security issue.

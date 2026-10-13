@@ -488,11 +488,14 @@ pub fn context_menu_intents(doc: &Document, selection: &[ElementId]) -> Vec<Cont
         if !element.base().group_ids.is_empty() {
             has_grouped = true;
         }
-        if element.base().locked {
+        if doc.effective_locked(id.as_str()) {
             has_locked = true;
         } else {
             has_unlocked = true;
         }
+    }
+    if has_locked {
+        return vec![ContextMenuIntent::Unlock];
     }
     if has_grouped {
         intents.push(ContextMenuIntent::Ungroup);
@@ -555,7 +558,7 @@ pub fn resize_handle_at(
     }
     let id = &selection[0];
     let element = doc.get(id.as_str())?;
-    if element.base().is_deleted || element.base().locked {
+    if element.base().is_deleted || doc.effective_locked(id.as_str()) {
         return None;
     }
     let bounds = element.bounds();
@@ -594,7 +597,7 @@ pub fn rotate_handle_at(
     }
     let id = &selection[0];
     let element = doc.get(id.as_str())?;
-    if element.base().is_deleted || element.base().locked {
+    if element.base().is_deleted || doc.effective_locked(id.as_str()) {
         return None;
     }
     let bounds = element.bounds();
@@ -631,7 +634,7 @@ pub fn snap_move_delta(
     let mut boxes: Vec<Bounds> = Vec::new();
     for id in affected {
         if let Some(element) = doc.get(id.as_str()) {
-            if element.base().is_deleted || element.base().locked {
+            if element.base().is_deleted || doc.effective_locked(id.as_str()) {
                 continue;
             }
             let mut bounds = element.bounds();
@@ -674,6 +677,93 @@ pub fn snap_move_delta(
     let snapped_dx = raw_dx + (result.x - center[0]);
     let snapped_dy = raw_dy + (result.y - center[1]);
     (snapped_dx, snapped_dy, result.guides)
+}
+
+/// Snaps a resize drag to a point the commit path can execute directly.
+///
+/// Computes the preview box at `point`, aligns its dragged edges against
+/// every other element (same edge rules as move drags), then shifts the
+/// point by the snapped edge delta and returns it with the guides. Both
+/// the read-only preview and the commit re-run the box math from the
+/// returned point, so preview and commit agree by construction — even
+/// under aspect lock or minimum-size clamping. Object snap only (TS
+/// parity: grid never applies to resizes).
+pub fn snap_resize_point(
+    doc: &Document,
+    id: &ElementId,
+    handle: HandleType,
+    point: Point,
+    lock_aspect: bool,
+    config: &SnapConfig,
+    zoom: f64,
+) -> (Point, Vec<SnapGuide>) {
+    let preview = match crate::command::preview_resize_box(doc, id, handle, point, lock_aspect) {
+        Ok(Some(output)) => output,
+        _ => return (point, Vec::new()),
+    };
+    if !config.snap_to_objects {
+        return (point, Vec::new());
+    }
+    let preview_box = Bounds::new(
+        preview.x,
+        preview.y,
+        preview.x + preview.width,
+        preview.y + preview.height,
+    );
+    let mut candidates: Vec<Bounds> = Vec::new();
+    for element in doc.get_all() {
+        if element.base().is_deleted || element.base().hidden {
+            continue;
+        }
+        if element.id().as_str() == id.as_str() {
+            continue;
+        }
+        candidates.push(element.bounds());
+    }
+    if candidates.is_empty() {
+        return (point, Vec::new());
+    }
+    let empty_excludes: HashSet<usize> = HashSet::new();
+    let (snapped, guides) = crate::geometry::snap::snap_resize_box(
+        &preview_box,
+        handle,
+        &candidates,
+        config.snap_threshold,
+        &empty_excludes,
+        zoom,
+    );
+    if guides.is_empty() {
+        return (point, Vec::new());
+    }
+    // The dragged corner/edge tracks the pointer: shifting the point by
+    // the snapped edge delta reproduces the snapped box downstream.
+    let dx = if matches!(
+        handle,
+        HandleType::TopRight | HandleType::MiddleRight | HandleType::BottomRight
+    ) {
+        snapped.max_x - preview_box.max_x
+    } else if matches!(
+        handle,
+        HandleType::TopLeft | HandleType::MiddleLeft | HandleType::BottomLeft
+    ) {
+        snapped.min_x - preview_box.min_x
+    } else {
+        0.0
+    };
+    let dy = if matches!(
+        handle,
+        HandleType::BottomLeft | HandleType::BottomCenter | HandleType::BottomRight
+    ) {
+        snapped.max_y - preview_box.max_y
+    } else if matches!(
+        handle,
+        HandleType::TopLeft | HandleType::TopCenter | HandleType::TopRight
+    ) {
+        snapped.min_y - preview_box.min_y
+    } else {
+        0.0
+    };
+    ([point[0] + dx, point[1] + dy], guides)
 }
 
 // ---------------------------------------------------------------------------

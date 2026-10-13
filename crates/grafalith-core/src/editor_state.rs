@@ -13,6 +13,7 @@
 //! [`crate::gesture`]; the thin intent facade over all three is
 //! [`crate::editor::Editor`].
 
+use crate::canvas_mode::CanvasMode;
 use crate::selection::SelectionState;
 
 /// Viewport state: scroll offset plus zoom (TS `Viewport` parity).
@@ -34,18 +35,23 @@ pub struct EditorState {
     /// Allowed tool ids, or `None` when every tool is allowed (TS
     /// `enabledTools` parity).
     pub enabled_tools: Option<Vec<String>>,
+    /// Canvas mode: unbounded workboard or fixed-size page. Per-project
+    /// host config applied at session start; never serialized with the
+    /// document (transient like the rest of this struct).
+    pub canvas_mode: CanvasMode,
     /// Current viewport.
     pub viewport: Viewport,
 }
 
 impl EditorState {
     /// Creates default state: empty selection, `select` tool, default
-    /// viewport, all tools allowed.
+    /// viewport, all tools allowed, infinite canvas.
     pub fn new() -> Self {
         Self {
             selection: SelectionState::new(),
             active_tool: "select".to_string(),
             enabled_tools: None,
+            canvas_mode: CanvasMode::default_mode(),
             viewport: Viewport::new(),
         }
     }
@@ -94,6 +100,7 @@ mod tests {
         assert!(state.selection.is_empty());
         assert_eq!(state.active_tool, "select");
         assert_eq!(state.enabled_tools, None);
+        assert_eq!(state.canvas_mode, CanvasMode::default_mode());
         assert_eq!(state.viewport, Viewport::new());
         assert_eq!(state.viewport.zoom, 1.0);
     }

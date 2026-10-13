@@ -74,7 +74,7 @@ export type ActivationTrigger =
   | { readonly kind: "startup" }
   | { readonly kind: "home" }
   | { readonly kind: "project" }
-  | { readonly kind: "editor"; readonly editorType: "design" | "whiteboard" | "diagram" | "*" }
+  | { readonly kind: "editor"; readonly editorType: "design" | "whiteboard" | "slides" | "*" }
   | { readonly kind: "command"; readonly commandId: string }
   | { readonly kind: "view"; readonly viewId: string };
 

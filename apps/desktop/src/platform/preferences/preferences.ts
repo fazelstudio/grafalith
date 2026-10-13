@@ -1,5 +1,5 @@
 import { DEFAULT_THEME_MODE, isThemeMode, type ThemeMode } from '../../app/theme/tokens';
-import { DEFAULT_LOCALE, isLocale, type Locale } from '../../app/i18n/locales';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '../../app/i18n/resources';
 
 const THEME_KEY = 'grafalith:theme';
 const LOCALE_KEY = 'grafalith:locale';

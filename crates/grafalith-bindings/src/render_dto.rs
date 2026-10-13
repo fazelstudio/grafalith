@@ -10,6 +10,7 @@
 //! [`SessionStateDto`] carries the session mirrors. Canvas/DOM/textareas
 //! stay host-owned.
 
+use grafalith_core::canvas_mode::CanvasMode;
 use grafalith_core::editor::Editor;
 use grafalith_core::editor::{
     EditorEvent, EscapeOutcome, KeyAction, PointerDownOutcome, PointerUpOutcome,
@@ -392,10 +393,26 @@ pub struct PathSegmentDto {
 pub struct DrawEntryDto {
     /// Stable element id.
     pub id: String,
+    /// Whether the element is protected from selection and mutation.
+    pub locked: bool,
+    /// Effective lock through the element or an ancestor container.
+    /// Hosts disable canvas affordances on this flag while the Layers
+    /// panel may still select the row for explicit unlock.
+    pub effective_locked: bool,
+    /// Display name for the Layers panel (frame titles, explicit labels,
+    /// or empty when unnamed; never identity).
+    pub label: String,
+    /// Group memberships, innermost first.
+    pub group_ids: Vec<String>,
     /// Dispatch tag (`"rectangle"`, `"text"`, …).
     pub kind: String,
-    /// Rotation-aware AABB in scene units.
+    /// Rotation-aware AABB in scene units (culling, fitting, hit extents).
     pub bounds: BoundsDto,
+    /// Unrotated box in scene units (paint/chrome frame). Hosts paint shape
+    /// extents from this and rotate by `rotation`; painting `bounds` dims
+    /// rotated would double-apply the rotation and grow the shape at
+    /// non-90° angles.
+    pub frame: BoundsDto,
     /// Rotation in radians about the element center.
     pub rotation: f64,
     /// Fill description.
@@ -427,12 +444,22 @@ pub struct DrawEntryDto {
     pub segments: Option<Vec<PathSegmentDto>>,
 }
 
-/// Maps a draw entry to its DTO.
-pub fn draw_entry_dto(entry: &DrawEntry) -> DrawEntryDto {
+/// Maps a draw entry to its DTO, enriching local flags with the observed
+/// hierarchy state from the document.
+pub fn draw_entry_dto(doc: &grafalith_core::document::Document, entry: &DrawEntry) -> DrawEntryDto {
     DrawEntryDto {
         id: entry.id.as_str().to_string(),
+        locked: entry.locked,
+        effective_locked: doc.effective_locked(entry.id.as_str()),
+        label: doc.node_name(entry.id.as_str()),
+        group_ids: entry
+            .group_ids
+            .iter()
+            .map(|id| id.as_str().to_string())
+            .collect(),
         kind: draw_kind_name(&entry.kind).to_string(),
         bounds: bounds_dto(&entry.bounds),
+        frame: bounds_dto(&entry.frame),
         rotation: entry.rotation,
         paint: paint_dto(&entry.paint),
         fill_hatch: fill_hatch_name(&entry.fill_hatch).to_string(),
@@ -469,10 +496,14 @@ pub struct FramePassDto {
 }
 
 /// Maps a frame pass to its DTO.
-pub fn frame_pass_dto(pass: &FramePass) -> FramePassDto {
+pub fn frame_pass_dto(doc: &grafalith_core::document::Document, pass: &FramePass) -> FramePassDto {
     FramePassDto {
-        frame: draw_entry_dto(&pass.frame),
-        children: pass.children.iter().map(draw_entry_dto).collect(),
+        frame: draw_entry_dto(doc, &pass.frame),
+        children: pass
+            .children
+            .iter()
+            .map(|entry| draw_entry_dto(doc, entry))
+            .collect(),
     }
 }
 
@@ -487,8 +518,10 @@ pub fn frame_pass_dto(pass: &FramePass) -> FramePassDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionOverlayDto {
-    /// Combined AABB of the selection.
+    /// Combined AABB of the selection (extents).
     pub bounds: BoundsDto,
+    /// Unrotated combined frame (outline/handles source when rotated).
+    pub frame: BoundsDto,
     /// Eight resize-handle positions in scene coordinates.
     pub handles: Vec<[f64; 2]>,
     /// Rotate-handle position in scene coordinates.
@@ -501,6 +534,7 @@ pub struct SelectionOverlayDto {
 pub fn selection_overlay_dto(overlay: &SelectionOverlay) -> SelectionOverlayDto {
     SelectionOverlayDto {
         bounds: bounds_dto(&overlay.bounds),
+        frame: bounds_dto(&overlay.frame),
         handles: overlay
             .handles
             .iter()
@@ -1032,6 +1066,38 @@ pub struct RenderModelDto {
     pub viewport: ViewportDto,
     /// Asset generation the model was built for.
     pub asset_generation: u64,
+    /// Persistent group metadata for hierarchical layer hosts.
+    pub groups: Vec<GroupDto>,
+    /// Explicit element labels for the Layers panel.
+    pub labels: Vec<ElementLabelDto>,
+    /// Complete document z-order, back-to-front.
+    pub element_order: Vec<String>,
+}
+
+/// Host-facing persistent group record.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupDto {
+    /// Stable group id.
+    pub id: String,
+    /// User-visible name.
+    pub name: String,
+    /// Parent group id.
+    pub parent_group_id: Option<String>,
+    /// Local container lock.
+    pub locked: bool,
+    /// Effective lock through the container or an ancestor.
+    pub effective_locked: bool,
+}
+
+/// Host-facing explicit element label.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementLabelDto {
+    /// Labeled element id.
+    pub id: String,
+    /// Trimmed display name.
+    pub name: String,
 }
 
 /// Builds the host render description from the editor.
@@ -1044,21 +1110,33 @@ pub fn render_model_dto(
     config: &RenderConfig,
     ready_images: &std::collections::HashSet<String>,
 ) -> RenderModelDto {
+    render_model_dto_for_viewport(editor, &editor.viewport(), config, ready_images)
+}
+
+/// Builds the host render description for an explicit viewport (one-shot
+/// reads such as export; the live session viewport is never touched).
+pub fn render_model_dto_for_viewport(
+    editor: &Editor,
+    viewport: &Viewport,
+    config: &RenderConfig,
+    ready_images: &std::collections::HashSet<String>,
+) -> RenderModelDto {
     let doc = editor.document();
-    let viewport = editor.viewport();
     let is_ready = |id: &str| ready_images.contains(id);
-    let model = RenderModel::build(doc, &viewport, config, &is_ready);
+    let model = RenderModel::build(doc, viewport, config, &is_ready);
 
     let selection_ids = editor.state().selection.ids();
     let selection = combined_bounds(doc, selection_ids).map(|bounds| {
-        let rotation = if selection_ids.len() == 1 {
-            doc.get(selection_ids[0].as_str())
-                .map(|element| element.base().rotation)
-                .unwrap_or(0.0)
+        let (frame, rotation) = if selection_ids.len() == 1 {
+            match doc.get(selection_ids[0].as_str()) {
+                Some(element) => (element.unrotated_bounds(), element.base().rotation),
+                None => (bounds, 0.0),
+            }
         } else {
-            0.0
+            (bounds, 0.0)
         };
-        selection_overlay_dto(&SelectionOverlay::for_bounds(
+        selection_overlay_dto(&SelectionOverlay::for_frame(
+            &frame,
             &bounds,
             viewport.zoom,
             editor.theme(),
@@ -1067,8 +1145,16 @@ pub fn render_model_dto(
     });
 
     RenderModelDto {
-        base: model.base.iter().map(draw_entry_dto).collect(),
-        frames: model.frames.iter().map(frame_pass_dto).collect(),
+        base: model
+            .base
+            .iter()
+            .map(|entry| draw_entry_dto(doc, entry))
+            .collect(),
+        frames: model
+            .frames
+            .iter()
+            .map(|pass| frame_pass_dto(doc, pass))
+            .collect(),
         selection,
         snap_guides: editor
             .last_snap_guides()
@@ -1076,8 +1162,35 @@ pub fn render_model_dto(
             .map(snap_guide_dto)
             .collect(),
         text_editing: text_state_dto(editor),
-        viewport: viewport_dto(&viewport),
+        viewport: viewport_dto(viewport),
         asset_generation: model.asset_generation,
+        groups: doc
+            .groups()
+            .into_iter()
+            .map(|group| {
+                let effective = doc.group_effective_locked(group.id.as_str());
+                GroupDto {
+                    id: group.id.as_str().to_string(),
+                    name: group.name,
+                    parent_group_id: group.parent_id.map(|id| id.as_str().to_string()),
+                    locked: group.locked,
+                    effective_locked: effective,
+                }
+            })
+            .collect(),
+        labels: doc
+            .labels()
+            .into_iter()
+            .map(|label| ElementLabelDto {
+                id: label.id.as_str().to_string(),
+                name: label.name,
+            })
+            .collect(),
+        element_order: doc
+            .order()
+            .into_iter()
+            .map(|id| id.as_str().to_string())
+            .collect(),
     }
 }
 
@@ -1230,6 +1343,8 @@ pub struct SessionStateDto {
     pub selection: Vec<String>,
     /// Active tool id.
     pub tool: String,
+    /// Current canvas mode (hosts paint the boundary and scope export).
+    pub canvas_mode: CanvasModeDto,
     /// Current viewport.
     pub viewport: ViewportDto,
     /// Active text session, if any.
@@ -1259,6 +1374,35 @@ pub struct SessionStateDto {
     pub path_editing: Option<String>,
 }
 
+/// Canvas mode echo: `"infinite"`, or `"bounded"` with page size in scene
+/// units (hosts paint the boundary and scope export from this).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasModeDto {
+    /// `"infinite"` or `"bounded"`.
+    pub mode: String,
+    /// Page width in scene units (bounded only).
+    pub width: Option<f64>,
+    /// Page height in scene units (bounded only).
+    pub height: Option<f64>,
+}
+
+/// Maps a canvas mode to its DTO.
+pub fn canvas_mode_dto(mode: &CanvasMode) -> CanvasModeDto {
+    match mode {
+        CanvasMode::Infinite => CanvasModeDto {
+            mode: "infinite".to_string(),
+            width: None,
+            height: None,
+        },
+        CanvasMode::Bounded { width, height, .. } => CanvasModeDto {
+            mode: "bounded".to_string(),
+            width: Some(*width),
+            height: Some(*height),
+        },
+    }
+}
+
 /// Reads the host-visible session snapshot.
 pub fn session_state_dto(editor: &Editor, asset_generation: u64) -> SessionStateDto {
     SessionStateDto {
@@ -1270,6 +1414,7 @@ pub fn session_state_dto(editor: &Editor, asset_generation: u64) -> SessionState
             .map(|id| id.as_str().to_string())
             .collect(),
         tool: editor.state().active_tool.clone(),
+        canvas_mode: canvas_mode_dto(&editor.state().canvas_mode),
         viewport: viewport_dto(&editor.viewport()),
         text_editing: text_state_dto(editor),
         pointer_phase: phase_dto(editor.pointer_phase()),
@@ -1478,7 +1623,8 @@ mod tests {
             let mut rect = create_rectangle(&mut gen);
             rect.base.fill_style = hatch;
             let entry = DrawEntry::for_element(&Element::Rectangle(rect), &ready);
-            let dto = draw_entry_dto(&entry);
+            let doc = grafalith_core::document::Document::new();
+            let dto = draw_entry_dto(&doc, &entry);
             assert_eq!(dto.fill_hatch, wire);
             let json = serde_json::to_value(&dto).expect("serializable");
             assert_eq!(json["fillHatch"], serde_json::json!(wire));
@@ -1495,5 +1641,31 @@ mod tests {
         };
         let dto = crop_dto(&crop);
         assert_eq!((dto.x, dto.y, dto.width, dto.height), (1.0, 2.0, 3.0, 4.0));
+    }
+
+    #[test]
+    fn rotated_entry_exposes_unrotated_frame_beside_rotated_bounds() {
+        use std::f64::consts::FRAC_PI_6;
+        let mut gen = CounterIdGenerator::new();
+        let mut rect = create_rectangle(&mut gen);
+        rect.base.x = 0.0;
+        rect.base.y = 0.0;
+        rect.base.width = 100.0;
+        rect.base.height = 50.0;
+        rect.base.rotation = FRAC_PI_6;
+        let entry = DrawEntry::for_element(&Element::Rectangle(rect), &ready);
+        // Unrotated frame keeps the authored size; the AABB expands.
+        assert!((entry.frame.width() - 100.0).abs() < 1e-9);
+        assert!((entry.frame.height() - 50.0).abs() < 1e-9);
+        assert!(entry.bounds.width() > 100.0);
+        assert!(entry.bounds.height() > 50.0);
+        let doc = grafalith_core::document::Document::new();
+        let dto = draw_entry_dto(&doc, &entry);
+        assert!((dto.frame.max_x - dto.frame.min_x - 100.0).abs() < 1e-9);
+        assert!((dto.frame.max_y - dto.frame.min_y - 50.0).abs() < 1e-9);
+        assert!((dto.bounds.max_x - dto.bounds.min_x) > 100.0);
+        let json = serde_json::to_value(&dto).expect("serializable");
+        assert!(json.get("frame").is_some());
+        assert!(json.get("bounds").is_some());
     }
 }

@@ -25,7 +25,7 @@ import type { WindowApi } from "./window.js";
 import type { WorkspaceApi } from "./workspace.js";
 
 /** Editor kinds supported by the host (Home offers all three). */
-export type EditorKind = "design" | "whiteboard" | "diagram";
+export type EditorKind = "design" | "whiteboard" | "slides";
 
 /** Any editor kind plus the cross-kind wildcard. */
 export type ToolEditorScope = EditorKind | "all";
@@ -538,7 +538,7 @@ export function createGrafalithApi(host: GrafalithHost): GrafalithApi {
     editor: {
       /** Active editor kind, if an editor is mounted. */
       getActiveEditor: () => host.getActiveEditor(),
-      /** Subscribe to editor switches (design/whiteboard/diagram). */
+      /** Subscribe to editor switches (design/whiteboard/slides). */
       onDidChangeActiveEditor: (listener: (event: { editorType: string }) => void): Disposable =>
         push(host.workspace.events.onDidChangeActiveEditor.on(listener)),
     },

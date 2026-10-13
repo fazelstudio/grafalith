@@ -13,13 +13,13 @@ describe('context keys', () => {
     const keys = new ContextKeyService();
     keys.syncEditorState({
       screen: 'editor',
-      editorType: 'diagram',
+      editorType: 'whiteboard',
       hasActiveProject: true,
       selectedCount: 2,
       activeTool: 'arrow',
       layerSelected: true,
     });
-    expect(keys.snapshot()['grafalith.context.editorType']).toBe('diagram');
+    expect(keys.snapshot()['grafalith.context.editorType']).toBe('whiteboard');
     expect(keys.get('grafalith.context.hasActiveProject', false)).toBe(true);
   });
 
@@ -36,7 +36,7 @@ describe('context keys', () => {
       true,
     );
     expect(evaluateWhen('!grafalith.context.layerSelected', values)).toBe(true);
-    expect(evaluateWhen('grafalith.context.editorType == diagram || grafalith.context.editorType == design', values)).toBe(
+    expect(evaluateWhen('grafalith.context.editorType == whiteboard || grafalith.context.editorType == design', values)).toBe(
       true,
     );
   });

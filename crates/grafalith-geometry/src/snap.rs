@@ -11,6 +11,7 @@
 
 use crate::rect::Bounds;
 use crate::transform::screen_to_world_tolerance;
+use crate::transform::HandleType;
 use std::collections::HashSet;
 
 // Config and result types (TS `SnapConfig`, `SnapGuide`, `SnapResult`).
@@ -129,13 +130,16 @@ fn edge_positions(bounds: &Bounds) -> ([f64; 3], [f64; 3]) {
 
 /// Finds edge/center alignment of `moving_bounds` against candidates.
 ///
-/// Exact port of TS `findSnapToObject` over precomputed bounds: for each
-/// axis the closest moving-edge → candidate-edge pair within
-/// `threshold / zoom` wins; the moving element offsets so the edges align
-/// exactly, and a guide spans both boxes ± 20 scene units. `exclude`
-/// holds candidate indices to skip (the moving element itself — the
-/// caller maps ids to indices). With no snap the moving *center* returns
-/// unchanged and `guides` is empty (TS quirk preserved).
+/// Exact port of TS `findSnapToObject` over precomputed bounds, extended to
+/// Figma-style multi-edge guides: for each axis the snap offset still comes
+/// from the single closest moving-edge → candidate-edge pair, but *every*
+/// pair within `threshold / zoom` emits a guide (equal heights show both
+/// the top and the bottom line). Guides at identical positions collapse to
+/// one; the moving element offsets so the closest edges align exactly, and
+/// each guide spans both boxes ± 20 scene units. `exclude` holds candidate
+/// indices to skip (the moving element itself — the caller maps ids to
+/// indices). With no snap the moving *center* returns unchanged and
+/// `guides` is empty (TS quirk preserved).
 pub fn find_snap_to_object(
     moving_bounds: &Bounds,
     candidates: &[Bounds],
@@ -152,8 +156,8 @@ pub fn find_snap_to_object(
     let mut best_dy = f64::INFINITY;
     let mut snap_offset_x = 0.0;
     let mut snap_offset_y = 0.0;
-    let mut guide_x: Option<SnapGuide> = None;
-    let mut guide_y: Option<SnapGuide> = None;
+    let mut guides_x: Vec<SnapGuide> = Vec::new();
+    let mut guides_y: Vec<SnapGuide> = Vec::new();
 
     for (index, candidate) in candidates.iter().enumerate() {
         if exclude.contains(&index) {
@@ -163,34 +167,44 @@ pub fn find_snap_to_object(
         for mx in mxs {
             for cx in cxs {
                 let dist = (mx - cx).abs();
-                if dist < effective && dist < best_dx {
-                    best_dx = dist;
-                    snap_offset_x = cx - mx;
-                    guide_x = Some(SnapGuide {
-                        vertical: true,
-                        position: cx,
-                        start_x: cx,
-                        start_y: moving_bounds.min_y.min(candidate.min_y) - 20.0,
-                        end_x: cx,
-                        end_y: moving_bounds.max_y.max(candidate.max_y) + 20.0,
-                    });
+                if dist < effective {
+                    if dist < best_dx {
+                        best_dx = dist;
+                        snap_offset_x = cx - mx;
+                    }
+                    push_guide(
+                        &mut guides_x,
+                        SnapGuide {
+                            vertical: true,
+                            position: cx,
+                            start_x: cx,
+                            start_y: moving_bounds.min_y.min(candidate.min_y) - 20.0,
+                            end_x: cx,
+                            end_y: moving_bounds.max_y.max(candidate.max_y) + 20.0,
+                        },
+                    );
                 }
             }
         }
         for my in mys {
             for cy in cys {
                 let dist = (my - cy).abs();
-                if dist < effective && dist < best_dy {
-                    best_dy = dist;
-                    snap_offset_y = cy - my;
-                    guide_y = Some(SnapGuide {
-                        vertical: false,
-                        position: cy,
-                        start_x: moving_bounds.min_x.min(candidate.min_x) - 20.0,
-                        start_y: cy,
-                        end_x: moving_bounds.max_x.max(candidate.max_x) + 20.0,
-                        end_y: cy,
-                    });
+                if dist < effective {
+                    if dist < best_dy {
+                        best_dy = dist;
+                        snap_offset_y = cy - my;
+                    }
+                    push_guide(
+                        &mut guides_y,
+                        SnapGuide {
+                            vertical: false,
+                            position: cy,
+                            start_x: moving_bounds.min_x.min(candidate.min_x) - 20.0,
+                            start_y: cy,
+                            end_x: moving_bounds.max_x.max(candidate.max_x) + 20.0,
+                            end_y: cy,
+                        },
+                    );
                 }
             }
         }
@@ -199,23 +213,145 @@ pub fn find_snap_to_object(
     let mut guides = Vec::new();
     let mut result_x = moving_cx;
     let mut result_y = moving_cy;
-    if let Some(guide) = guide_x {
-        if best_dx < effective {
-            result_x = moving_cx + snap_offset_x;
-            guides.push(guide);
-        }
+    if best_dx < effective {
+        result_x = moving_cx + snap_offset_x;
+        guides.extend(guides_x);
     }
-    if let Some(guide) = guide_y {
-        if best_dy < effective {
-            result_y = moving_cy + snap_offset_y;
-            guides.push(guide);
-        }
+    if best_dy < effective {
+        result_y = moving_cy + snap_offset_y;
+        guides.extend(guides_y);
     }
     SnapResult {
         x: result_x,
         y: result_y,
         guides,
     }
+}
+
+/// Pushes a guide unless the same line is already present (shared edges
+/// across candidates draw once, not once per pair).
+fn push_guide(guides: &mut Vec<SnapGuide>, guide: SnapGuide) {
+    let key = (guide.vertical, guide.position.to_bits());
+    if !guides
+        .iter()
+        .any(|existing| (existing.vertical, existing.position.to_bits()) == key)
+    {
+        guides.push(guide);
+    }
+}
+
+/// Snaps a resize preview box: dragged edges align to candidate edges.
+///
+/// Only the edges the handle moves participate — the anchored edges never
+/// shift. Per free axis the snap offset comes from the closest moving-edge
+/// → candidate-edge pair (candidate sides include centers, so sizing to a
+/// midpoint works), while every in-threshold pair emits a guide, matching
+/// move-drag behavior. The box keeps a minimum size of 1 scene unit per
+/// axis. `exclude` holds candidate indices to skip.
+pub fn snap_resize_box(
+    preview: &Bounds,
+    handle: HandleType,
+    candidates: &[Bounds],
+    threshold: f64,
+    exclude: &HashSet<usize>,
+    zoom: f64,
+) -> (Bounds, Vec<SnapGuide>) {
+    use HandleType::*;
+    let west = matches!(handle, TopLeft | MiddleLeft | BottomLeft);
+    let east = matches!(handle, TopRight | MiddleRight | BottomRight);
+    let north = matches!(handle, TopLeft | TopCenter | TopRight);
+    let south = matches!(handle, BottomLeft | BottomCenter | BottomRight);
+    let effective = screen_to_world_tolerance(threshold, zoom);
+
+    let mut best_dx = f64::INFINITY;
+    let mut best_dy = f64::INFINITY;
+    let mut snap_dx = 0.0;
+    let mut snap_dy = 0.0;
+    let mut guides: Vec<SnapGuide> = Vec::new();
+
+    for (index, candidate) in candidates.iter().enumerate() {
+        if exclude.contains(&index) {
+            continue;
+        }
+        let (cxs, cys) = edge_positions(candidate);
+        if west || east {
+            let moving = if west { preview.min_x } else { preview.max_x };
+            for edge in cxs {
+                let dist = (moving - edge).abs();
+                if dist < effective {
+                    if dist < best_dx {
+                        best_dx = dist;
+                        snap_dx = edge - moving;
+                    }
+                    push_guide(
+                        &mut guides,
+                        SnapGuide {
+                            vertical: true,
+                            position: edge,
+                            start_x: edge,
+                            start_y: preview.min_y.min(candidate.min_y) - 20.0,
+                            end_x: edge,
+                            end_y: preview.max_y.max(candidate.max_y) + 20.0,
+                        },
+                    );
+                }
+            }
+        }
+        if north || south {
+            let moving = if north { preview.min_y } else { preview.max_y };
+            for edge in cys {
+                let dist = (moving - edge).abs();
+                if dist < effective {
+                    if dist < best_dy {
+                        best_dy = dist;
+                        snap_dy = edge - moving;
+                    }
+                    push_guide(
+                        &mut guides,
+                        SnapGuide {
+                            vertical: false,
+                            position: edge,
+                            start_x: preview.min_x.min(candidate.min_x) - 20.0,
+                            start_y: edge,
+                            end_x: preview.max_x.max(candidate.max_x) + 20.0,
+                            end_y: edge,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    let mut out = *preview;
+    if (west || east) && best_dx < effective {
+        if west {
+            out.min_x += snap_dx;
+        } else {
+            out.max_x += snap_dx;
+        }
+    }
+    if (north || south) && best_dy < effective {
+        if north {
+            out.min_y += snap_dy;
+        } else {
+            out.max_y += snap_dy;
+        }
+    }
+    if out.max_x - out.min_x < 1.0 {
+        if west {
+            out.min_x = out.max_x - 1.0;
+        } else {
+            out.max_x = out.min_x + 1.0;
+        }
+    }
+    if out.max_y - out.min_y < 1.0 {
+        if north {
+            out.min_y = out.max_y - 1.0;
+        } else {
+            out.max_y = out.min_y + 1.0;
+        }
+    }
+    (out, guides)
 }
 
 /// Applies combined grid + object snap (TS `applySnap`).
@@ -321,6 +457,102 @@ mod tests {
         let excluded: HashSet<usize> = HashSet::from([0]);
         let skipped = find_snap_to_object(&moving, &[here], 10.0, &excluded, 1.0);
         assert!(skipped.guides.is_empty());
+    }
+
+    #[test]
+    fn equal_sizes_emit_both_edge_guides_with_closest_offset() {
+        // Same height, tops 2 apart and bottoms 2 apart: both horizontal
+        // guides show while the offset comes from the closest pair.
+        let target = Bounds::new(200.0, 0.0, 250.0, 50.0);
+        let moving = Bounds::new(0.0, 2.0, 50.0, 52.0);
+        let result = find_snap_to_object(&moving, &[target], 10.0, &HashSet::new(), 1.0);
+        let horizontals: Vec<f64> = result
+            .guides
+            .iter()
+            .filter(|guide| guide.is_horizontal())
+            .map(|guide| guide.position)
+            .collect();
+        assert!(horizontals.contains(&0.0));
+        assert!(horizontals.contains(&50.0));
+    }
+
+    #[test]
+    fn shared_edges_across_candidates_draw_once() {
+        // Two candidates sharing one right edge produce a single guide.
+        let first = Bounds::new(100.0, 0.0, 150.0, 50.0);
+        let second = Bounds::new(100.0, 200.0, 150.0, 250.0);
+        let moving = Bounds::new(152.0, 0.0, 202.0, 50.0);
+        let result = find_snap_to_object(&moving, &[first, second], 10.0, &HashSet::new(), 1.0);
+        let verticals: Vec<f64> = result
+            .guides
+            .iter()
+            .filter(|guide| guide.is_vertical())
+            .map(|guide| guide.position)
+            .collect();
+        assert_eq!(verticals, vec![150.0]);
+        assert_eq!(result.x, 175.0);
+    }
+
+    #[test]
+    fn resize_snaps_the_dragged_edge_and_guides_it() {
+        use crate::transform::HandleType;
+        // East handle 3 shy of the target right edge: edge snaps, one guide.
+        let target = Bounds::new(200.0, 0.0, 300.0, 100.0);
+        let preview = Bounds::new(0.0, 0.0, 297.0, 100.0);
+        let (snapped, guides) = snap_resize_box(
+            &preview,
+            HandleType::MiddleRight,
+            &[target],
+            10.0,
+            &HashSet::new(),
+            1.0,
+        );
+        assert_eq!(snapped.max_x, 300.0);
+        assert_eq!(snapped.min_x, 0.0);
+        assert_eq!(guides.len(), 1);
+        assert!(guides[0].is_vertical());
+        assert_eq!(guides[0].position, 300.0);
+    }
+
+    #[test]
+    fn resize_leaves_anchored_edges_and_ignores_locked_axes() {
+        use crate::transform::HandleType;
+        // North handle only moves y; a nearby x edge must not pull it.
+        let target = Bounds::new(3.0, 200.0, 103.0, 300.0);
+        let preview = Bounds::new(0.0, 197.0, 100.0, 297.0);
+        let (snapped, guides) = snap_resize_box(
+            &preview,
+            HandleType::TopCenter,
+            &[target],
+            10.0,
+            &HashSet::new(),
+            1.0,
+        );
+        assert_eq!(snapped.min_y, 200.0);
+        assert_eq!(snapped.max_y, 297.0);
+        assert_eq!(snapped.min_x, 0.0);
+        assert_eq!(snapped.max_x, 100.0);
+        assert_eq!(guides.len(), 1);
+        assert!(guides[0].is_horizontal());
+    }
+
+    #[test]
+    fn resize_keeps_a_minimum_size() {
+        use crate::transform::HandleType;
+        // Snap pulling the edge past the anchor clamps at one scene unit:
+        // max_x 8 snaps to the 0.5 edge, then clamps back to min_x + 1.
+        let target = Bounds::new(0.0, 0.0, 0.5, 50.0);
+        let preview = Bounds::new(0.0, 0.0, 8.0, 50.0);
+        let (snapped, _) = snap_resize_box(
+            &preview,
+            HandleType::MiddleRight,
+            &[target],
+            10.0,
+            &HashSet::new(),
+            1.0,
+        );
+        assert_eq!(snapped.max_x, 1.0);
+        assert!((snapped.max_x - snapped.min_x) >= 1.0);
     }
 
     #[test]

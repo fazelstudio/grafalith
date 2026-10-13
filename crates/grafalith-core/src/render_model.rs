@@ -245,17 +245,27 @@ pub struct AbsoluteSegment {
 ///
 /// `bounds` is the rotation-aware AABB ([`Element::bounds`]); `rotation`
 /// rides along so the host applies the same center rotation TS does.
-/// `points`/`segments` carry absolute scene coordinates for the
+/// `frame` is the unrotated box ([`Element::unrotated_bounds`]): hosts paint
+/// shape extents from it (painting `bounds` dims rotated would double-apply
+/// the rotation and grow the shape), while `bounds` stays the source for
+/// culling, fitting, and hit extents. The two coincide for unrotated
+/// elements. `points`/`segments` carry absolute scene coordinates for the
 /// point-based kinds (line/arrow/freedraw/path) so committed strokes render
 /// as true polylines — the AABB alone cannot describe them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DrawEntry {
     /// Stable element id.
     pub id: ElementId,
+    /// Whether the element is protected from selection and mutation.
+    pub locked: bool,
+    /// Group memberships, innermost first.
+    pub group_ids: Vec<ElementId>,
     /// Dispatch tag.
     pub kind: DrawKind,
     /// Rotation-aware AABB in scene units.
     pub bounds: Bounds,
+    /// Unrotated box in scene units (paint/chrome frame).
+    pub frame: Bounds,
     /// Rotation in radians about the element center.
     pub rotation: f64,
     /// Fill description.
@@ -368,8 +378,11 @@ impl DrawEntry {
         };
         Self {
             id: base.id.clone(),
+            locked: base.locked,
+            group_ids: base.group_ids.clone(),
             kind,
             bounds: element.bounds(),
+            frame: element.unrotated_bounds(),
             rotation: base.rotation,
             paint: resolve_paint(&base.background_color),
             fill_hatch,
@@ -710,6 +723,8 @@ impl RenderModel {
 pub struct SelectionOverlay {
     /// Combined AABB of the selection.
     pub bounds: Bounds,
+    /// Unrotated combined frame (outline/handles source when rotated).
+    pub frame: Bounds,
     /// Eight resize handles in scene coordinates (unrotated frame).
     pub handles: [ResizeHandle; 8],
     /// Rotate-handle position in scene coordinates (unrotated frame).
@@ -725,11 +740,28 @@ impl SelectionOverlay {
     /// Handle sizes come from the theme; the rotate offset is
     /// zoom-normalized exactly like TS `getRotateHandlePosition`.
     pub fn for_bounds(bounds: &Bounds, zoom: f64, theme: &GrafalithTheme, rotation: f64) -> Self {
+        Self::for_frame(bounds, bounds, zoom, theme, rotation)
+    }
+
+    /// Describes the overlay for an unrotated `frame` inside `bounds`.
+    ///
+    /// Handles and the outline derive from `frame`; `bounds` stays the
+    /// combined AABB for extents. Callers pass the same box twice when
+    /// nothing is rotated, which keeps every existing construction
+    /// identical.
+    pub fn for_frame(
+        frame: &Bounds,
+        bounds: &Bounds,
+        zoom: f64,
+        theme: &GrafalithTheme,
+        rotation: f64,
+    ) -> Self {
         Self {
             bounds: *bounds,
-            handles: get_resize_handles(bounds),
+            frame: *frame,
+            handles: get_resize_handles(frame),
             rotate_handle: get_rotate_handle_position(
-                bounds,
+                frame,
                 zoom,
                 theme.sizes.rotate_handle_offset,
             ),

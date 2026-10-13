@@ -127,7 +127,7 @@ intent = one history entry (go through `Command`, never direct field mutation).
 - `examples/custom-button/` — one toolbar scenario on three hosts, each
   against a real built artifact.
 - `generated/grafalith-commands.d.ts` + `generated/grafalith.pyi` — produced by
-  `scripts/gen_command_bindings.py` from the single 79-op table
+  `scripts/gen_command_bindings.py` from the single 88-op table
   (CI runs `--check`).
 
 ## 5. TypeScript SDK
@@ -180,7 +180,7 @@ Minimal manifest:
   "main": "./dist/extension.js",
   "priority": "normal",
   "permissions": ["notifications"],
-  "activationEvents": ["onStartup", "onHome", "onEditor:diagram"],
+  "activationEvents": ["onStartup", "onHome", "onEditor:design"],
   "contributes": {
     "commands": [{ "command": "acme.sticker.create", "title": "Create sticker" }],
     "menus": { "canvas.context": [{ "command": "acme.sticker.create" }] },
@@ -193,7 +193,7 @@ Minimal manifest:
 Incompatible extensions are refused at install, never half-loaded.
 Activation events: `onStartup`, `onHome`, `onProject`,
 `onEditor:*`, `onEditor:design`, `onEditor:whiteboard`,
-`onEditor:diagram`, `onCommand:<id>`, `onView:<id>` (see
+`onEditor:slides`, `onCommand:<id>`, `onView:<id>` (see
 `docs/guides/extension-ecosystem.md` for the phase order, priority, and
 dependency rules). Permissions gate `clipboard`, `filesystem`, `network`,
 and `notifications` — undeclared access fails with a typed error.

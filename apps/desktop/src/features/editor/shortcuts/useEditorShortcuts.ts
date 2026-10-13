@@ -20,6 +20,8 @@ interface ShortcutOptions {
   notify: (message: string) => void;
   /** Translator for error messages. */
   t: (key: string, params?: Record<string, string | number>) => string;
+  /** Open the quick switcher in files mode (Ctrl+P). */
+  onOpenQuickSwitcher?: () => void;
 }
 
 /**
@@ -29,13 +31,15 @@ interface ShortcutOptions {
  * handler. Focus-aware: text/input targets only receive
  * application-scope commands; text sessions suppress editor commands.
  */
-export function useEditorShortcuts({ context, paletteOpen, onToolChange, notify, t }: ShortcutOptions) {
+export function useEditorShortcuts({ context, paletteOpen, onToolChange, notify, t, onOpenQuickSwitcher }: ShortcutOptions) {
   const ctxRef = useRef(context);
   ctxRef.current = context;
   const paletteRef = useRef(paletteOpen);
   paletteRef.current = paletteOpen;
   const toolRef = useRef(onToolChange);
   toolRef.current = onToolChange;
+  const quickSwitcherRef = useRef(onOpenQuickSwitcher);
+  quickSwitcherRef.current = onOpenQuickSwitcher;
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
   const tRef = useRef(t);
@@ -44,6 +48,14 @@ export function useEditorShortcuts({ context, paletteOpen, onToolChange, notify,
   useEffect(() => {
     async function onKeyDown(event: KeyboardEvent) {
       const ctx = ctxRef.current;
+      // Ctrl/Cmd+P opens the quick switcher (files mode); the browser
+      // print dialog never survives this preventDefault. Typing `>` inside
+      // switches to command search, like Ctrl+Shift+P does directly.
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        quickSwitcherRef.current?.();
+        return;
+      }
       if (paletteRef.current) return;
       const target = event.target as EventTarget | null;
 

@@ -68,7 +68,7 @@ function DockToggle({
 
 /**
  * Master editor layout shared by every editor family (design, whiteboard,
- * diagram). The six regions — menubar, activity bar, left dock, canvas,
+ * slides). The six regions — menubar, activity bar, left dock, canvas,
  * right dock, status bar — render here exactly once, so default widths,
  * min/max clamps, and expand/collapse behave identically everywhere.
  * Kind editors supply only content slots, never their own layout.
@@ -90,6 +90,8 @@ export function EditorShell({
   const { t } = useI18n();
   const openPanels = workspace.openPanels;
   const resizeRef = useRef<{ side: 'left' | 'right'; startX: number; startWidth: number } | null>(null);
+  const dragWidthRef = useRef<{ side: 'left' | 'right'; width: number } | null>(null);
+  const dockRefs = useRef<{ left: HTMLElement | null; right: HTMLElement | null }>({ left: null, right: null });
 
   function handleTogglePanel(id: string) {
     onWorkspaceChange({
@@ -119,15 +121,34 @@ export function EditorShell({
       EDITOR_DOCK_WIDTHS.max,
       Math.max(EDITOR_DOCK_WIDTHS.min, Math.round(resize.startWidth + signedDelta)),
     );
-    const key = resize.side === 'left' ? 'leftPanelWidth' : 'rightPanelWidth';
-    if (workspace[key] !== width) {
-      onWorkspaceChange({ ...workspace, [key]: width });
-    }
+    // Transient drag paint: write the width straight to the dock node so
+    // the drag stays light — no workspace state, no persistence, no tree
+    // re-render until release. The single commit lands on pointer-up.
+    dragWidthRef.current = { side: resize.side, width };
+    dockRefs.current[resize.side]?.style.setProperty('width', `${width}px`);
   }
 
   function handleDockPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragWidthRef.current;
+    dragWidthRef.current = null;
     resizeRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
+    if (!drag) return;
+    const key = drag.side === 'left' ? 'leftPanelWidth' : 'rightPanelWidth';
+    if (workspace[key] !== drag.width) {
+      onWorkspaceChange({ ...workspace, [key]: drag.width });
+    }
+  }
+
+  function handleDockPointerCancel(event: React.PointerEvent<HTMLDivElement>) {
+    // Cancelled drags discard the transient width: nothing was committed.
+    dragWidthRef.current = null;
+    resizeRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Detached node: nothing to release.
+    }
   }
 
   function renderDock(side: 'left' | 'right', content: ReactNode) {
@@ -138,6 +159,9 @@ export function EditorShell({
     return (
       <aside
         id={`editor-dock-${side}`}
+        ref={(node) => {
+          dockRefs.current[side] = node;
+        }}
         className={`editor-dock editor-dock--${side}${open ? '' : ' editor-dock--collapsed'}`}
         aria-label={t(panel.labelKey)}
         style={{ width: open ? width : 0 }}
@@ -158,6 +182,7 @@ export function EditorShell({
             onPointerDown={(event) => handleDockPointerDown(side, event)}
             onPointerMove={handleDockPointerMove}
             onPointerUp={handleDockPointerUp}
+            onPointerCancel={handleDockPointerCancel}
           />
         ) : null}
       </aside>

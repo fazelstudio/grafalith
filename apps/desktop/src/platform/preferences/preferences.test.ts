@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isLocale } from '../../app/i18n/locales';
+import { isLocale } from '../../app/i18n/resources';
 import { loadLocale, loadThemeMode, saveLocale, saveThemeMode } from './preferences';
 
 describe('preferences', () => {

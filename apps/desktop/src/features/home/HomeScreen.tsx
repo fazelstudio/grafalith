@@ -6,11 +6,13 @@ import { executeAppCommand, type AppCommandContext } from '../../registries/appC
 import { getProjectStore } from '../../platform/projects/projectService';
 import {
   parseProjectError,
+  type ProjectCanvas,
   type ProjectError,
   type ProjectKind,
   type ProjectSummary,
 } from '../../platform/projects/types';
 import { filterProjects } from '../projects/search';
+import { copyColorRecents, pruneColorRecents } from '../editor/inspector/colorSwatches';
 import { buildBlankScene, projectTemplateRegistry } from '../projects/templateRegistry';
 import { projectKindRegistry, templateForKind } from '../projects/projectKinds';
 import {
@@ -23,6 +25,7 @@ import { extensionPanelStore } from '../../platform/extensions/extensionPanels';
 import { getContextKeys } from '../../platform/context/contextKeys';
 import { ExtensionErrorBoundary } from '../extension-manager/ExtensionErrorBoundary';
 import { ChevronDownIcon, EditorIcon, GridViewIcon, ListViewIcon, PlusIcon } from '../../ui/icons';
+import { resolveIcon } from '../../ui/iconRegistry';
 import { Button, EmptyState, LoadingState, SearchInput } from '../../ui/primitives/controls';
 import { Tooltip } from '../../ui/primitives/tooltip';
 import { deriveHomeListState, toProjectOpenError, type ProjectOpenError } from './homeState';
@@ -44,7 +47,7 @@ type LoadState =
 
 type DialogState =
   | null
-  | { kind: 'create'; templateId: string }
+  | { kind: 'create'; templateId: string; projectKind: ProjectKind }
   | { kind: 'rename'; project: ProjectSummary }
   | { kind: 'delete'; project: ProjectSummary };
 
@@ -77,6 +80,8 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     try {
       const projects = await getProjectStore().list();
       setLoadState({ kind: 'ready', projects });
+      // Recents live per project; drop rows whose project no longer exists.
+      pruneColorRecents(projects.map((project) => project.id));
     } catch (raw) {
       setLoadState({ kind: 'failed', error: parseProjectError(raw) });
     }
@@ -149,7 +154,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     [openingId, onOpenProject],
   );
 
-  async function createProject(name: string, templateId: string): Promise<void> {
+  async function createProject(name: string, templateId: string, canvas: ProjectCanvas): Promise<void> {
     if (dialogPending) return;
     setDialogPending(true);
     setDialogError(null);
@@ -164,6 +169,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
         name,
         builtin ? template.buildScene() : buildBlankScene(),
         kind,
+        canvas,
       );
       notify(t('projects.notifications.created', { name: created.name }));
       setDialog(null);
@@ -183,7 +189,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     // Extensions may redirect creation (custom template flow); otherwise
     // the kind default template opens as before.
     const redirect = interceptProjectCreate(kind);
-    openDialog({ kind: 'create', templateId: redirect ?? templateForKind(kind).id });
+    openDialog({ kind: 'create', templateId: redirect ?? templateForKind(kind).id, projectKind: kind });
   }
 
   async function renameProject(id: string, name: string): Promise<void> {
@@ -244,6 +250,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
         targetProjectId: project.id,
         duplicateProject: async () => {
           const copy = await getProjectStore().duplicate(project.id);
+          copyColorRecents(project.id, copy.id);
           notify(t('projects.notifications.duplicated', { name: copy.name }));
         },
       },
@@ -314,7 +321,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     if (typing) return;
     if (event.key === 'n' || event.key === 'N') {
       event.preventDefault();
-      openDialog({ kind: 'create', templateId: 'blank' });
+      openDialog({ kind: 'create', templateId: 'blank', projectKind: 'design' });
     } else if (event.key === '/') {
       event.preventDefault();
       searchRef.current?.focus();
@@ -427,46 +434,49 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
             </Button>
             {createMenuOpen ? (
               <div id="home-create-menu" className="home__create-menu" role="menu">
-                {projectKindRegistry.all().map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className="home__create-menu-item"
-                    role="menuitem"
-                    onClick={() => createOfKind(entry.id as ProjectKind)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setCreateMenuOpen(false);
-                        createMenuRef.current
-                          ?.querySelector<HTMLElement>('[aria-haspopup="menu"]')
-                          ?.focus();
-                      } else if (
-                        event.key === 'ArrowDown' ||
-                        event.key === 'ArrowUp' ||
-                        event.key === 'Home' ||
-                        event.key === 'End'
-                      ) {
-                        event.preventDefault();
-                        const items = Array.from(
-                          createMenuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
-                        );
-                        const index = items.indexOf(event.currentTarget as HTMLElement);
-                        const next =
-                          event.key === 'ArrowDown' || event.key === 'End'
-                            ? items[(index + 1) % items.length]
-                            : items[(index - 1 + items.length) % items.length];
-                        if (event.key === 'Home') items[0]?.focus();
-                        else if (event.key === 'End') items[items.length - 1]?.focus();
-                        else next?.focus();
-                      }
-                    }}
-                  >
-                    <EditorIcon size={15} />
-                    <span className="home__create-menu-title">{t(entry.labelKey)}</span>
-                  </button>
-                ))}
+                {projectKindRegistry.all().map((entry) => {
+                  const KindIcon = resolveIcon(entry.icon) ?? EditorIcon;
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className="home__create-menu-item"
+                      role="menuitem"
+                      onClick={() => createOfKind(entry.id as ProjectKind)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setCreateMenuOpen(false);
+                          createMenuRef.current
+                            ?.querySelector<HTMLElement>('[aria-haspopup="menu"]')
+                            ?.focus();
+                        } else if (
+                          event.key === 'ArrowDown' ||
+                          event.key === 'ArrowUp' ||
+                          event.key === 'Home' ||
+                          event.key === 'End'
+                        ) {
+                          event.preventDefault();
+                          const items = Array.from(
+                            createMenuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+                          );
+                          const index = items.indexOf(event.currentTarget as HTMLElement);
+                          const next =
+                            event.key === 'ArrowDown' || event.key === 'End'
+                              ? items[(index + 1) % items.length]
+                              : items[(index - 1 + items.length) % items.length];
+                          if (event.key === 'Home') items[0]?.focus();
+                          else if (event.key === 'End') items[items.length - 1]?.focus();
+                          else next?.focus();
+                        }
+                      }}
+                    >
+                      <KindIcon size={15} />
+                      <span className="home__create-menu-title">{t(entry.labelKey)}</span>
+                    </button>
+                  );
+                })}
                 {projectTemplates().map((template) => (
                   <button
                     key={`extension-template:${template.id}`}
@@ -475,7 +485,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
                     role="menuitem"
                     onClick={() => {
                       setCreateMenuOpen(false);
-                      openDialog({ kind: 'create', templateId: template.id });
+                      openDialog({ kind: 'create', templateId: template.id, projectKind: template.kind });
                     }}
                   >
                     <EditorIcon size={15} />
@@ -587,6 +597,12 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
         </section>
       ) : null}
 
+      {listState?.kind === 'empty' ? (
+        <div className="home__empty">
+          <EmptyState title={t('home.empty')} />
+        </div>
+      ) : null}
+
       {menu ? (
         <ProjectMenu
           project={menu.project}
@@ -613,10 +629,11 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
 
       {dialog?.kind === 'create' ? (
         <CreateProjectDialog
+          kind={dialog.projectKind}
           onClose={() => {
             if (!dialogPending) openDialog(null);
           }}
-          onConfirm={(name) => void createProject(name, dialog.templateId)}
+          onConfirm={(name, canvas) => void createProject(name, dialog.templateId, canvas)}
           pending={dialogPending}
           error={dialogError}
         />

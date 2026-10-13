@@ -1,6 +1,7 @@
 import {
   toolRegistry,
 } from '../../registries';
+import type { ProjectKind } from '../../platform/projects/types';
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../app/i18n/resources';
 import { Tooltip } from '../../ui/primitives/tooltip';
@@ -20,7 +21,7 @@ import {
 interface EditorToolbarProps {
   activeTool: string;
   onToolChange: (tool: string) => void;
-  kind: 'design' | 'whiteboard' | 'diagram';
+  kind: ProjectKind;
   /** When true the tool stays active after commit (toggled by double-click). */
   stickyTool: boolean;
   onToggleSticky: () => void;

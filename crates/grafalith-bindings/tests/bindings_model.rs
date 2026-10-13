@@ -243,8 +243,116 @@ fn batch_records_hard_failures_per_op_and_keeps_going() {
     assert_eq!(result_at(&result, 1)["ok"], false);
     assert_eq!(result_at(&result, 1)["code"], "invalidInput");
     // The ops around the failure still applied.
-    assert_eq!(engine.document().get("a").expect("a").base().x, 11.0);
+    assert_eq!(engine.document().get("a").expect("a exists").base().x, 11.0);
     assert_eq!(engine.document().get("b").expect("b").base().x, 202.0);
+}
+
+#[test]
+fn configure_canvas_mode_sets_and_echoes_bounded_size() {
+    let mut engine = Engine::new();
+    let session = apply(&mut engine, json!([{"op": "sessionState"}]));
+    assert_eq!(
+        result_at(&session, 0)["data"]["canvasMode"]["mode"],
+        "infinite"
+    );
+
+    let result = apply(
+        &mut engine,
+        json!([
+            {"op": "configure", "canvasMode": {"mode": "bounded", "width": 1920.0, "height": 1080.0}},
+            {"op": "sessionState"},
+        ]),
+    );
+    assert_eq!(result["applied"], 2, "failing op: {result}");
+    let mode = &result_at(&result, 1)["data"]["canvasMode"];
+    assert_eq!(mode["mode"], "bounded");
+    assert_eq!(mode["width"], 1920.0);
+    assert_eq!(mode["height"], 1080.0);
+
+    let back = apply(
+        &mut engine,
+        json!([{"op": "configure", "canvasMode": {"mode": "infinite"}}]),
+    );
+    assert_eq!(back["applied"], 1, "failing op: {back}");
+    let session = apply(&mut engine, json!([{"op": "sessionState"}]));
+    assert_eq!(
+        result_at(&session, 0)["data"]["canvasMode"]["mode"],
+        "infinite"
+    );
+}
+
+#[test]
+fn configure_canvas_mode_rejects_non_positive_sizes() {
+    let mut engine = Engine::new();
+    for patch in [
+        json!({"mode": "bounded", "width": 0.0, "height": 10.0}),
+        json!({"mode": "bounded", "width": -5.0, "height": 10.0}),
+        json!({"mode": "bounded", "width": 10.0, "height": -1.0}),
+    ] {
+        let result = apply(
+            &mut engine,
+            json!([{"op": "configure", "canvasMode": patch}]),
+        );
+        assert_eq!(result["applied"], 0);
+        assert_eq!(result_at(&result, 0)["ok"], false);
+        assert_eq!(result_at(&result, 0)["code"], "invalidInput");
+    }
+    let session = apply(&mut engine, json!([{"op": "sessionState"}]));
+    assert_eq!(
+        result_at(&session, 0)["data"]["canvasMode"]["mode"],
+        "infinite"
+    );
+}
+
+#[test]
+fn render_model_viewport_override_frames_without_touching_session() {
+    let mut engine = Engine::new();
+    seed_two(&mut engine);
+    let export = apply(
+        &mut engine,
+        json!([{
+            "op": "renderModel",
+            "canvasWidth": 400.0,
+            "canvasHeight": 300.0,
+            "viewport": {"scrollX": -200.0, "scrollY": -20.0, "zoom": 2.0},
+        }]),
+    );
+    assert_eq!(export["applied"], 1, "failing op: {export}");
+    let model = &result_at(&export, 0)["data"];
+    assert_eq!(model["viewport"]["scrollX"], -200.0);
+    assert_eq!(model["viewport"]["zoom"], 2.0);
+    let session = apply(&mut engine, json!([{"op": "sessionState"}]));
+    assert_eq!(result_at(&session, 0)["data"]["viewport"]["scrollX"], 0.0);
+    assert_eq!(result_at(&session, 0)["data"]["viewport"]["zoom"], 1.0);
+
+    for viewport in [
+        json!({"scrollX": 0.0, "scrollY": 0.0, "zoom": 0.0}),
+        json!({"scrollX": 0.0, "scrollY": 0.0, "zoom": -2.0}),
+    ] {
+        let result = apply(
+            &mut engine,
+            json!([{
+                "op": "renderModel",
+                "canvasWidth": 400.0,
+                "canvasHeight": 300.0,
+                "viewport": viewport,
+            }]),
+        );
+        assert_eq!(result["applied"], 0);
+        assert_eq!(result_at(&result, 0)["ok"], false);
+    }
+}
+
+#[test]
+fn plan_png_export_reports_content_bounds() {
+    let mut engine = Engine::new();
+    seed_two(&mut engine);
+    let result = apply(&mut engine, json!([{"op": "planPngExport"}]));
+    assert_eq!(result["applied"], 1, "failing op: {result}");
+    let plan = &result_at(&result, 0)["data"];
+    assert_eq!(plan["contentBounds"]["minX"], 10.0);
+    assert!(plan["canvasWidthPx"].as_u64().expect("width") > 0);
+    assert!(plan["canvasHeightPx"].as_u64().expect("height") > 0);
 }
 
 #[test]

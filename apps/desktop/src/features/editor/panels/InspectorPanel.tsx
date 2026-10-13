@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { DrawEntryDto, Engine, FrameSnapshot, RenderModelDto } from '../../../hooks/useEngine';
+import type { FillPreview } from '../../../render/drawModel';
 import { useI18n } from '../../../app/i18n/resources';
 import { LoadingState } from '../../../ui/primitives/controls';
 import { useToast } from '../../../app/shell/ToastProvider';
 import { executeCommand, canExecuteCommand, type CommandContext } from '../../../registries';
 import { normalizeSelection } from '../selection';
-import { inspectorSectionsFor } from '../inspector/descriptors';
+import { groupFieldRows, inspectorSectionsFor, type InspectorFieldDefinition } from '../inspector/descriptors';
 import { InspectorField } from '../inspector/fields';
 import { kindLabel } from './LayersPanel';
 
@@ -14,6 +15,9 @@ interface InspectorPanelProps {
   engine: Engine;
   sendBatch: (ops: unknown[]) => Promise<string>;
   commandContext: CommandContext;
+  projectId: string;
+  /** Uncommitted fill preview shared with the canvas loop (writer-owned). */
+  fillPreviewRef: { current: FillPreview | null };
 }
 
 function findEntries(model: RenderModelDto, ids: readonly string[]): DrawEntryDto[] {
@@ -57,7 +61,7 @@ function totalEntries(model: RenderModelDto): number {
  * `inspector/fields.tsx`. Only engine-readable/writable properties are
  * editable; everything else is read-only or omitted (see engineGaps.ts).
  */
-export function InspectorPanel({ frame, engine, sendBatch, commandContext }: InspectorPanelProps) {
+export function InspectorPanel({ frame, engine, sendBatch, commandContext, projectId, fillPreviewRef }: InspectorPanelProps) {
   const { t } = useI18n();
   const { notify } = useToast();
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -132,11 +136,33 @@ export function InspectorPanel({ frame, engine, sendBatch, commandContext }: Ins
     selection,
     sendBatch,
     engine,
+    projectId,
+    fillPreviewRef,
     commit: async (commandId: string, op: string, ops: unknown[]) =>
       executeCommand(commandId, { ...commandContext, inspectorOp: { op, ops } }),
   };
   const alignVerdict = canExecuteCommand('alignLeft', commandContext);
   const distributeVerdict = canExecuteCommand('distributeHorizontal', commandContext);
+
+  function renderField(field: InspectorFieldDefinition) {
+    if (field.control === 'alignment') {
+      return (
+        <InspectorField
+          key={field.id}
+          field={field}
+          ctx={fieldCtx}
+          onResult={handleFieldResult}
+          alignment={{
+            onAlign: (mode) => void runAlign(mode),
+            canAlign: alignVerdict.executable,
+            onDistribute: (axis) => void runDistribute(axis),
+            canDistribute: distributeVerdict.executable,
+          }}
+        />
+      );
+    }
+    return <InspectorField key={field.id} field={field} ctx={fieldCtx} onResult={handleFieldResult} />;
+  }
 
   return (
     <div className="editor-inspector">
@@ -154,26 +180,15 @@ export function InspectorPanel({ frame, engine, sendBatch, commandContext }: Ins
         <section key={section.id} aria-label={t(section.titleKey)}>
           <h4 className="editor-inspector__section">{t(section.titleKey)}</h4>
           <div className="editor-inspector__fields">
-            {section.fields
-              .filter((field) => field.visible?.(fieldCtx) ?? true)
-              .map((field) =>
-                field.control === 'alignment' ? (
-                  <InspectorField
-                    key={field.id}
-                    field={field}
-                    ctx={fieldCtx}
-                    onResult={handleFieldResult}
-                    alignment={{
-                      onAlign: (mode) => void runAlign(mode),
-                      canAlign: alignVerdict.executable,
-                      onDistribute: (axis) => void runDistribute(axis),
-                      canDistribute: distributeVerdict.executable,
-                    }}
-                  />
-                ) : (
-                  <InspectorField key={field.id} field={field} ctx={fieldCtx} onResult={handleFieldResult} />
-                ),
-              )}
+            {groupFieldRows(section.fields.filter((field) => field.visible?.(fieldCtx) ?? true)).map((group) =>
+              group.kind === 'row' ? (
+                <div key={group.fields.map((field) => field.id).join('-')} className="inspector-field__row">
+                  {group.fields.map((field) => renderField(field))}
+                </div>
+              ) : (
+                renderField(group.field)
+              ),
+            )}
           </div>
         </section>
       ))}

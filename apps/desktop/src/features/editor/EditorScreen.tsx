@@ -17,6 +17,9 @@ import {
   type ViewActions,
 } from '../../registries';
 import { commandResultMessage } from './engineGaps';
+import { exportPngImage, pngFileName } from './exportPng';
+import { exportSvgImage, svgFileName } from './exportSvg';
+import { exportPdfBlob, pdfFileName } from './exportPdf';
 import { normalizeSelection } from './selection';
 import { useEditorShortcuts } from './shortcuts/useEditorShortcuts';
 import { TitlebarQuickSwitcher } from './quickswitcher/QuickSwitcher';
@@ -29,10 +32,12 @@ import { isTauriRuntime } from '../../platform/projects/tauriAdapter';
 import {
   normalizeProjectKind,
   parseProjectError,
+  type ProjectCanvas,
   type ProjectKind,
 } from '../../platform/projects/types';
 import { projectKindHintKey, templateForKind } from '../projects/projectKinds';
 import { Canvas } from './Canvas';
+import type { FillPreview } from '../../render/drawModel';
 import { EditorTopBar } from './EditorTopBar';
 import { EditorToolbar } from './EditorToolbar';
 import { EditorStatusBar } from './EditorStatusBar';
@@ -46,8 +51,8 @@ import type { ViewportState } from '../../render/coords';
 import { SettingsIcon } from '../../ui/icons';
 import { Tooltip } from '../../ui/primitives/tooltip';
 import { DesignEditor } from './editors/DesignEditor';
+import { SlidesEditor } from './editors/SlidesEditor';
 import { WhiteboardEditor } from './editors/WhiteboardEditor';
-import { DiagramEditor } from './editors/DiagramEditor';
 import './editor.css';
 
 interface EditorScreenProps {
@@ -134,6 +139,10 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
   }, [sessionKind, notify]);
 
   const lastSelectionRef = useRef<string>('');
+  // Uncommitted fill preview (inspector stop drag) shared from the panels
+  // to the canvas loop by ref: drags repaint without re-rendering, and the
+  // writer (ColorPicker) owns clearing it on commit, cancel, or close.
+  const fillPreviewRef = useRef<FillPreview | null>(null);
   useEffect(() => {
     // Fan selection changes out to active extension workspaces.
     if (session.kind !== 'ready' || !frame) return;
@@ -299,6 +308,19 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
       });
   }, [engine, engine.ready, session.kind, resolved]);
 
+  // Apply the project's canvas mode once the session is ready: the engine
+  // echoes it in `sessionState` for any host reading the live session.
+  useEffect(() => {
+    if (!engine.ready || session.kind !== 'ready') return;
+    const canvasMode =
+      session.canvas.mode === 'fixed'
+        ? { mode: 'bounded', width: session.canvas.width, height: session.canvas.height }
+        : { mode: 'infinite' };
+    void engine.sendBatch([{ op: 'configure', canvasMode }]).catch(() => {
+      // Infinite remains the engine default; the next sync covers it.
+    });
+  }, [engine, engine.ready, session]);
+
   const dismissHint = useCallback(() => {
     setWorkspace((prev) => ({ ...prev, hintDismissed: true }));
   }, []);
@@ -336,6 +358,48 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
     fileInputRef.current?.click();
   }, []);
 
+  const handleExportPng = useCallback(async () => {
+    const canvas = session.kind === 'ready' ? session.canvas : { mode: 'infinite', width: 0, height: 0, unit: 'px' } as const;
+    const name = session.kind === 'ready' ? session.name : 'grafalith';
+    const file = pngFileName(name);
+    const blob = await exportPngImage(engine, canvas);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify(t('editor.notifications.exportedPng', { file }));
+  }, [engine, session, notify, t]);
+
+  const handleExportSvg = useCallback(async () => {
+    const canvas = session.kind === 'ready' ? session.canvas : { mode: 'infinite', width: 0, height: 0, unit: 'px' } as const;
+    const name = session.kind === 'ready' ? session.name : 'grafalith';
+    const file = svgFileName(name);
+    const blob = await exportSvgImage(engine, canvas);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify(t('editor.notifications.exportedSvg', { file }));
+  }, [engine, session, notify, t]);
+
+  const handleExportPdf = useCallback(async () => {
+    const canvas = session.kind === 'ready' ? session.canvas : { mode: 'infinite', width: 0, height: 0, unit: 'px' } as const;
+    const name = session.kind === 'ready' ? session.name : 'grafalith';
+    const file = pdfFileName(name);
+    const blob = await exportPdfBlob(engine, canvas);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify(t('editor.notifications.exportedPdf', { file }));
+  }, [engine, session, notify, t]);
+
   const handleImportFile = useCallback(
     async (file: File) => {
       try {
@@ -367,10 +431,10 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
       textEditingId: frame?.session.textEditing?.id ?? null,
       documentIds: allDocumentIds(frame),
       view: viewActions ?? undefined,
-      files: session.kind === 'ready' ? { exportScene: handleExportScene, importScene: handleImportScene } : undefined,
+      files: session.kind === 'ready' ? { exportScene: handleExportScene, importScene: handleImportScene, exportPng: handleExportPng, exportSvg: handleExportSvg, exportPdf: handleExportPdf } : undefined,
       ui: { openPalette: openCommands },
     };
-  }, [engine, frame, activeTool, session.kind, handleExportScene, handleImportScene, openCommands, viewActions]);
+  }, [engine, frame, activeTool, session.kind, handleExportScene, handleImportScene, handleExportPng, handleExportSvg, handleExportPdf, openCommands, viewActions]);
 
   useEditorShortcuts({
     context: commandContext,
@@ -378,6 +442,7 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
     onToolChange: handleToolChange,
     notify,
     t,
+    onOpenQuickSwitcher: openLayers,
   });
 
   // Manual save stays outside the command registry (persistence lifecycle,
@@ -408,14 +473,86 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
     (ids: string[], additive: boolean) => {
       const live = liveIdSet(frame);
       const current = normalizeSelection(frame?.session.selection ?? [], live);
-      const normalizedIds = normalizeSelection(ids, live);
-      // Additive toggles one row; unknown ids are already dropped.
-      const next =
-        additive && normalizedIds.length === 1
-          ? current.includes(normalizedIds[0])
-            ? current.filter((id) => id !== normalizedIds[0])
-            : [...current, normalizedIds[0]]
-          : normalizedIds;
+      // Group members act as one unit: any grouped node (element or group)
+      // resolves to its outermost container plus every member, so a group
+      // click and a member click converge on the same selection.
+      const groupIds = new Set((frame?.model.groups ?? []).map((group) => group.id));
+      const membersOf = (groupId: string): string[] => {
+        const out: string[] = [];
+        if (!frame) return out;
+        const visit = (entry: { id: string; groupIds: string[] }): void => {
+          if (entry.groupIds.includes(groupId)) out.push(entry.id);
+        };
+        for (const entry of frame.model.base) visit(entry);
+        for (const pass of frame.model.frames) {
+          for (const child of pass.children) visit(child);
+        }
+        return out;
+      };
+      const outermostOf = (elementId: string): string | null => {
+        if (!frame) return null;
+        const find = (entries: readonly { id: string; groupIds: string[] }[]): readonly string[] | null => {
+          const entry = entries.find((candidate) => candidate.id === elementId);
+          return entry ? entry.groupIds : null;
+        };
+        const path = find(frame.model.base) ?? find(frame.model.frames.flatMap((pass) => [pass.frame, ...pass.children]));
+        return path && path.length > 0 ? path[path.length - 1] : null;
+      };
+      const unitMembers = (id: string): string[] => {
+        if (groupIds.has(id)) return membersOf(id);
+        const outer = outermostOf(id);
+        if (outer) return membersOf(outer);
+        return live.has(id) ? [id] : [];
+      };
+      const expand = (list: readonly string[]): string[] => {
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const id of list) {
+          for (const member of unitMembers(id)) {
+            if (!seen.has(member)) {
+              seen.add(member);
+              out.push(member);
+            }
+          }
+        }
+        return out;
+      };
+      let next: string[];
+      if (!additive) {
+        next = expand(ids);
+      } else {
+        // Additive toggles whole units: a unit fully inside the current
+        // selection leaves it, otherwise it joins.
+        const pending = new Set(current);
+        const seenUnit = new Set<string>();
+        let touched = false;
+        for (const id of ids) {
+          const unit = unitMembers(id);
+          if (unit.length === 0 || seenUnit.has(unit[0])) continue;
+          seenUnit.add(unit[0]);
+          touched = true;
+          if (unit.every((member) => pending.has(member))) {
+            for (const member of unit) pending.delete(member);
+          } else {
+            for (const member of unit) pending.add(member);
+          }
+        }
+        if (!touched) return;
+        next = current.filter((id) => pending.has(id));
+        for (const id of pending) {
+          if (!next.includes(id)) next.push(id);
+        }
+      }
+      if (next.length === 0) {
+        // Genuine clears go through the raw op: the selectIds command
+        // refuses empty targets, which would otherwise leave stale ids.
+        // The watcher wakes for the cleared session like any other change.
+        void engine
+          .sendBatch([{ op: 'select', ids: [] }])
+          .then(() => viewActions?.refreshFrame?.())
+          .catch(() => undefined);
+        return;
+      }
       const snapshot = frame;
       const selection = normalizeSelection(snapshot?.session.selection ?? [], live);
       const documentIds = snapshot ? allDocumentIds(snapshot) : [];
@@ -431,9 +568,12 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
         textEditingId: snapshot?.session.textEditing?.id ?? null,
         documentIds,
         targetIds: next,
+        // Without the view channel, runOp cannot wake the frame watcher
+        // and programmatic selection would never visibly land.
+        view: viewActions ?? undefined,
       });
     },
-    [engine, frame, activeTool],
+    [engine, frame, activeTool, viewActions],
   );
 
   const handleQuickSelect = useCallback(
@@ -453,13 +593,13 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
   }, []);
 
   const confirmNewProject = useCallback(
-    async (name: string) => {
+    async (name: string, canvas: ProjectCanvas) => {
       if (createPending || createKind === null) return;
       setCreatePending(true);
       setCreateError(null);
       try {
         const template = templateForKind(createKind);
-        const created = await getProjectStore().create(name, template.buildScene(), template.kind);
+        const created = await getProjectStore().create(name, template.buildScene(), template.kind, canvas);
         notify(t('projects.notifications.created', { name: created.name }));
         setCreateKind(null);
         onOpenProject(created.id);
@@ -686,6 +826,7 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
         engine={engine}
         activeTool={activeTool}
         stickyTool={workspace.stickyTool}
+        fillPreviewRef={fillPreviewRef}
         onFrame={handleFrame}
         onRenderError={handleRenderError}
         commandContext={commandContext}
@@ -703,24 +844,29 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
       />
     ),
     overlays,
-    leftDock: (
-      <PanelHost
-        location="left"
-        frame={frame}
-        onSelect={handleSelect}
-        engine={engine}
-        sendBatch={engine.sendBatch}
-        commandContext={commandContext}
-      />
-    ),
-    rightDock: (
-      <PanelHost
-        location="right"
-        frame={frame}
-        onSelect={handleSelect}
-        engine={engine}
-        sendBatch={engine.sendBatch}
-        commandContext={commandContext}
+      leftDock: (
+        <PanelHost
+          location="left"
+          frame={frame}
+          onSelect={handleSelect}
+          engine={engine}
+          sendBatch={engine.sendBatch}
+          commandContext={commandContext}
+          projectId={projectId}
+          fillPreviewRef={fillPreviewRef}
+        />
+      ),
+      rightDock: (
+        <PanelHost
+          location="right"
+          frame={frame}
+          onSelect={handleSelect}
+          engine={engine}
+          sendBatch={engine.sendBatch}
+          commandContext={commandContext}
+          projectId={projectId}
+          fillPreviewRef={fillPreviewRef}
+        showInteractionTab={projectKind === 'design' && session.kind === 'ready' && session.canvas.mode === 'infinite'}
       />
     ),
     statusBar: (
@@ -826,17 +972,18 @@ export function EditorScreen({ projectId, onBackToHome, onOpenProject }: EditorS
           />
           {projectKind === 'whiteboard' ? (
             <WhiteboardEditor {...shellProps} />
-          ) : projectKind === 'diagram' ? (
-            <DiagramEditor {...shellProps} />
+          ) : projectKind === 'slides' ? (
+            <SlidesEditor {...shellProps} />
           ) : (
             <DesignEditor {...shellProps} />
           )}
           {createKind !== null ? (
             <CreateProjectDialog
+              kind={createKind}
               onClose={() => {
                 if (!createPending) setCreateKind(null);
               }}
-              onConfirm={(name) => void confirmNewProject(name)}
+              onConfirm={(name, canvas) => void confirmNewProject(name, canvas)}
               pending={createPending}
               error={createError}
             />

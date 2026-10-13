@@ -7,14 +7,14 @@
  * (`features/projects/projectKinds.ts`) owns everything else per family,
  * including creation-menu order.
  */
-export type ProjectKind = 'design' | 'whiteboard' | 'diagram';
+export type ProjectKind = 'design' | 'whiteboard' | 'slides';
 
 /** Fallback kind for payloads written before kinds existed. */
 export const DEFAULT_PROJECT_KIND: ProjectKind = 'design';
 
 /** Type guard for kind values arriving over the IPC boundary. */
 export function isProjectKind(value: unknown): value is ProjectKind {
-  return value === 'design' || value === 'whiteboard' || value === 'diagram';
+  return value === 'design' || value === 'whiteboard' || value === 'slides';
 }
 
 /** Normalizes an unknown kind to a valid one; unknown values become design. */
@@ -22,11 +22,50 @@ export function normalizeProjectKind(value: unknown): ProjectKind {
   return isProjectKind(value) ? value : DEFAULT_PROJECT_KIND;
 }
 
+/** Display unit for fixed-canvas dimensions (CorelDRAW-style). */
+export type CanvasUnit = 'px' | 'mm' | 'cm' | 'm' | 'in' | 'pt';
+
+/** Canvas configuration stored in project metadata. */
+export interface ProjectCanvas {
+  /** `infinite` workboard or `fixed` page (engine `bounded`). */
+  mode: 'infinite' | 'fixed';
+  /** Page width in scene units (px at 96 DPI); ignored when infinite. */
+  width: number;
+  /** Page height in scene units (px at 96 DPI); ignored when infinite. */
+  height: number;
+  /** Display unit the dimensions were entered in. */
+  unit: CanvasUnit;
+}
+
+/** Default canvas: unbounded workboard, matching the engine default. */
+export const DEFAULT_PROJECT_CANVAS: ProjectCanvas = { mode: 'infinite', width: 0, height: 0, unit: 'px' };
+
+/** Type guard for unit values arriving over the IPC boundary. */
+export function isCanvasUnit(value: unknown): value is CanvasUnit {
+  return value === 'px' || value === 'mm' || value === 'cm' || value === 'm' || value === 'in' || value === 'pt';
+}
+
+/** Normalizes stored canvas config; anything invalid becomes infinite. */
+export function normalizeProjectCanvas(value: unknown): ProjectCanvas {
+  if (typeof value !== 'object' || value === null) return { ...DEFAULT_PROJECT_CANVAS };
+  const record = value as Record<string, unknown>;
+  if (record['mode'] !== 'fixed') return { ...DEFAULT_PROJECT_CANVAS };
+  const width = record['width'];
+  const height = record['height'];
+  if (typeof width !== 'number' || typeof height !== 'number' || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return { ...DEFAULT_PROJECT_CANVAS };
+  }
+  const unit = record['unit'];
+  return { mode: 'fixed', width, height, unit: isCanvasUnit(unit) ? unit : 'px' };
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
   /** Editor family; absent in payloads written before kinds existed. */
   kind: ProjectKind;
+  /** Canvas configuration; absent in payloads written before it existed. */
+  canvas: ProjectCanvas;
   createdAtMs: number;
   updatedAtMs: number;
   lastOpenedAtMs?: number;

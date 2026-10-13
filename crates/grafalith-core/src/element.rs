@@ -1083,6 +1083,31 @@ impl Element {
             Self::Path(el) => path_bounds(base, &el.segments),
         }
     }
+
+    /// Axis-aligned box before rotation is applied.
+    ///
+    /// Paint, selection outlines, and handle positions for a rotated
+    /// element derive from this box rotated about its center; the
+    /// rotation-aware [`Element::bounds`] stays the source for culling,
+    /// fitting, and hit extents. For unrotated elements both coincide.
+    pub fn unrotated_bounds(&self) -> Bounds {
+        let base = self.base();
+        match self {
+            Self::Rectangle(_)
+            | Self::Ellipse(_)
+            | Self::Text(_)
+            | Self::Image(_)
+            | Self::Frame(_)
+            | Self::Instance(_)
+            | Self::Custom(_) => {
+                Bounds::new(base.x, base.y, base.x + base.width, base.y + base.height)
+            }
+            Self::Line(el) => raw_points_bounds(base, &el.points),
+            Self::Arrow(el) => raw_points_bounds(base, &el.points),
+            Self::Freedraw(el) => raw_points_bounds(base, &el.points),
+            Self::Path(el) => raw_path_bounds(base, &el.segments),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1141,6 +1166,39 @@ fn points_bounds(base: &BaseElement, points: &[Point]) -> Bounds {
     )
 }
 
+/// AABB of origin-relative polyline points without rotation (paint and
+/// chrome frame; `points_bounds` above stays the rotation-aware source for
+/// culling, fitting, and hit extents, bit-identical as before).
+fn raw_points_bounds(base: &BaseElement, points: &[Point]) -> Bounds {
+    if points.is_empty() {
+        return Bounds::point(base.x, base.y);
+    }
+    let mut min_px = f64::INFINITY;
+    let mut min_py = f64::INFINITY;
+    let mut max_px = f64::NEG_INFINITY;
+    let mut max_py = f64::NEG_INFINITY;
+    for point in points {
+        if point[0] < min_px {
+            min_px = point[0];
+        }
+        if point[1] < min_py {
+            min_py = point[1];
+        }
+        if point[0] > max_px {
+            max_px = point[0];
+        }
+        if point[1] > max_py {
+            max_py = point[1];
+        }
+    }
+    Bounds::new(
+        base.x + min_px,
+        base.y + min_py,
+        base.x + max_px,
+        base.y + max_py,
+    )
+}
+
 /// AABB of path anchors and their control handles, then rotated.
 /// Empty input collapses to the origin point (TS parity).
 fn path_bounds(base: &BaseElement, segments: &[PathSegment]) -> Bounds {
@@ -1177,6 +1235,45 @@ fn path_bounds(base: &BaseElement, segments: &[PathSegment]) -> Bounds {
         }
     }
     rotated_bounds(min_x, min_y, max_x - min_x, max_y - min_y, base.rotation)
+}
+
+/// AABB of path anchors and control handles without rotation (paint and
+/// chrome frame; `path_bounds` above stays the rotation-aware source,
+/// bit-identical as before).
+fn raw_path_bounds(base: &BaseElement, segments: &[PathSegment]) -> Bounds {
+    if segments.is_empty() {
+        return Bounds::point(base.x, base.y);
+    }
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    let mut record = |x: f64, y: f64| {
+        if x < min_x {
+            min_x = x;
+        }
+        if y < min_y {
+            min_y = y;
+        }
+        if x > max_x {
+            max_x = x;
+        }
+        if y > max_y {
+            max_y = y;
+        }
+    };
+    for segment in segments {
+        let ax = base.x + segment.point[0];
+        let ay = base.y + segment.point[1];
+        record(ax, ay);
+        if let Some(handle) = segment.handle_in {
+            record(ax + handle[0], ay + handle[1]);
+        }
+        if let Some(handle) = segment.handle_out {
+            record(ax + handle[0], ay + handle[1]);
+        }
+    }
+    Bounds::new(min_x, min_y, max_x, max_y)
 }
 
 // ---------------------------------------------------------------------------

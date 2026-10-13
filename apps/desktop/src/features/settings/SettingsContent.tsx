@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { useI18n } from '../../app/i18n/resources';
-import { LOCALE_LIST, type Locale } from '../../app/i18n/locales';
+import { LOCALE_LIST, useI18n, type Locale } from '../../app/i18n/resources';
 import { useTheme } from '../../app/theme/ThemeProvider';
 import { THEME_MODES, type ThemeMode } from '../../app/theme/tokens';
 import { SearchInput, SegmentedControl, Select, Switch, TextInput, Button, Divider } from '../../ui/primitives/controls';

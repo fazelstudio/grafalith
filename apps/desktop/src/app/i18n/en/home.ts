@@ -1,5 +1,6 @@
 const home = {
   description: 'Your recent design projects, saved locally.',
+  empty: 'No projects yet',
   actions: {
     create: 'Create',
   },

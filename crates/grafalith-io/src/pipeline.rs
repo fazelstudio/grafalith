@@ -27,8 +27,8 @@
 //! by construction, so the snapshot cannot leak them. PNG planning is pure
 //! math — canvas allocation and rasterization stay host-side.
 
-use grafalith_core::document::{Document, ImportSummary, SCHEMA_VERSION};
-use grafalith_core::element::Element;
+use grafalith_core::document::{Document, GroupRecord, ImportSummary, SCHEMA_VERSION};
+use grafalith_core::element::{Element, ElementId};
 use grafalith_core::geometry::Bounds;
 use grafalith_core::{EngineError, EngineResult};
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,10 @@ struct RawEnvelope {
     /// Z-order (optional; non-string entries are dropped, TS parity).
     #[serde(rename = "elementOrder", default)]
     element_order: Option<Value>,
+    #[serde(default)]
+    groups: Option<Value>,
+    #[serde(default)]
+    labels: Option<Value>,
 }
 
 /// Outgoing scene envelope, mirroring TS `SerializedScene` exactly:
@@ -74,6 +78,81 @@ struct SceneEnvelopeOut {
     elements: Vec<Value>,
     /// Full z-order, including tombstone ids (TS export parity).
     element_order: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    groups: Vec<GroupRecordOut>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<ElementLabelOut>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GroupRecordOut {
+    id: String,
+    name: String,
+    parent_group_id: Option<String>,
+    #[serde(skip_serializing_if = "is_false", default)]
+    locked: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ElementLabelOut {
+    id: String,
+    name: String,
+}
+
+fn parse_groups(value: Option<Value>) -> Vec<GroupRecord> {
+    let Some(Value::Array(items)) = value else {
+        return Vec::new();
+    };
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let object = item.as_object()?;
+            let id = object.get("id")?.as_str()?;
+            Some(GroupRecord {
+                id: ElementId::of(id),
+                name: object
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or(id)
+                    .to_string(),
+                parent_id: object
+                    .get("parentGroupId")
+                    .and_then(Value::as_str)
+                    .map(ElementId::of),
+                locked: object
+                    .get("locked")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            })
+        })
+        .collect()
+}
+
+fn parse_labels(value: Option<Value>) -> Vec<grafalith_core::document::ElementLabel> {
+    let Some(Value::Array(items)) = value else {
+        return Vec::new();
+    };
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let object = item.as_object()?;
+            let id = object.get("id")?.as_str()?;
+            let name = object.get("name")?.as_str()?;
+            if name.trim().is_empty() {
+                return None;
+            }
+            Some(grafalith_core::document::ElementLabel {
+                id: ElementId::of(id),
+                name: name.trim().to_string(),
+            })
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +185,24 @@ pub fn export_str(doc: &Document) -> EngineResult<String> {
             .iter()
             .map(|id| id.as_str().to_string())
             .collect(),
+        groups: snapshot
+            .groups
+            .iter()
+            .map(|group| GroupRecordOut {
+                id: group.id.as_str().to_string(),
+                name: group.name.clone(),
+                parent_group_id: group.parent_id.as_ref().map(|id| id.as_str().to_string()),
+                locked: group.locked,
+            })
+            .collect(),
+        labels: snapshot
+            .labels
+            .iter()
+            .map(|label| ElementLabelOut {
+                id: label.id.as_str().to_string(),
+                name: label.name.clone(),
+            })
+            .collect(),
     };
     serde_json::to_string(&envelope)
         .map_err(|err| EngineError::InvalidInput(format!("scene export failed: {err}")))
@@ -115,9 +212,18 @@ pub fn export_str(doc: &Document) -> EngineResult<String> {
 // Import
 // ---------------------------------------------------------------------------
 
+/// Parsed envelope parts: element values, order strings, group records, and
+/// explicit element labels.
+type ParsedEnvelope = (
+    Vec<Value>,
+    Vec<String>,
+    Vec<GroupRecord>,
+    Vec<grafalith_core::document::ElementLabel>,
+);
+
 /// Parses the envelope version and raw element values without touching the
 /// document (pipeline stages: parse → version).
-fn parse_envelope(json: &str) -> EngineResult<(Vec<Value>, Vec<String>)> {
+fn parse_envelope(json: &str) -> EngineResult<ParsedEnvelope> {
     let raw: RawEnvelope = serde_json::from_str(json)
         .map_err(|_| EngineError::InvalidInput("invalid JSON: could not parse".to_string()))?;
     // `from_str` to a struct already rejects non-object roots (arrays,
@@ -145,7 +251,12 @@ fn parse_envelope(json: &str) -> EngineResult<(Vec<Value>, Vec<String>)> {
             .collect(),
         _ => Vec::new(),
     };
-    Ok((elements, order))
+    Ok((
+        elements,
+        order,
+        parse_groups(raw.groups),
+        parse_labels(raw.labels),
+    ))
 }
 
 /// Converts raw element values to domain elements, skipping unknown or
@@ -171,7 +282,7 @@ fn convert_elements(values: &[Value]) -> (Vec<Element>, usize) {
 /// (and its nonce) untouched. Returns admitted/skipped counts. For a
 /// one-entry undoable import, use [`import_str_tracked`].
 pub fn import_str(doc: &mut Document, json: &str) -> EngineResult<ImportSummary> {
-    let (values, order) = parse_envelope(json)?;
+    let (values, order, groups, labels) = parse_envelope(json)?;
     let (converted, convert_skipped) = convert_elements(&values);
     if converted.is_empty() && !values.is_empty() {
         return Err(EngineError::InvalidInput(
@@ -186,6 +297,8 @@ pub fn import_str(doc: &mut Document, json: &str) -> EngineResult<ImportSummary>
             .into_iter()
             .map(grafalith_core::element::ElementId::of)
             .collect(),
+        groups,
+        labels,
     };
     let summary = doc.apply_snapshot(&snapshot)?;
     Ok(ImportSummary {
@@ -206,7 +319,7 @@ pub fn import_str_tracked(
     history: &mut grafalith_core::history::HistoryManager,
     json: &str,
 ) -> EngineResult<ImportSummary> {
-    let (values, order) = parse_envelope(json)?;
+    let (values, order, groups, labels) = parse_envelope(json)?;
     let (converted, convert_skipped) = convert_elements(&values);
     if converted.is_empty() && !values.is_empty() {
         return Err(EngineError::InvalidInput(
@@ -221,6 +334,8 @@ pub fn import_str_tracked(
             .into_iter()
             .map(grafalith_core::element::ElementId::of)
             .collect(),
+        groups,
+        labels,
     };
     let plan = Document::plan_snapshot(&snapshot)?;
     let imported = plan.imported;
@@ -241,6 +356,8 @@ pub fn import_str_tracked(
         if let Some(order) = plan.order.clone() {
             ctx.set_order(order)?;
         }
+        ctx.set_groups(plan.groups.clone())?;
+        ctx.set_labels(plan.labels.clone())?;
         Ok(())
     })?;
     Ok(ImportSummary { imported, skipped })

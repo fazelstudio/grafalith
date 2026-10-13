@@ -19,6 +19,7 @@ use crate::command::{
     Command, CommandContext, CommandOutcome, HistoryEntry, HistorySide, SlotDelta,
 };
 use crate::document::Document;
+use crate::document::{ElementLabel, GroupRecord};
 use crate::element::ElementId;
 use crate::{EngineError, EngineResult};
 
@@ -41,6 +42,10 @@ struct OpenTransaction {
     updates: HashMap<ElementId, SlotDelta>,
     /// Z-order when the transaction opened.
     order_before: Vec<ElementId>,
+    /// Group metadata when the transaction opened.
+    groups_before: Vec<GroupRecord>,
+    /// Element labels when the transaction opened.
+    labels_before: Vec<ElementLabel>,
 }
 
 /// Manages undo/redo stacks over recorded command entries.
@@ -184,6 +189,8 @@ impl HistoryManager {
         self.current = Some(OpenTransaction {
             updates: HashMap::new(),
             order_before: doc.order(),
+            groups_before: doc.groups(),
+            labels_before: doc.labels(),
         });
     }
 
@@ -196,10 +203,18 @@ impl HistoryManager {
         };
         let order_after = doc.order();
         let order_changed = order_after != tx.order_before;
+        let groups_after = doc.groups();
+        let groups_changed = groups_after != tx.groups_before;
+        let labels_after = doc.labels();
+        let labels_changed = labels_after != tx.labels_before;
         let entry = HistoryEntry {
             element_updates: tx.updates,
             order_before: order_changed.then_some(tx.order_before),
             order_after: order_changed.then_some(order_after),
+            groups_before: groups_changed.then_some(tx.groups_before),
+            groups_after: groups_changed.then_some(groups_after),
+            labels_before: labels_changed.then_some(tx.labels_before),
+            labels_after: labels_changed.then_some(labels_after),
         };
         if entry.is_empty() {
             return;
@@ -225,6 +240,12 @@ impl HistoryManager {
         }
         if doc.order() != tx.order_before {
             doc.set_order(tx.order_before)?;
+        }
+        if doc.groups() != tx.groups_before {
+            doc.set_groups(tx.groups_before)?;
+        }
+        if doc.labels() != tx.labels_before {
+            doc.set_labels(tx.labels_before)?;
         }
         Ok(())
     }

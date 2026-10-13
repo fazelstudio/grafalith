@@ -28,10 +28,12 @@
 use std::collections::HashSet;
 
 use grafalith_core::boolean::BooleanOp;
+use grafalith_core::canvas_mode::CanvasMode;
 use grafalith_core::clipboard::{duplicate_elements, Clipboard};
 use grafalith_core::command::{
-    CommandOutcome, CreateElements, GroupElements, Reorder, SetLocked, SetStyle, StylePatch,
-    UngroupElements,
+    CommandOutcome, CreateElements, DuplicateNodes, GroupElements, MoveElementsToGroup,
+    RenameGroup, RenameNode, Reorder, ReparentGroup, ReparentNodes, SetGroupLocked, SetLocked,
+    SetStyle, StylePatch, UngroupElements,
 };
 use grafalith_core::document::{Document, ImportSummary, SCHEMA_VERSION};
 use grafalith_core::editor::Editor;
@@ -53,13 +55,14 @@ use serde_json::{json, Value};
 
 use crate::protocol::{err_result, ok_result, op_name, unsupported_result, OpResult};
 use crate::protocol::{
-    BatchOp, BatchResult, EngineStatus, JpegOptionsJson, ModifiersJson, PngOptionsJson, PointJson,
-    RenderQueryJson, SnapConfigJson, StylePatchJson, ThemeOverrideJson, ViewportStatusJson,
-    WebpOptionsJson, PROTOCOL_VERSION,
+    BatchOp, BatchResult, CanvasModeJson, EngineStatus, JpegOptionsJson, ModifiersJson,
+    PngOptionsJson, PointJson, RenderQueryJson, SnapConfigJson, StylePatchJson, ThemeOverrideJson,
+    ViewportStatusJson, WebpOptionsJson, PROTOCOL_VERSION,
 };
 use crate::render_dto::{
     context_intent_name, event_dto, key_action_dto, phase_name, pointer_down_dto, pointer_up_dto,
-    render_model_dto, session_state_dto, snap_guide_dto, viewport_dto, RenderCache, RenderCacheKey,
+    render_model_dto, render_model_dto_for_viewport, session_state_dto, snap_guide_dto,
+    viewport_dto, RenderCache, RenderCacheKey,
 };
 
 /// Bindings crate version (echoed in [`EngineStatus`] for skew detection).
@@ -416,7 +419,7 @@ impl Engine {
                 outcome_result(op, outcome)
             }
             BatchOp::Group { ids } => {
-                let group_id = self.editor.document_mut().fresh_element_id();
+                let group_id = self.editor.document_mut().fresh_group_id();
                 let outcome = self
                     .editor
                     .execute_command(GroupElements::new(ids_of(ids), group_id.clone()));
@@ -437,6 +440,62 @@ impl Engine {
                     .execute_command(UngroupElements::new(ElementId::of(group_id.clone())));
                 outcome_result(op, outcome)
             }
+            BatchOp::RenameGroup { group_id, name } => outcome_result(
+                op,
+                self.editor.execute_command(RenameGroup {
+                    group_id: ElementId::of(group_id.clone()),
+                    name: name.clone(),
+                }),
+            ),
+            BatchOp::ReparentGroup {
+                group_id,
+                parent_group_id,
+            } => outcome_result(
+                op,
+                self.editor.execute_command(ReparentGroup {
+                    group_id: ElementId::of(group_id.clone()),
+                    parent_id: parent_group_id.clone().map(ElementId::of),
+                }),
+            ),
+            BatchOp::MoveToGroup {
+                ids,
+                group_id,
+                index,
+            } => outcome_result(
+                op,
+                self.editor.execute_command(MoveElementsToGroup::with_index(
+                    ids_of(ids),
+                    group_id.clone().map(ElementId::of),
+                    *index,
+                )),
+            ),
+            BatchOp::SetGroupLocked { ids, locked } => outcome_result(
+                op,
+                self.editor
+                    .execute_command(SetGroupLocked::new(ids_of(ids), *locked)),
+            ),
+            BatchOp::RenameNode { id, name } => outcome_result(
+                op,
+                self.editor
+                    .execute_command(RenameNode::new(ElementId::of(id.clone()), name.clone())),
+            ),
+            BatchOp::ReparentNodes {
+                ids,
+                parent_group_id,
+                index,
+            } => outcome_result(
+                op,
+                self.editor.execute_command(ReparentNodes::new(
+                    ids_of(ids),
+                    parent_group_id.clone().map(ElementId::of),
+                    *index,
+                )),
+            ),
+            BatchOp::DuplicateNodes { ids } => outcome_result(
+                op,
+                self.editor
+                    .execute_command(DuplicateNodes::new(ids_of(ids))),
+            ),
             BatchOp::Select { ids } => {
                 self.editor.select(ids_of(ids));
                 ok_result(
@@ -612,6 +671,30 @@ impl Engine {
                 Ok(()) => ok_result(op_name(op), None),
                 Err(err) => err_result(op_name(op), &err),
             },
+            BatchOp::CommitDraw {
+                request_id,
+                shape,
+                origin,
+                current,
+                trail,
+            } => {
+                let name = op_name(op);
+                let trail_scenes = trail
+                    .as_ref()
+                    .map(|samples| samples.iter().map(|point| [point.x, point.y]).collect());
+                match self.editor.commit_draw(
+                    request_id.as_deref(),
+                    shape,
+                    [origin.x, origin.y],
+                    [current.x, current.y],
+                    trail_scenes,
+                ) {
+                    Ok(id) => {
+                        dto_result(name, json!({ "id": id.map(|id| id.as_str().to_string()) }))
+                    }
+                    Err(err) => err_result(name, &err),
+                }
+            }
             BatchOp::KeyDown { key, modifiers } => {
                 match self
                     .editor
@@ -839,12 +922,14 @@ impl Engine {
                 enabled_tools,
                 theme,
                 snap,
+                canvas_mode,
             } => {
                 let result = self.op_configure(
                     op,
                     enabled_tools,
                     theme.as_ref().as_ref(),
                     snap.as_ref().as_ref(),
+                    canvas_mode.as_ref(),
                 );
                 if result.ok {
                     self.asset_generation = self.asset_generation.wrapping_add(1);
@@ -859,6 +944,17 @@ impl Engine {
                 )
             }
             BatchOp::RenderModel { query } => self.op_render_model(op, query),
+            BatchOp::PlanPngExport { options } => {
+                let name = op_name(op);
+                let options_json = options
+                    .as_ref()
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "{}".to_string());
+                match self.plan_png_export(&options_json) {
+                    Ok(plan) => ok_result(name, Some(plan)),
+                    Err(err) => err_result(name, &err),
+                }
+            }
             BatchOp::PreviewMove {
                 ids,
                 from,
@@ -899,7 +995,7 @@ impl Engine {
                             [*x, *y],
                             *lock_aspect,
                         ) {
-                            Ok(Some(output)) => dto_result(
+                            Ok(Some((output, guides))) => dto_result(
                                 name,
                                 json!({
                                     "changed": true,
@@ -908,6 +1004,7 @@ impl Engine {
                                     "width": output.width,
                                     "height": output.height,
                                     "fontSize": output.font_size,
+                                    "guides": guides.iter().map(snap_guide_dto).collect::<Vec<_>>(),
                                 }),
                             ),
                             Ok(None) => dto_result(name, json!({ "changed": false })),
@@ -1097,6 +1194,7 @@ impl Engine {
         enabled_tools: &Option<Option<Vec<String>>>,
         theme: Option<&ThemeOverrideJson>,
         snap: Option<&SnapConfigJson>,
+        canvas_mode: Option<&CanvasModeJson>,
     ) -> OpResult {
         let name = op_name(op);
         let next_theme = match theme {
@@ -1113,6 +1211,13 @@ impl Engine {
             },
             None => None,
         };
+        let next_canvas_mode = match canvas_mode {
+            Some(json) => match parse_canvas_mode(json) {
+                Ok(parsed) => Some(parsed),
+                Err(err) => return err_result(name, &err),
+            },
+            None => None,
+        };
         if let Some(tools) = enabled_tools {
             self.editor.set_enabled_tools(tools.clone());
         }
@@ -1121,6 +1226,9 @@ impl Engine {
         }
         if let Some(config) = next_snap {
             self.editor.set_snap_config(config);
+        }
+        if let Some(mode) = next_canvas_mode {
+            self.editor.set_canvas_mode(mode);
         }
         ok_result(
             name,
@@ -1164,6 +1272,30 @@ impl Engine {
         }
         config.asset_generation = self.asset_generation;
         let ready: HashSet<String> = query.ready_images.iter().cloned().collect();
+        if let Some(override_viewport) = &query.viewport {
+            if !override_viewport.scroll_x.is_finite()
+                || !override_viewport.scroll_y.is_finite()
+                || !override_viewport.zoom.is_finite()
+                || override_viewport.zoom <= 0.0
+            {
+                return err_result(
+                    name,
+                    &EngineError::InvalidInput(format!(
+                        "render viewport override must be finite with positive zoom, got ({}, {}, {})",
+                        override_viewport.scroll_x, override_viewport.scroll_y, override_viewport.zoom
+                    )),
+                );
+            }
+            // One-shot read: the override never touches the live session and
+            // bypasses the frame cache (export queries rarely repeat).
+            let viewport = Viewport {
+                scroll_x: override_viewport.scroll_x,
+                scroll_y: override_viewport.scroll_y,
+                zoom: override_viewport.zoom,
+            };
+            let dto = render_model_dto_for_viewport(&self.editor, &viewport, &config, &ready);
+            return dto_result(name, dto);
+        }
         // Cached across identical polls (one frame costs one clone, not one
         // rebuild); any input change misses and rebuilds transparently.
         let key = RenderCacheKey::capture(&self.editor, &config, &ready);
@@ -1444,6 +1576,26 @@ fn merge_snap_config(
         next.snap_threshold = snap_threshold;
     }
     Ok(next)
+}
+
+/// Parses a canvas mode update (bounded sizes must be finite and positive,
+/// like viewport sizes).
+fn parse_canvas_mode(mode: &CanvasModeJson) -> EngineResult<CanvasMode> {
+    match mode {
+        CanvasModeJson::Infinite => Ok(CanvasMode::Infinite),
+        CanvasModeJson::Bounded { width, height } => {
+            if !width.is_finite() || !height.is_finite() || *width <= 0.0 || *height <= 0.0 {
+                return Err(EngineError::InvalidInput(format!(
+                    "canvasMode bounded size must be finite and positive, got ({width} {height})"
+                )));
+            }
+            Ok(CanvasMode::Bounded {
+                width: *width,
+                height: *height,
+                background: None,
+            })
+        }
+    }
 }
 
 /// Parses a scalar style patch (background must already be cleared as a

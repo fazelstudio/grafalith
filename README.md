@@ -5,7 +5,7 @@
 <h1 align="center">Grafalith</h1>
 
 <p align="center">
-  A lightweight, framework-agnostic canvas engine for building infinite whiteboard applications — written in Rust, distributed to npm (WASM) and PyPI (Python).
+  A lightweight, framework-agnostic 2D graphics engine written in Rust, designed to power drawing, design, presentation, and whiteboard experiences.
 </p>
 
 <p align="center">
@@ -15,23 +15,26 @@
   <a href="https://github.com/fazelstudio/grafalith/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@fazelstudio/grafalith" alt="license" /></a>
 </p>
 
-## Features
+## Overview
 
-- **Shape primitives** — Rectangle (with roundness), ellipse, line, arrow (arrow/bar/dot heads), freedraw, text, frame, image (with crop), vector path, component instance
-- **Selection** — Click, multi-select (Shift+click), rubber-band selection, group-aware drill-in
-- **Transform** — Move, resize (8 handles, rotation-aware), rotate (15° snap), multi-select proportional resize
-- **Style** — Solid colors, linear/radial gradients, hachure/cross-hatch fills, stroke styles (solid/dashed/dotted), opacity
-- **Text** — In-place editing, auto-resize, alignment, IME composition support
-- **Arrows** — Free arrows or bound to elements (auto-follow on move/resize/rotate)
-- **History** — Undo/redo via command pattern with exact snapshot inversion
-- **Clipboard** — Copy, paste (cascade offset), cut, duplicate — with id/group/binding remap
-- **Organization** — Groups, layers (z-order), lock, frames with constraints and flex-like auto-layout
-- **Precision tools** — Align (6 ops), distribute (2 ops), snap to grid and object edges
-- **Vector editing** — Multi-click pen with symmetric Bezier handles, path anchor/handle editing, image cropping
-- **Spatial index** — Grid-based spatial hash for fast hit-testing and viewport culling
-- **Export/Import** — Versioned JSON scene serialization and PNG export planning
-- **Headless engine API** — 100% usable without any UI framework; hosts render from a deterministic `RenderModel`
-- **Extension system** — Custom shapes, tools, commands, and serializers via extension traits
+Grafalith separates document and graphics logic from the host UI. The Rust engine can be embedded by applications through its supported bindings; hosts are responsible for presenting the engine's render output and handling platform-specific UI.
+
+The repository also contains a Tauri desktop application with Design, Slides, and Whiteboard workflows. Those workflows may share engine primitives, but mode-specific document rules belong to their appropriate domain rather than being duplicated inside the shared core.
+
+## Capabilities
+
+The engine and surrounding packages cover areas such as:
+
+- **2D elements** — shapes, paths, text, images, arrows, and frames.
+- **Editing** — selection, transforms, styles, grouping, locking, ordering, and clipboard operations.
+- **History** — command-based undo and redo.
+- **Precision tools** — snapping, alignment, and distribution.
+- **Geometry and hit testing** — reusable 2D math and spatial queries.
+- **Interchange** — versioned scene data, import/export, and clipboard codecs.
+- **Headless integration** — a host-facing API and deterministic render data.
+- **Extensibility** — supported extension points for custom shapes or operations.
+
+See the API guides and command reference for the capabilities available through each public interface. The README is an overview, not the authoritative feature-status checklist.
 
 ## Install
 
@@ -45,39 +48,39 @@ bun add @fazelstudio/grafalith
 pip install grafalith
 ```
 
-Usage: [`docs/guides/javascript.md`](./docs/guides/javascript.md) for
-JavaScript/TypeScript, [`docs/guides/python.md`](./docs/guides/python.md)
-for Python.
+Usage guides: [JavaScript/TypeScript](./docs/guides/javascript.md) · [Python](./docs/guides/python.md) · [Commands and protocol](./docs/guides/commands.md).
 
-## Crates
+## Workspace map
 
-| Crate | Description |
-|----|-------------|
-| [`grafalith-geometry`](./crates/grafalith-geometry) | Pure 2D math — points, bounds, transforms, hit-testing, spatial grid, snapping, viewport |
-| [`grafalith-core`](./crates/grafalith-core) | Document domain — elements, document store, history/commands, editor session, clipboard, components, extensions |
-| [`grafalith-io`](./crates/grafalith-io) | Interchange — versioned JSON schema, staged import pipeline, clipboard codec, PNG export descriptors |
-| [`grafalith-bindings`](./crates/grafalith-bindings) | Host boundary — JSON-string batch protocol, `Engine` facade, render/session DTOs |
-| [`grafalith`](./crates/grafalith) | npm distribution — `wasm-pack` target, published as `@fazelstudio/grafalith` |
-| [`grafalith-python`](./crates/grafalith-python) | PyPI distribution — `maturin`/PyO3 bindings, published as `grafalith` |
+| Area | Responsibility |
+|---|---|
+| `crates/grafalith-geometry/` | Pure 2D geometry, transforms, bounds, hit testing, spatial queries, snapping, and viewport math |
+| `crates/grafalith-core/` | Document domain, editor state, commands, history, and core operations |
+| `crates/grafalith-io/` | Versioned interchange, import pipeline, clipboard codecs, and export descriptors |
+| `crates/grafalith-pptx/` | PowerPoint/PPTX-specific interchange, where provided by this workspace |
+| `crates/grafalith-bindings/` | Host protocol, engine facade, and DTOs |
+| `crates/grafalith/` | npm/WASM distribution |
+| `crates/grafalith-python/` | Python distribution; use its manifest for the exact Cargo package name |
+| `crates/grafalith-sdk/` | Rust-facing SDK and extension facade |
+| `crates/grafalith-text/` | Text measurement and shaping helpers |
+| `apps/desktop/` | Tauri reference desktop host |
+| `packages/grafalith-sdk/` | TypeScript SDK for host integrations |
 
-Dependency direction: `grafalith`/`grafalith-python` → `grafalith-bindings` → `grafalith-io` → `grafalith-core` → `grafalith-geometry`.
+The Cargo manifests and [`crates/README.md`](./crates/README.md) are authoritative for the current workspace members and dependency direction.
 
-## Docs
+## Documentation
 
-- [`docs/`](./docs/) — product scope, technical contract, and guides.
-- [`docs/guides/javascript.md`](./docs/guides/javascript.md) — JavaScript/TypeScript usage.
-- [`docs/guides/python.md`](./docs/guides/python.md) — Python usage.
-- [`docs/guides/commands.md`](./docs/guides/commands.md) — command and protocol reference.
-- [`docs/guides/extensions.md`](./docs/guides/extensions.md) — extensions without forking.
-- [`docs/guides/desktop.md`](./docs/guides/desktop.md) — desktop demo (reference host).
-- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — technical contract.
-- [`docs/PRD.md`](./docs/PRD.md) — scope and out-of-scope boundaries.
-- [`crates/README.md`](./crates/README.md) — Rust workspace map and design rules.
+- [Product requirements](./docs/PRD.md) — product goals, scope, and acceptance expectations.
+- [Architecture contract](./docs/ARCHITECTURE.md) — domain boundaries and invariants.
+- [Design notes](./DESIGN.md) — repository-specific implementation design; keep it verified against the source.
+- [Development](./DEVELOPMENT.md) — setup, build, checks, and local workflows.
+- [Releasing](./RELEASING.md) — package publication and release checks.
+- [Comment guidelines](./docs/guides/comment-guidelines.md) — source-code comment rules.
+- [Crate map](./crates/README.md) — Rust workspace details.
+- [Documentation index](./docs/README.md) — guides and API references.
 
-## Development
-
-See [`DEVELOPMENT.md`](./DEVELOPMENT.md). Contributing: see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Contribution and security policies should live in their dedicated files (for example `CONTRIBUTING.md` and `SECURITY.md`) rather than being duplicated in this overview.
 
 ## License
 
-[MIT](./LICENSE) © [fazelstudio](https://github.com/fazelstudio)
+[MIT](./LICENSE) © fazelstudio

@@ -201,13 +201,13 @@ fn rubber_band_selects_many_and_additive_extends() {
 }
 
 #[test]
-fn locked_click_passes_through_to_below() {
+fn locked_click_does_not_select_below() {
     let mut editor = Editor::new();
     place(&mut editor, "a", 0.0, 0.0, 100.0, 100.0);
     place(&mut editor, "b", 0.0, 0.0, 100.0, 100.0);
     editor.lock(vec![ElementId::of("b")]).unwrap();
     click(&mut editor, 50.0, 50.0);
-    assert_eq!(selected(&editor), vec![ElementId::of("a")]);
+    assert!(selected(&editor).is_empty());
 }
 
 #[test]
@@ -220,8 +220,7 @@ fn top_wins_on_overlap() {
 }
 
 #[test]
-fn rubber_band_includes_locked() {
-    // TS parity: the rubber query skips deleted/hidden, not locked.
+fn rubber_band_excludes_locked() {
     let mut editor = Editor::new();
     place(&mut editor, "a", 0.0, 0.0, 100.0, 100.0);
     editor.lock(vec![ElementId::of("a")]).unwrap();
@@ -232,8 +231,8 @@ fn rubber_band_includes_locked() {
     let outcome = editor
         .pointer_up(200.0, 200.0, PointerButton::Left, none())
         .unwrap();
-    assert!(matches!(outcome, PointerUpOutcome::RubberBand(_)));
-    assert_eq!(selected(&editor), vec![ElementId::of("a")]);
+    assert!(matches!(outcome, PointerUpOutcome::RubberBand(ids) if ids.is_empty()));
+    assert!(selected(&editor).is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -338,25 +337,19 @@ fn ungrouped_press_collapses_immediately() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn multi_drag_skips_locked_in_one_entry() {
+fn grouping_locked_selection_is_rejected_atomically() {
     let mut editor = Editor::new();
     place(&mut editor, "a", 0.0, 0.0, 100.0, 100.0);
     place(&mut editor, "b", 200.0, 0.0, 100.0, 100.0);
     editor.lock(vec![ElementId::of("b")]).unwrap();
-    // Group first: only the exact group selection survives a press without
-    // collapsing, so the drag moves the whole set (TS parity).
     editor.select(vec![ElementId::of("a"), ElementId::of("b")]);
-    editor.group_selected().unwrap();
+    assert!(editor.group_selected().is_err());
     let undo_before = editor.history().undo_len();
-    click(&mut editor, 50.0, 50.0);
-    assert_eq!(selected(&editor).len(), 2);
     let outcome = drag(&mut editor, (50.0, 50.0), (100.0, 50.0), none());
     assert_eq!(outcome, PointerUpOutcome::DragCommitted(true));
     assert_eq!(x_of(&editor, "a"), 50.0);
     assert_eq!(x_of(&editor, "b"), 200.0, "locked member stays");
     assert_eq!(editor.history().undo_len(), undo_before + 1);
-    assert!(editor.undo().unwrap());
-    assert_eq!(x_of(&editor, "a"), 0.0);
 }
 
 #[test]
@@ -1158,7 +1151,7 @@ fn transform_previews_agree_with_commit() {
     assert_eq!((dx, dy), (30.0, 50.0));
 
     // Resize preview matches the committed box.
-    let preview = editor
+    let (preview, _) = editor
         .preview_resize(
             &ElementId::of("r1"),
             HandleType::BottomRight,
@@ -1189,6 +1182,24 @@ fn transform_previews_agree_with_commit() {
         (100.0, 100.0)
     );
 
+    // Resize drag snaps the dragged edge, shows its guide, and commits
+    // the snapped box; guides never linger after release.
+    place(&mut editor, "r2", 200.0, 0.0, 100.0, 100.0);
+    let (preview, guides) = editor
+        .preview_resize(
+            &ElementId::of("r1"),
+            HandleType::MiddleRight,
+            [297.0, 50.0],
+            false,
+        )
+        .unwrap()
+        .expect("preview");
+    assert_eq!((preview.x, preview.y), (0.0, 0.0));
+    assert_eq!((preview.width, preview.height), (300.0, 100.0));
+    assert_eq!(guides.len(), 1);
+    assert!(guides[0].is_vertical());
+    assert_eq!(guides[0].position, 300.0);
+
     // Rotate preview matches the committed angle.
     let angle = editor
         .preview_rotate(&ElementId::of("r1"), [0.0, 0.0], [50.0, 0.0], false)
@@ -1212,4 +1223,23 @@ fn transform_previews_agree_with_commit() {
         .preview_rotate(&ElementId::of("r1"), [0.0, 0.0], [50.0, 0.0], false)
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn resize_pointer_drag_snaps_edge_and_clears_guides_on_release() {
+    let mut editor = Editor::new();
+    place(&mut editor, "r1", 0.0, 0.0, 100.0, 100.0);
+    place(&mut editor, "r2", 200.0, 0.0, 100.0, 100.0);
+    click(&mut editor, 50.0, 50.0);
+    editor
+        .pointer_down(100.0, 50.0, PointerButton::Left, none(), 1)
+        .unwrap();
+    editor.pointer_move(297.0, 50.0, none()).unwrap();
+    let outcome = editor
+        .pointer_up(297.0, 50.0, PointerButton::Left, none())
+        .unwrap();
+    assert_eq!(outcome, PointerUpOutcome::DragCommitted(true));
+    let el = editor.document().get("r1").unwrap();
+    assert_eq!((el.base().x, el.base().width), (0.0, 300.0));
+    assert!(editor.last_snap_guides().is_empty());
 }

@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, isLocale, type Locale } from './i18n/locales';
+import { DEFAULT_LOCALE, isLocale, type Locale } from './i18n/resources';
 import { DEFAULT_THEME_MODE, isThemeMode, resolveThemeMode } from './theme/tokens';
 import { isTauriRuntime } from '../platform/projects/tauriAdapter';
 

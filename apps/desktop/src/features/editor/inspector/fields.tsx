@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MIXED, type InspectorFieldDefinition, type InspectorFieldContext } from './descriptors';
 import { useI18n } from '../../../app/i18n/resources';
 import { Tooltip } from '../../../ui/primitives/tooltip';
+import { CheckIcon, ChevronDownIcon, ResetIcon } from '../../../ui/icons';
 import { commandShortcutLabel, formatShortcut } from '../../../registries';
+import { ColorPicker } from './ColorPicker';
+import type { FillValue } from './colorSwatches';
 
 interface FieldProps {
   field: InspectorFieldDefinition;
@@ -41,8 +44,19 @@ export function NumberTemplate({ field, ctx, onResult }: FieldProps) {
     onResult(field.id, result.status === 'ok', result.status === 'ok' ? null : t('editor.errors.commandFailed', { message: t(field.labelKey) }));
   }
 
+  async function reset() {
+    if (disabled || field.resetValue === undefined || value === MIXED) return;
+    setDraft(String(field.resetValue));
+    const result = await field.write(field.resetValue, ctx);
+    onResult(field.id, result.status === 'ok', result.status === 'ok' ? null : t('editor.errors.commandFailed', { message: t(field.labelKey) }));
+  }
+
+  const resetLabel = field.resetValue === undefined
+    ? undefined
+    : t('editor.inspector.resetField', { field: t(field.labelKey) });
+
   return (
-    <label className="inspector-field">
+    <label className={`inspector-field${field.stacked === true ? ' inspector-field--stacked' : ''}${field.halfWidth === true ? ' inspector-field--half' : ''}`}>
       <span className="inspector-field__label">{t(field.labelKey)}</span>
       <span className="inspector-field__control">
         <input
@@ -68,63 +82,233 @@ export function NumberTemplate({ field, ctx, onResult }: FieldProps) {
           }}
         />
         {field.unit ? <span className="inspector-field__unit">{field.unit}</span> : null}
+        {resetLabel !== undefined ? (
+          <Tooltip content={resetLabel}>
+            <button
+              type="button"
+              className="inspector-field__reset"
+              aria-label={resetLabel}
+              disabled={disabled || value === MIXED}
+              onClick={() => void reset()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <ResetIcon size={14} />
+            </button>
+          </Tooltip>
+        ) : field.reserveResetSpace === true ? (
+          <span className="inspector-field__reset inspector-field__reset--spacer" aria-hidden="true" />
+        ) : null}
       </span>
     </label>
   );
 }
 
-/** Color input for solid fills/strokes only (gradients stay disabled by descriptor). */
-export function ColorTemplate({ field, ctx, onResult }: FieldProps) {
+/**
+ * Opacity as one button: single click opens the preset menu (home Create
+ * menu pattern), double-click swaps the label for an inline editor where
+ * Enter, Esc, and blur all commit. No unit label.
+ */
+export function OpacityTemplate({ field, ctx, onResult }: FieldProps) {
   const { t } = useI18n();
   const value = field.read(ctx);
   const disabled = field.disabled?.(ctx) ?? false;
-  const solid = typeof value === 'string' ? value : '#000000';
+  const presets = field.presets ?? [];
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useDraft(value);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const editingRef = useRef(false);
 
-  async function commit(next: string) {
-    const result = await field.write(next, ctx);
-    onResult(field.id, result.status === 'ok', result.status === 'ok' ? null : t('editor.errors.commandFailed', { message: next }));
+  // Outside interaction closes the menu, matching the home create menu.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: PointerEvent): void {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [menuOpen]);
+
+  async function writeAndReport(numeric: number): Promise<void> {
+    const result = await field.write(numeric, ctx);
+    onResult(field.id, result.status === 'ok', result.status === 'ok' ? null : t('editor.errors.commandFailed', { message: t(field.labelKey) }));
   }
 
-  if (value === MIXED && !disabled) {
-    return (
-      <label className="inspector-field">
-        <span className="inspector-field__label">{t(field.labelKey)}</span>
-        <span className="inspector-field__control">
-          <input
-            type="color"
-            className="inspector-field__color"
-            value="#000000"
-            disabled={disabled}
-            aria-label={t(field.labelKey)}
-            onChange={(event) => void commit(event.target.value)}
-            onKeyDown={(event) => event.stopPropagation()}
-          />
-          <span className="inspector-field__mixed">{mixedPlaceholder(t)}</span>
-        </span>
-      </label>
-    );
+  async function choosePreset(preset: number): Promise<void> {
+    if (disabled) return;
+    setMenuOpen(false);
+    setDraft(String(preset));
+    await writeAndReport(preset);
+    setTimeout(() => buttonRef.current?.focus(), 0);
   }
+
+  function beginEdit(): void {
+    if (disabled) return;
+    setMenuOpen(false);
+    editingRef.current = true;
+    setDraft(value === MIXED ? '' : String(value));
+    setEditing(true);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 0);
+  }
+
+  async function commitEdit(raw: string): Promise<void> {
+    if (!editingRef.current) return;
+    editingRef.current = false;
+    setEditing(false);
+    const numeric = Number(raw);
+    if (raw.trim() === '' || !Number.isFinite(numeric)) {
+      onResult(field.id, false, t('editor.errors.invalidNumber'));
+      return;
+    }
+    await writeAndReport(numeric);
+  }
+
+  function onMenuItemKeyDown(event: React.KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuOpen(false);
+      setTimeout(() => buttonRef.current?.focus(), 0);
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const items = Array.from(rootRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []);
+    const index = items.indexOf(event.currentTarget as HTMLElement);
+    if (event.key === 'Home') {
+      items[0]?.focus();
+      return;
+    }
+    if (event.key === 'End') {
+      items[items.length - 1]?.focus();
+      return;
+    }
+    const delta = event.key === 'ArrowDown' ? 1 : -1;
+    items[(index + delta + items.length) % items.length]?.focus();
+  }
+
+  const text = value === MIXED ? mixedPlaceholder(t) : String(value);
 
   return (
     <label className="inspector-field">
       <span className="inspector-field__label">{t(field.labelKey)}</span>
       <span className="inspector-field__control">
-        <input
-          type="color"
-          className="inspector-field__color"
-          value={disabled ? '#000000' : solid}
-          disabled={disabled}
-          aria-label={t(field.labelKey)}
-          onChange={(event) => void commit(event.target.value)}
-          onKeyDown={(event) => event.stopPropagation()}
-        />
-        <Tooltip content={disabled ? t('editor.inspector.gradientNote') : solid}>
-          <span className="inspector-field__value">
-            {disabled ? t('editor.inspector.gradientNote') : solid}
-          </span>
-        </Tooltip>
+        <span className="inspector-field__opacity" ref={rootRef}>
+          {editing ? (
+            <input
+              ref={inputRef}
+              type="number"
+              className="ui-input inspector-field__input"
+              value={draft}
+              placeholder={value === MIXED ? mixedPlaceholder(t) : undefined}
+              disabled={disabled}
+              min={field.min}
+              max={field.max}
+              step={field.step ?? 1}
+              aria-label={t(field.labelKey)}
+              onChange={(event) => setDraft(event.target.value)}
+              onBlur={(event) => void commitEdit(event.target.value)}
+              onKeyDown={(event) => {
+                // Esc commits this draft instead of cancelling it.
+                if (event.key === 'Enter' || event.key === 'Escape') {
+                  event.preventDefault();
+                  void commitEdit((event.target as HTMLInputElement).value).then(() => buttonRef.current?.focus());
+                }
+                event.stopPropagation();
+              }}
+            />
+          ) : (
+            <Tooltip content={t(field.labelKey)}>
+              <button
+                ref={buttonRef}
+                type="button"
+                className={menuOpen ? 'inspector-field__opacity-button inspector-field__opacity-button--open' : 'inspector-field__opacity-button'}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-controls="inspector-opacity-menu"
+                disabled={disabled}
+                onClick={() => setMenuOpen((open) => !open)}
+                onDoubleClick={beginEdit}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <span className="inspector-field__opacity-value">{text}</span>
+                <ChevronDownIcon size={14} />
+              </button>
+            </Tooltip>
+          )}
+          {menuOpen && !editing ? (
+            <div id="inspector-opacity-menu" className="inspector-field__opacity-menu" role="menu" aria-label={t('editor.inspector.preset')}>
+              {presets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className="inspector-field__opacity-item"
+                  role="menuitemradio"
+                  aria-checked={preset === value}
+                  onClick={() => void choosePreset(preset)}
+                  onKeyDown={onMenuItemKeyDown}
+                >
+                  <span>{preset}</span>
+                  <span className="inspector-field__opacity-check" aria-hidden="true">
+                    {preset === value ? <CheckIcon size={14} /> : null}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </span>
       </span>
     </label>
+  );
+}
+
+/** Modern color input: popover picker with gradients for fills, solid only for strokes. */
+export function ColorTemplate({ field, ctx, onResult }: FieldProps) {
+  const { t } = useI18n();
+  const raw = field.read(ctx);
+  const disabled = field.disabled?.(ctx) ?? false;
+  const mixed = raw === MIXED;
+  const current: FillValue = mixed
+    ? '#000000'
+    : field.allowGradient === true
+      ? (raw as FillValue)
+      : String(raw);
+  const text = mixed
+    ? mixedPlaceholder(t)
+    : typeof current === 'string'
+      ? current
+      : t('editor.inspector.colorGradient');
+
+  async function commit(next: FillValue) {
+    const result = await field.write(next as unknown as Exclude<typeof raw, typeof MIXED>, ctx);
+    onResult(field.id, result.status === 'ok', result.status === 'ok' ? null : t('editor.errors.commandFailed', { message: text }));
+  }
+
+  return (
+    <span className="inspector-field">
+      <span className="inspector-field__label">{t(field.labelKey)}</span>
+      <span className="inspector-field__control">
+        <ColorPicker
+          label={t(field.labelKey)}
+          value={current}
+          mixed={mixed}
+          allowGradient={field.allowGradient === true}
+          projectId={ctx.projectId}
+          disabled={disabled}
+          selectionIds={ctx.selection}
+          fillPreviewRef={ctx.fillPreviewRef}
+          onCommit={(next) => void commit(next)}
+        />
+        <Tooltip content={text}>
+          <span className="inspector-field__value">{text}</span>
+        </Tooltip>
+      </span>
+    </span>
   );
 }
 
@@ -252,6 +436,8 @@ export function InspectorField({ field, ctx, onResult, alignment }: FieldProps &
   switch (field.control) {
     case 'number':
       return <NumberTemplate field={field} ctx={ctx} onResult={onResult} />;
+    case 'opacity':
+      return <OpacityTemplate field={field} ctx={ctx} onResult={onResult} />;
     case 'color':
       return <ColorTemplate field={field} ctx={ctx} onResult={onResult} />;
     case 'segmented':

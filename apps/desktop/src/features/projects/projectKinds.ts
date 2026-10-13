@@ -2,7 +2,7 @@ import { createRegistry, type Descriptor } from '../../registries/core';
 import { isProjectKind, type ProjectKind } from '../../platform/projects/types';
 import { projectTemplateRegistry, type ProjectTemplateDefinition } from './templateRegistry';
 
-/** Declarative description of one editor family (design, whiteboard, diagram). */
+/** Declarative description of one editor family (design, whiteboard). */
 export interface ProjectKindDefinition extends Descriptor {
   /** English label rendered until `labelKey` resolves. */
   defaultLabel: string;
@@ -10,13 +10,15 @@ export interface ProjectKindDefinition extends Descriptor {
   hintKey: string;
   /** English hint rendered until `hintKey` resolves. */
   defaultHint: string;
+  /** Shared icon identifier resolved by the host icon registry. */
+  icon: string;
 }
 
 // Single source for everything that varies per editor family: display
-// label, empty-canvas hint, and starting template. Menus, home, cards,
-// and editors consume this registry instead of branching on kind ids or
-// repeating label keys, so adding a family means adding one entry here
-// plus its template, locale strings, and thin editor wrapper.
+// label, empty-canvas hint, starting template, and create-menu icon. Menus,
+// home, cards, and editors consume this registry instead of branching on
+// kind ids or repeating label keys, so adding a family means adding one
+// entry here plus its template, locale strings, and thin editor wrapper.
 //
 // The `default*` strings below are registry metadata required by the
 // shared Descriptor contract (and used by tests); interface text always
@@ -29,6 +31,7 @@ const KINDS: readonly ProjectKindDefinition[] = [
     hintKey: 'editor.hint.text',
     defaultHint:
       'Drag to select · scroll to pan · Ctrl+scroll to zoom · V selects, R draws, Ctrl+Shift+P commands',
+    icon: 'penNib',
   },
   {
     id: 'whiteboard',
@@ -36,13 +39,15 @@ const KINDS: readonly ProjectKindDefinition[] = [
     defaultLabel: 'Whiteboard',
     hintKey: 'editor.hint.textWhiteboard',
     defaultHint: 'Draw freely · scroll to pan the board · Ctrl+scroll to zoom',
+    icon: 'presentationBoard',
   },
   {
-    id: 'diagram',
-    labelKey: 'projects.kinds.diagram',
-    defaultLabel: 'Diagram',
-    hintKey: 'editor.hint.textDiagram',
-    defaultHint: 'Click to place shapes · drag between shapes to connect · Ctrl+scroll to zoom',
+    id: 'slides',
+    labelKey: 'projects.kinds.slides',
+    defaultLabel: 'Slides',
+    hintKey: 'editor.hint.textSlides',
+    defaultHint: 'Design one slide per page · 16:9 by default · present when ready',
+    icon: 'slides',
   },
 ];
 
@@ -57,6 +62,9 @@ export const projectKindRegistry = createRegistry<ProjectKindDefinition>('projec
     }
     if (kind.defaultHint === '') {
       return `missing defaultHint for id "${kind.id}"`;
+    }
+    if (kind.icon === '') {
+      return `missing icon for id "${kind.id}"`;
     }
     return undefined;
   },

@@ -38,7 +38,7 @@ export interface GrltContributes {
   diagramNodes?: readonly { id: string; title: string; icon?: string }[];
   assetProviders?: readonly { id: string; title: string }[];
   homeWidgets?: readonly { id: string; title: string }[];
-  projectTemplates?: readonly { id: string; title: string; kind: 'design' | 'whiteboard' | 'diagram' }[];
+  projectTemplates?: readonly { id: string; title: string; kind: 'design' | 'whiteboard' | 'slides' }[];
   modals?: readonly { id: string; title: string }[];
 }
 
@@ -117,7 +117,7 @@ export function validateGrltManifest(raw: unknown): { manifest?: GrltManifest; e
         'onEditor:*',
         'onEditor:design',
         'onEditor:whiteboard',
-        'onEditor:diagram',
+        'onEditor:slides',
       ];
       for (const entry of activationEvents as string[]) {
         const eventKnown =

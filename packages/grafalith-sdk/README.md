@@ -52,7 +52,7 @@ UI shell: `ui.menuBar` (addMenu/addMenuItem/addSeparator), `ui.activityBar`
 Design domain: `canvas`
 (getViewport/addOverlay/getSelectedObjects/onDidChangeSelection/
 onDidChangeViewport), `tools`
-(registerTool per `design|whiteboard|diagram|all`, set/get/onDidChange),
+(registerTool per `design|whiteboard|slides|all`, set/get/onDidChange),
 `shapes` (registerShapeType/getShapeTypes), `diagram`
 (registerNodeType/registerEdgeType/getNodeTypes/getEdgeTypes),
 `properties` (registerInspectorSection/onDidChangeSelection), `assets`
@@ -117,7 +117,7 @@ export function activate(context: ExtensionContext): void {
 | `onStartup` | App boot (background queue, never blocks projects) |
 | `onHome` | Home screen renders |
 | `onProject` | A project opens |
-| `onEditor:*` / `onEditor:design\|whiteboard\|diagram` | Editor mounts (wildcard or kind) |
+| `onEditor:*` / `onEditor:design\|whiteboard\|slides` | Editor mounts (wildcard or kind) |
 | `onCommand:<id>` | First execution of the command (lazy) |
 | `onView:<id>` | First reveal of the view (lazy) |
 
@@ -130,7 +130,7 @@ No `activationEvents` means eager (activates on every trigger).
 context, commandPalette, select lists), `keybindings`, `configuration`
 (settings), `activityBarItems`, `statusBarItems`, `panels`, `modals`,
 `toolbarItems`, `editorTools` (per kind: `design`, `whiteboard`,
-`diagram`), `themes`, `diagramNodes`, `assetProviders`, `homeWidgets`,
+`slides`), `themes`, `diagramNodes`, `assetProviders`, `homeWidgets`,
 `projectTemplates` (create-new flow).
 
 ## Command ids and `when` clauses

@@ -22,7 +22,7 @@ export type ContextValue = string | boolean | number;
 export type ContextScreen = 'home' | 'editor';
 
 /** Editor kind when `screen` is `editor`. */
-export type ContextEditorType = 'design' | 'whiteboard' | 'diagram' | 'none';
+export type ContextEditorType = 'design' | 'whiteboard' | 'slides' | 'none';
 
 /**
  * Window-shared context-key store. One instance per window; no globals.

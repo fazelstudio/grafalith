@@ -26,7 +26,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::document::Document;
+use crate::document::{Document, GroupRecord};
 use crate::element::{Element, ElementId};
 use crate::history::HistoryManager;
 use crate::{EngineError, EngineResult};
@@ -142,6 +142,20 @@ impl Clipboard {
         self.paste_count = self.paste_count.saturating_add(1);
         let planned = plan_paste_elements(doc, &self.elements, self.paste_count, target)?;
         history.transaction(doc, |ctx| {
+            let mut groups = ctx.doc().groups();
+            for element in &planned {
+                for group_id in &element.base().group_ids {
+                    if !groups.iter().any(|group| group.id == *group_id) {
+                        groups.push(GroupRecord {
+                            id: group_id.clone(),
+                            name: format!("Group-{}", groups.len() + 1),
+                            parent_id: None,
+                            locked: false,
+                        });
+                    }
+                }
+            }
+            ctx.set_groups(groups)?;
             for element in &planned {
                 ctx.upsert(element.clone())?;
             }
@@ -200,6 +214,20 @@ pub fn duplicate_elements(
     // TS forces the cascade counter 0 → 1 for duplicates: exactly one step.
     let planned = plan_paste_elements(doc, &source, 1, None)?;
     history.transaction(doc, |ctx| {
+        let mut groups = ctx.doc().groups();
+        for element in &planned {
+            for group_id in &element.base().group_ids {
+                if !groups.iter().any(|group| group.id == *group_id) {
+                    groups.push(GroupRecord {
+                        id: group_id.clone(),
+                        name: format!("Group-{}", groups.len() + 1),
+                        parent_id: None,
+                        locked: false,
+                    });
+                }
+            }
+        }
+        ctx.set_groups(groups)?;
         for element in &planned {
             ctx.upsert(element.clone())?;
         }

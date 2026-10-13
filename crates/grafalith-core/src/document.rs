@@ -58,6 +58,51 @@ pub struct DocumentSnapshot {
     pub elements: Vec<Element>,
     /// Full z-order, including tombstone ids (TS export parity).
     pub element_order: Vec<ElementId>,
+    /// Persistent group records.
+    pub groups: Vec<GroupRecord>,
+    /// Explicit display names for non-frame elements, by element id.
+    /// Frames use their own `name` field and groups use `GroupRecord.name`,
+    /// so each node kind has exactly one name store and renames stay atomic
+    /// with the element or group snapshot that carries them.
+    pub labels: Vec<ElementLabel>,
+}
+
+/// Explicit display name for one element.
+///
+/// Stored separately from element data so the frozen `BaseElement` shape
+/// never changes: renames flow through the same validate-then-store and
+/// history machinery as group renames, with trim validation, duplicate
+/// names allowed, and empty names rejected at the command boundary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElementLabel {
+    /// Labeled element id.
+    pub id: ElementId,
+    /// Trimmed display name.
+    pub name: String,
+}
+
+/// Persistent folder-like group metadata.
+///
+/// Groups are pure organizational containers without their own transform,
+/// clip, effects, or paint: every element keeps its scene-space `x/y` and
+/// the group only names a set of members. World transforms are therefore
+/// preserved trivially across grouping, ungrouping, and reparenting because
+/// no geometric rewrite ever occurs. If a future container gains a
+/// transform or clip semantic, grouping must switch to a preserving
+/// strategy that bakes the inverse delta into members instead of reusing
+/// this record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupRecord {
+    /// Stable group id referenced by element memberships.
+    pub id: ElementId,
+    /// User-visible group name.
+    pub name: String,
+    /// Parent group, or `None` for a root group.
+    pub parent_id: Option<ElementId>,
+    /// Local lock of the container itself. Descendants become effectively
+    /// locked while this flag or any ancestor's flag is set, without
+    /// touching their own local flags.
+    pub locked: bool,
 }
 
 /// Counts returned by [`Document::apply_snapshot`], mirroring TS
@@ -90,6 +135,10 @@ pub struct ImportPlan {
     pub imported: usize,
     /// Elements skipped as invalid.
     pub skipped: usize,
+    /// Validated persistent group records.
+    pub groups: Vec<GroupRecord>,
+    /// Validated display labels for admitted elements.
+    pub labels: Vec<ElementLabel>,
 }
 
 // ---------------------------------------------------------------------------
@@ -117,6 +166,11 @@ pub struct Document {
     elements: HashMap<ElementId, Element>,
     /// Z-order, back-to-front (index 0 renders first / hits last).
     order: Vec<ElementId>,
+    /// Persistent group tree metadata.
+    groups: HashMap<ElementId, GroupRecord>,
+    /// Display names for non-frame elements, by element id. Frames use
+    /// their own `name` field; this map never stores a frame id.
+    labels: HashMap<ElementId, String>,
     /// Bumped on every stored mutation; cache/event root (ARCHITECTURE
     /// §3.4). Monotonic via saturating addition.
     scene_nonce: u64,
@@ -145,6 +199,8 @@ impl Document {
         Self {
             elements: HashMap::new(),
             order: Vec::new(),
+            groups: HashMap::new(),
+            labels: HashMap::new(),
             scene_nonce: 0,
             id_gen,
             spatial: SpatialGrid::with_default_cell_size(),
@@ -201,6 +257,444 @@ impl Document {
     /// Copies the z-order vector (back-to-front).
     pub fn order(&self) -> Vec<ElementId> {
         self.order.clone()
+    }
+
+    /// Returns persistent groups in stable id order.
+    pub fn groups(&self) -> Vec<GroupRecord> {
+        let mut groups: Vec<GroupRecord> = self.groups.values().cloned().collect();
+        groups.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        groups
+    }
+
+    /// Returns one group record.
+    pub fn group(&self, id: &str) -> Option<&GroupRecord> {
+        self.groups.get(id)
+    }
+
+    /// Returns the display name for any node id: group names for groups,
+    /// frame titles for frames, explicit labels for other elements, or an
+    /// empty string when the node carries no explicit name. Names are never
+    /// identity: duplicates are allowed and empty means unnamed.
+    pub fn node_name(&self, id: &str) -> String {
+        if let Some(group) = self.groups.get(id) {
+            return group.name.clone();
+        }
+        if let Some(element) = self.elements.get(id) {
+            if let Element::Frame(frame) = element {
+                return frame.name.clone();
+            }
+            if let Some(label) = self.labels.get(id) {
+                return label.clone();
+            }
+        } else if let Some(label) = self.labels.get(id) {
+            return label.clone();
+        }
+        String::new()
+    }
+
+    /// Returns all explicit element labels in stable id order.
+    pub fn labels(&self) -> Vec<ElementLabel> {
+        let mut out: Vec<ElementLabel> = self
+            .labels
+            .iter()
+            .map(|(id, name)| ElementLabel {
+                id: id.clone(),
+                name: name.clone(),
+            })
+            .collect();
+        out.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        out
+    }
+
+    /// Replaces explicit element labels after validation. Frame ids are
+    /// rejected here because frames carry their title on the element
+    /// itself; unknown element ids are rejected so renames cannot strand
+    /// labels on missing nodes. Identical content is a no-op without a
+    /// nonce bump so history can tell real renames apart.
+    pub fn set_labels(&mut self, labels: Vec<ElementLabel>) -> EngineResult<()> {
+        let mut normalized: Vec<ElementLabel> = labels
+            .into_iter()
+            .map(|label| ElementLabel {
+                id: label.id,
+                name: label.name.trim().to_string(),
+            })
+            .collect();
+        normalized.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+        if normalized == self.labels() {
+            return Ok(());
+        }
+        for label in &normalized {
+            if label.id.as_str().is_empty() || label.name.trim().is_empty() {
+                return Err(EngineError::InvalidInput(
+                    "label id and name must not be empty".to_string(),
+                ));
+            }
+            let Some(element) = self.elements.get(label.id.as_str()) else {
+                return Err(EngineError::NotFound(format!(
+                    "label target '{}'",
+                    label.id.as_str()
+                )));
+            };
+            if matches!(element, Element::Frame(_)) {
+                return Err(EngineError::InvalidInput(format!(
+                    "element '{}' is a frame; rename the frame itself",
+                    label.id.as_str()
+                )));
+            }
+            if element.base().is_deleted {
+                return Err(EngineError::InvalidInput(format!(
+                    "label target '{}' is deleted",
+                    label.id.as_str()
+                )));
+            }
+        }
+        let mut seen = HashSet::new();
+        for label in &normalized {
+            if !seen.insert(label.id.clone()) {
+                return Err(EngineError::InvariantViolation(format!(
+                    "duplicate label for '{}'",
+                    label.id.as_str()
+                )));
+            }
+        }
+        self.labels = normalized
+            .into_iter()
+            .map(|label| (label.id, label.name))
+            .collect();
+        self.bump_nonce();
+        Ok(())
+    }
+
+    /// Local lock of one element, without ancestor inheritance.
+    pub fn local_locked(&self, id: &str) -> bool {
+        self.elements
+            .get(id)
+            .is_some_and(|element| element.base().locked)
+    }
+
+    /// Effective lock of one element: its own local flag or any ancestor
+    /// group container lock. Walks only the element's membership path plus
+    /// the group parent chain, never the whole document.
+    pub fn effective_locked(&self, id: &str) -> bool {
+        let Some(element) = self.elements.get(id) else {
+            return false;
+        };
+        if element.base().locked {
+            return true;
+        }
+        for group_id in &element.base().group_ids {
+            if self.group_effective_locked(group_id.as_str()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Effective lock of one group: its own local flag or any ancestor
+    /// group lock. Unknown groups report unlocked so stale references fail
+    /// closed at the validation layer instead of here.
+    pub fn group_effective_locked(&self, group_id: &str) -> bool {
+        let mut current = self
+            .groups
+            .get(group_id)
+            .map(|group| group as *const GroupRecord);
+        // Raw pointers avoid double-borrow issues while walking the chain;
+        // every dereference is bounded by the loop below.
+        let mut steps = 0usize;
+        while let Some(ptr) = current {
+            // Cycles are rejected by `set_groups`, but imports from older
+            // files are defensively bounded here so a corrupt chain cannot
+            // spin the hit-test path.
+            if steps > 1024 {
+                return true;
+            }
+            steps += 1;
+            let group = unsafe { &*ptr };
+            if group.locked {
+                return true;
+            }
+            current = group
+                .parent_id
+                .as_ref()
+                .and_then(|parent| self.groups.get(parent.as_str()))
+                .map(|group| group as *const GroupRecord);
+        }
+        false
+    }
+
+    /// Full ancestor chain of a group, nearest parent first.
+    pub fn group_ancestors(&self, group_id: &str) -> Vec<ElementId> {
+        let mut out = Vec::new();
+        let mut seen = HashSet::new();
+        let mut current = self
+            .groups
+            .get(group_id)
+            .and_then(|group| group.parent_id.clone());
+        while let Some(parent) = current {
+            if !seen.insert(parent.clone()) {
+                break;
+            }
+            out.push(parent.clone());
+            current = self
+                .groups
+                .get(parent.as_str())
+                .and_then(|group| group.parent_id.clone());
+            if out.len() > 1024 {
+                break;
+            }
+        }
+        out
+    }
+
+    /// Full membership path for an element placed directly under
+    /// `parent`: the parent plus its ancestors, innermost first. `None`
+    /// places the element at the root.
+    pub fn membership_for_parent(&self, parent: Option<&ElementId>) -> Vec<ElementId> {
+        match parent {
+            None => Vec::new(),
+            Some(group) => {
+                let mut path = vec![group.clone()];
+                path.extend(self.group_ancestors(group.as_str()));
+                path
+            }
+        }
+    }
+
+    /// Direct parent group of an element (innermost membership), if any.
+    pub fn direct_parent(&self, id: &str) -> Option<ElementId> {
+        self.elements
+            .get(id)
+            .and_then(|element| element.base().group_ids.first().cloned())
+    }
+
+    /// Live direct element children of a group: non-deleted elements whose
+    /// innermost membership names this group, in global z-order.
+    pub fn group_direct_elements(&self, group_id: &str) -> Vec<ElementId> {
+        let key = ElementId::of(group_id);
+        self.order
+            .iter()
+            .filter(|id| {
+                self.elements.get(id.as_str()).is_some_and(|element| {
+                    !element.base().is_deleted && element.base().group_ids.first() == Some(&key)
+                })
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Direct subgroup children of a group, in stable id order.
+    pub fn group_direct_subgroups(&self, group_id: &str) -> Vec<ElementId> {
+        let mut out: Vec<ElementId> = self
+            .groups
+            .values()
+            .filter(|group| {
+                group
+                    .parent_id
+                    .as_ref()
+                    .is_some_and(|parent| parent.as_str() == group_id)
+            })
+            .map(|group| group.id.clone())
+            .collect();
+        out.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        out
+    }
+
+    /// Count of direct children (live elements plus subgroups) of a group.
+    pub fn group_direct_child_count(&self, group_id: &str) -> usize {
+        self.group_direct_elements(group_id).len() + self.group_direct_subgroups(group_id).len()
+    }
+
+    /// All live member elements mentioning a group anywhere in their path,
+    /// in global z-order.
+    pub fn group_all_members(&self, group_id: &str) -> Vec<ElementId> {
+        let key = ElementId::of(group_id);
+        self.order
+            .iter()
+            .filter(|id| {
+                self.elements.get(id.as_str()).is_some_and(|element| {
+                    !element.base().is_deleted && element.base().group_ids.contains(&key)
+                })
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Lowest global rank among a group's live members, if any. Defines the
+    /// group's order slot for promotion and clustering decisions.
+    pub fn group_order_slot(&self, group_id: &str) -> Option<usize> {
+        let key = ElementId::of(group_id);
+        self.order.iter().position(|id| {
+            self.elements.get(id.as_str()).is_some_and(|element| {
+                !element.base().is_deleted && element.base().group_ids.contains(&key)
+            })
+        })
+    }
+
+    /// Structural invariant check for the hierarchy: every order entry names
+    /// a stored element, every membership names a stored group, no element
+    /// lists a group twice, every group parent names a stored group without
+    /// cycles or self-parenting, labels never target frames or missing
+    /// elements, and every non-deleted element path is consistent with the
+    /// group parent chain (each outer entry must be an ancestor of the
+    /// previous one).
+    pub fn validate_hierarchy(&self) -> EngineResult<()> {
+        for id in &self.order {
+            if !self.elements.contains_key(id) {
+                return Err(EngineError::InvariantViolation(format!(
+                    "element order references unknown element '{}'",
+                    id.as_str()
+                )));
+            }
+        }
+        let mut seen_order = HashSet::new();
+        for id in &self.order {
+            if !seen_order.insert(id.clone()) {
+                return Err(EngineError::InvariantViolation(format!(
+                    "element '{}' appears twice in z-order",
+                    id.as_str()
+                )));
+            }
+        }
+        for element in self.elements.values() {
+            let mut seen_groups = HashSet::new();
+            for group_id in &element.base().group_ids {
+                if !seen_groups.insert(group_id.clone()) {
+                    return Err(EngineError::InvariantViolation(format!(
+                        "element '{}' lists group '{}' twice",
+                        element.id().as_str(),
+                        group_id.as_str()
+                    )));
+                }
+                if !self.groups.contains_key(group_id.as_str()) {
+                    return Err(EngineError::InvariantViolation(format!(
+                        "element '{}' references unknown group '{}'",
+                        element.id().as_str(),
+                        group_id.as_str()
+                    )));
+                }
+            }
+            // Path consistency: each outer entry must parent the previous one.
+            let path = &element.base().group_ids;
+            for window in path.windows(2) {
+                let (inner, outer) = (&window[0], &window[1]);
+                let Some(inner_group) = self.groups.get(inner.as_str()) else {
+                    continue;
+                };
+                let expected = inner_group.parent_id.clone();
+                if expected.as_ref() != Some(outer) {
+                    return Err(EngineError::InvariantViolation(format!(
+                        "element '{}' has an inconsistent group path at '{}'",
+                        element.id().as_str(),
+                        outer.as_str()
+                    )));
+                }
+            }
+        }
+        for group in self.groups.values() {
+            if let Some(parent) = &group.parent_id {
+                if parent == &group.id {
+                    return Err(EngineError::InvariantViolation(format!(
+                        "group '{}' parents itself",
+                        group.id.as_str()
+                    )));
+                }
+                if !self.groups.contains_key(parent.as_str()) {
+                    return Err(EngineError::InvariantViolation(format!(
+                        "group '{}' references unknown parent '{}'",
+                        group.id.as_str(),
+                        parent.as_str()
+                    )));
+                }
+            }
+        }
+        // Cycle check over group parents.
+        for group in self.groups.values() {
+            let mut seen = HashSet::new();
+            let mut current = group.parent_id.clone();
+            while let Some(parent) = current {
+                if !seen.insert(parent.clone()) || parent == group.id {
+                    return Err(EngineError::InvariantViolation(format!(
+                        "group '{}' has a cyclic parent chain",
+                        group.id.as_str()
+                    )));
+                }
+                current = self
+                    .groups
+                    .get(parent.as_str())
+                    .and_then(|candidate| candidate.parent_id.clone());
+            }
+        }
+        for id in self.labels.keys() {
+            let Some(element) = self.elements.get(id.as_str()) else {
+                return Err(EngineError::InvariantViolation(format!(
+                    "label references unknown element '{}'",
+                    id.as_str()
+                )));
+            };
+            if matches!(element, Element::Frame(_)) {
+                return Err(EngineError::InvariantViolation(format!(
+                    "label targets frame '{}', which carries its own name",
+                    id.as_str()
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Replaces group metadata after validation.
+    pub fn set_groups(&mut self, groups: Vec<GroupRecord>) -> EngineResult<()> {
+        let ids: HashSet<ElementId> = groups.iter().map(|group| group.id.clone()).collect();
+        for group in &groups {
+            if group.id.as_str().is_empty() || group.name.trim().is_empty() {
+                return Err(EngineError::InvalidInput(
+                    "group id and name must not be empty".to_string(),
+                ));
+            }
+            if group
+                .parent_id
+                .as_ref()
+                .is_some_and(|parent| parent == &group.id || !ids.contains(parent))
+            {
+                return Err(EngineError::InvalidInput(format!(
+                    "group '{}' has an invalid parent",
+                    group.id.as_str()
+                )));
+            }
+            let mut seen = HashSet::new();
+            let mut current = group.parent_id.clone();
+            while let Some(parent) = current {
+                if !seen.insert(parent.clone()) || parent == group.id {
+                    return Err(EngineError::InvalidInput(format!(
+                        "group '{}' has a cyclic parent chain",
+                        group.id.as_str()
+                    )));
+                }
+                current = groups
+                    .iter()
+                    .find(|candidate| candidate.id == parent)
+                    .and_then(|candidate| candidate.parent_id.clone());
+            }
+        }
+        let mut groups_by_id = HashMap::with_capacity(groups.len());
+        for group in groups {
+            groups_by_id.insert(group.id.clone(), group);
+        }
+        self.groups = groups_by_id;
+        self.bump_nonce();
+        Ok(())
+    }
+
+    /// Mints a fresh group id.
+    ///
+    /// Collision-guarded like [`Document::fresh_element_id`]: skips group
+    /// ids already present (imported scenes and templates carry their own).
+    pub fn fresh_group_id(&mut self) -> ElementId {
+        loop {
+            let id = self.id_gen.new_group_id();
+            if !self.groups.contains_key(id.as_str()) {
+                return id;
+            }
+        }
     }
 
     /// Inserts or updates an element — the single authoritative mutation
@@ -271,14 +765,24 @@ impl Document {
     /// undo/redo. Unlike TS — which bumps unconditionally — the nonce only
     /// moves when something was actually removed. The spatial index drops
     /// the id alongside (unknown ids are silent no-ops there too).
+    /// Explicit labels are dropped with the element so renames cannot
+    /// strand names on missing nodes.
     pub fn hard_delete(&mut self, id: &str) -> EngineResult<()> {
         if self.elements.remove(id).is_some() {
             self.order.retain(|order_id| order_id.as_str() != id);
             self.bump_order_version();
             self.spatial.remove(id);
+            self.labels.remove(id);
             self.bump_nonce();
         }
         Ok(())
+    }
+
+    /// Removes one explicit element label, if present.
+    pub fn remove_label(&mut self, id: &str) {
+        if self.labels.remove(id).is_some() {
+            self.bump_nonce();
+        }
     }
 
     /// Replaces the z-order vector.
@@ -307,14 +811,28 @@ impl Document {
     /// Single authority for fresh identity: create, paste, and import paths
     /// all mint here so ids stay unique within the instance without a
     /// process global.
+    ///
+    /// Collision-guarded: the counter source knows nothing about ids that
+    /// arrived from elsewhere (imported scenes, templates, cross-document
+    /// pastes — each generator starts at `el-1`), so minting loops past
+    /// occupied ids instead of handing out an id [`CreateElements`] would
+    /// reject with an invariant violation. Tombstones count as occupied:
+    /// reusing a soft-deleted id would resurrect order/history confusion.
+    /// Call-site re-mint loops (paste, boolean) stay correct as-is: the
+    /// first mint is already fresh, so they simply never iterate.
     pub fn fresh_element_id(&mut self) -> ElementId {
-        self.id_gen.new_element_id()
+        loop {
+            let id = self.id_gen.new_element_id();
+            if !self.contains(id.as_str()) {
+                return id;
+            }
+        }
     }
 
     /// Mints a fresh group id from the document's id source
     /// (crate-internal; group operations consume it).
     pub(crate) fn next_group_id(&mut self) -> ElementId {
-        self.id_gen.new_group_id()
+        self.fresh_group_id()
     }
 
     /// Mints a fresh version nonce from the document's id source.
@@ -445,6 +963,8 @@ impl Document {
             legacy_version: LEGACY_VERSION,
             elements: self.get_all().into_iter().cloned().collect(),
             element_order: self.order.clone(),
+            groups: self.groups(),
+            labels: self.labels(),
         }
     }
 
@@ -533,11 +1053,74 @@ impl Document {
             Some(restored)
         };
 
+        let mut groups = snapshot.groups.clone();
+        let mut known_groups: HashSet<ElementId> =
+            groups.iter().map(|group| group.id.clone()).collect();
+        for element in &valid {
+            for group_id in &element.base().group_ids {
+                if known_groups.insert(group_id.clone()) {
+                    groups.push(GroupRecord {
+                        id: group_id.clone(),
+                        name: format!("Group-{}", known_groups.len()),
+                        parent_id: None,
+                        locked: false,
+                    });
+                }
+            }
+        }
+        groups.retain(|group| known_groups.contains(&group.id));
+        let group_ids = known_groups;
+        for group in &groups {
+            if group.name.trim().is_empty() {
+                return Err(EngineError::InvalidInput(format!(
+                    "group '{}' has an empty name",
+                    group.id.as_str()
+                )));
+            }
+            if group
+                .parent_id
+                .as_ref()
+                .is_some_and(|parent| !group_ids.contains(parent))
+            {
+                return Err(EngineError::InvalidInput(format!(
+                    "group '{}' references unknown parent",
+                    group.id.as_str()
+                )));
+            }
+        }
+
+        // Labels survive only for admitted, non-frame elements; stale or
+        // frame-targeted labels are dropped with a skip count instead of
+        // failing the whole import.
+        let mut labels = Vec::new();
+        let mut label_skipped = 0usize;
+        let mut seen_labels = HashSet::new();
+        for label in &snapshot.labels {
+            if label.name.trim().is_empty() || !seen_labels.insert(label.id.clone()) {
+                label_skipped += 1;
+                continue;
+            }
+            let Some(element) = valid.iter().find(|el| el.id() == &label.id) else {
+                label_skipped += 1;
+                continue;
+            };
+            if matches!(element, Element::Frame(_)) {
+                label_skipped += 1;
+                continue;
+            }
+            labels.push(ElementLabel {
+                id: label.id.clone(),
+                name: label.name.trim().to_string(),
+            });
+        }
+
         Ok(ImportPlan {
             imported: valid.len(),
-            skipped,
+            skipped: skipped + label_skipped,
+            groups,
             elements: valid,
             order,
+            labels,
         })
     }
 
@@ -570,6 +1153,8 @@ impl Document {
         if let Some(restored) = plan.order {
             self.set_order(restored)?;
         }
+        self.set_groups(plan.groups)?;
+        self.set_labels(plan.labels)?;
         self.rebuild_spatial();
 
         Ok(ImportSummary {

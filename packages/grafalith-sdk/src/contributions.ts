@@ -87,7 +87,7 @@ export function validateContributions(
     if (setting.key === "") problems.push("contributed configuration key must not be empty");
   }
   for (const [kind, tools] of Object.entries(contributes.editorTools ?? {})) {
-    if (!["design", "whiteboard", "diagram"].includes(kind)) {
+    if (!["design", "whiteboard", "slides"].includes(kind)) {
       problems.push(`unknown editorTools kind "${kind}"`);
     }
     for (const tool of tools ?? []) {
@@ -97,7 +97,7 @@ export function validateContributions(
   }
   for (const template of contributes.projectTemplates ?? []) {
     if (template.id === "") problems.push("contributed projectTemplates id must not be empty");
-    if (!["design", "whiteboard", "diagram"].includes(template.kind)) {
+    if (!["design", "whiteboard", "slides"].includes(template.kind)) {
       problems.push(`unknown projectTemplates kind "${template.kind}" for "${template.id}"`);
     }
   }

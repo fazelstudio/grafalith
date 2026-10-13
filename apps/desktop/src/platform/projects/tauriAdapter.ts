@@ -1,8 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import {
   isProjectSummary,
+  normalizeProjectCanvas,
   normalizeProjectKind,
   parseProjectError,
+  type ProjectCanvas,
   type ProjectError,
   type ProjectKind,
   type ProjectOpenResult,
@@ -23,7 +25,11 @@ function parseSummary(raw: string): ProjectSummary {
   }
   // Payloads written before kinds existed carry no kind; normalize keeps
   // every summary on the current union instead of threading optionals.
-  return { ...parsed, kind: normalizeProjectKind(parsed.kind) };
+  return {
+    ...parsed,
+    kind: normalizeProjectKind(parsed.kind),
+    canvas: normalizeProjectCanvas((parsed as unknown as Record<string, unknown>)['canvas']),
+  };
 }
 
 function parseOpen(raw: string): ProjectOpenResult {
@@ -55,7 +61,14 @@ function parseOpen(raw: string): ProjectOpenResult {
       }),
     );
   }
-  return { summary: { ...summary, kind: normalizeProjectKind(summary.kind) }, sceneJson };
+  return {
+    summary: {
+      ...summary,
+      kind: normalizeProjectKind(summary.kind),
+      canvas: normalizeProjectCanvas((summary as unknown as Record<string, unknown>)['canvas']),
+    },
+    sceneJson,
+  };
 }
 
 /** True inside the Tauri webview; false for plain browser dev/preview. */
@@ -99,8 +112,12 @@ export const tauriProjectStore = {
     await call('project_purge_expired', {}, () => undefined);
   },
 
-  async create(name: string, sceneJson: string, kind?: ProjectKind): Promise<ProjectSummary> {
-    return call('project_create', { name, sceneJson, kind: normalizeProjectKind(kind) }, parseSummary);
+  async create(name: string, sceneJson: string, kind?: ProjectKind, canvas?: ProjectCanvas): Promise<ProjectSummary> {
+    return call(
+      'project_create',
+      { name, sceneJson, kind: normalizeProjectKind(kind), canvas: normalizeProjectCanvas(canvas) },
+      parseSummary,
+    );
   },
 
   async open(id: string): Promise<ProjectOpenResult> {

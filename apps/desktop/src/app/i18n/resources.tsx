@@ -1,11 +1,34 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import en from './en';
 import id from './id';
-import { DEFAULT_LOCALE, type Locale } from './locales';
 import { preferenceService } from '../../platform/preferences/preferenceService';
 
-export type { Locale } from './locales';
-export { DEFAULT_LOCALE, LOCALES } from './locales';
+/** Available locale codes. */
+export type Locale = 'en' | 'id';
+export const LOCALES: readonly Locale[] = ['en', 'id'];
+export const DEFAULT_LOCALE: Locale = 'en';
+
+/** Locale selection entry; the settings UI renders this list directly. */
+export interface LocaleMeta {
+  code: Locale;
+  nameKey: string;
+}
+
+/**
+ * Single registry for available locales. Codes, selection entries,
+ * dictionaries, translation, and diagnostics all live in this file, so
+ * contributors add a locale in exactly one place: one entry in each list
+ * below plus one resource directory beside `en` and `id`.
+ */
+export const LOCALE_LIST: readonly LocaleMeta[] = [
+  { code: 'en', nameKey: 'settings.general.localeNames.en' },
+  { code: 'id', nameKey: 'settings.general.localeNames.id' },
+];
+
+/** Type guard for persisted locale values. */
+export function isLocale(value: unknown): value is Locale {
+  return value === 'en' || value === 'id';
+}
 
 const resources = { en, id } as const;
 
@@ -77,6 +100,19 @@ function translate(locale: Locale, key: string, params?: Record<string, string |
     console.warn(`[i18n] unknown key "${key}"`);
   }
   return key;
+}
+
+/**
+ * Pure translator for non-React platform code (extension host, watcher,
+ * fatal dialog) that cannot use the `useI18n` hook. Same dictionaries,
+ * same English fallback, same `{name}` interpolation as the hook.
+ */
+export function translateKey(
+  locale: Locale,
+  key: string,
+  params?: Record<string, string | number>,
+): string {
+  return translate(locale, key, params);
 }
 
 interface I18nContextValue {

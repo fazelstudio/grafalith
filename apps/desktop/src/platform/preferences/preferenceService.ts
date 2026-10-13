@@ -8,7 +8,7 @@ import {
   loadLocale as loadStoredLocale,
   saveLocale as saveStoredLocale,
 } from './preferences';
-import type { Locale } from '../../app/i18n/locales';
+import type { Locale } from '../../app/i18n/resources';
 import type { ThemeMode } from '../../app/theme/tokens';
 import type { HomeViewMode } from './editorWorkspace';
 import { loadThemeMode as loadStoredTheme, saveThemeMode as saveStoredTheme } from './preferences';

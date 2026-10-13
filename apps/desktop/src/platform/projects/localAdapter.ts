@@ -5,8 +5,10 @@ import {
 import { persistenceConfig } from './persistenceConfig';
 import {
   DEFAULT_PROJECT_KIND,
+  normalizeProjectCanvas,
   normalizeProjectKind,
   parseProjectError,
+  type ProjectCanvas,
   type ProjectError,
   type ProjectKind,
   type ProjectOpenResult,
@@ -23,6 +25,8 @@ interface StoredMeta {
   name: string;
   /** Editor family; entries written before kinds existed have no value. */
   kind?: ProjectKind;
+  /** Canvas config; entries written before it existed have no value. */
+  canvas?: ProjectCanvas;
   createdAtMs: number;
   updatedAtMs: number;
   lastOpenedAtMs?: number;
@@ -106,6 +110,7 @@ function toSummary(meta: StoredMeta, documentExists: boolean): ProjectSummary {
     id: meta.id,
     name: meta.name,
     kind: normalizeProjectKind(meta.kind),
+    canvas: normalizeProjectCanvas(meta.canvas),
     createdAtMs: meta.createdAtMs,
     updatedAtMs: meta.updatedAtMs,
     lastOpenedAtMs: meta.lastOpenedAtMs,
@@ -188,7 +193,12 @@ export function createLocalProjectStore(storage: KeyValueStorage = backingStorag
       pruneExpired(storage, readIndex(storage), Date.now());
     },
 
-    async create(name: string, sceneJson: string, kind: ProjectKind = DEFAULT_PROJECT_KIND): Promise<ProjectSummary> {
+    async create(
+      name: string,
+      sceneJson: string,
+      kind: ProjectKind = DEFAULT_PROJECT_KIND,
+      canvas?: ProjectCanvas,
+    ): Promise<ProjectSummary> {
       const clean = cleanName(name);
       const version = checkScene(sceneJson);
       const now = Date.now();
@@ -196,6 +206,7 @@ export function createLocalProjectStore(storage: KeyValueStorage = backingStorag
         id: makeId(),
         name: clean,
         kind: normalizeProjectKind(kind),
+        canvas: normalizeProjectCanvas(canvas),
         createdAtMs: now,
         updatedAtMs: now,
         lastOpenedAtMs: now,
@@ -284,6 +295,7 @@ export function createLocalProjectStore(storage: KeyValueStorage = backingStorag
         id: makeId(),
         name: `${source.name} copy`.slice(0, persistenceConfig.maxNameLength),
         kind: normalizeProjectKind(source.kind),
+        canvas: normalizeProjectCanvas(source.canvas),
         createdAtMs: now,
         updatedAtMs: now,
         lastOpenedAtMs: now,

@@ -39,6 +39,12 @@ The engine owns all state. Hosts translate DOM events into `apply_batch` ops
 (`pointerDown`, `pointerMove`, `pointerUp`, `wheel`, `keyDown`, `textInput`, …)
 and render from the `renderModel` op's deterministic `RenderModelDto`.
 
+Paint rotated entries from `frame` (unrotated box) with `rotation` about its
+center; `bounds` is the rotation-aware AABB for culling/hit-testing only.
+Painting `bounds` dims rotated double-applies the rotation and visibly grows
+the shape at non-90° angles. The selection overlay follows the same rule
+(`frame` for outline/handles, `bounds` for extents).
+
 ## Protocol shape
 
 Every method takes and returns JSON strings, never throws across the boundary.

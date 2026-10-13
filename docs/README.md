@@ -2,10 +2,10 @@
 
 Start here to understand, use, and contribute to Grafalith.
 
-## Product
+## Product and architecture
 
-- [`PRD.md`](./PRD.md) — what Grafalith is, who it serves, and what is in scope.
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — technical contract: data model, rendering, history, and boundaries.
+- [`PRD.md`](./PRD.md) — product goals, target users, scope, and requirements.
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — technical contracts, data model, rendering, history, and architectural boundaries.
 
 ## Guides
 
@@ -13,13 +13,15 @@ Start here to understand, use, and contribute to Grafalith.
 - [`guides/python.md`](./guides/python.md) — use the engine from Python (PyPI).
 - [`guides/desktop.md`](./guides/desktop.md) — run the Tauri desktop demo (reference host).
 - [`guides/commands.md`](./guides/commands.md) — command and protocol reference for host developers.
-- [`guides/extensions.md`](./guides/extensions.md) — add engine capabilities and ship desktop extensions   (`.grlt`) without forking.
-- [`guides/extension-ecosystem.md`](./guides/extension-ecosystem.md) — extension ecosystem architecture: lifecycle phases, hosting decisions, manifest contract, and API surface.
-- [`guides/comment-guidelines.md`](./guides/comment-guidelines.md) — how to write source-code comments.
-- [`guides/locale-guide.md`](./guides/locale-guide.md) — how UI text and locales work in the desktop app.
+- [`guides/extensions.md`](./guides/extensions.md) — extend engine capabilities and package desktop extensions (`.grlt`) without forking.
+- [`guides/extension-ecosystem.md`](./guides/extension-ecosystem.md) — extension architecture, lifecycle, hosting decisions, manifest contract, and API boundaries.
+- [`guides/slides.md`](./guides/slides.md) — PowerPoint (`.pptx`) export foundation and supported subset.
+- [`guides/comment-guidelines.md`](./guides/comment-guidelines.md) — rules for source-code comments and API/module documentation.
+- [`guides/locale-guide.md`](./guides/locale-guide.md) — desktop UI text and locale conventions.
 
-## Development
+## Development and repository references
 
-- [`../DEVELOPMENT.md`](../DEVELOPMENT.md) — setup, test, lint, build, and publishing.
-- [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — workflow for contributors.
-- [`../crates/README.md`](../crates/README.md) — Rust workspace map and design rules.
+- [`../DEVELOPMENT.md`](../DEVELOPMENT.md) — local setup, tests, lint, builds, and development commands.
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — contributor workflow and contribution expectations.
+- [`../DESIGN.md`](../DESIGN.md) — implementation map and design decisions verified against the current source code.
+- [`../crates/README.md`](../crates/README.md) — Rust workspace map, crate responsibilities, dependency direction, and design rules.

@@ -2,7 +2,7 @@
 
 Single source of truth: the COMMANDS table in that script, mirroring
 crates/grafalith-bindings/src/protocol.rs (pinned by the command_coverage
-test: 79 unique wire names).
+test: 87 unique wire names).
 """
 
 from typing import Any, Union
@@ -60,5 +60,5 @@ class Engine:
     @staticmethod
     def protocol_version() -> int: ...
 
-# Wire ops covered: 79
-# "create", "delete", "move", "setBounds", "setRotation", "setStyle", "setLocked", "reorder", "group", "ungroup", "select", "setTool", "copy", "paste", "duplicate", "cut", "nudge", "deleteSelected", "undo", "redo", "importScene", "importSvg", "exportScene", "pointerDown", "pointerMove", "pointerUp", "pointerCancel", "keyDown", "wheel", "setViewport", "fitViewport", "fillViewport", "configure", "notifyAssetsChanged", "startTextAt", "textInput", "textBackspace", "textDelete", "textSetCaret", "compositionStart", "compositionUpdate", "compositionEnd", "commitText", "cancelText", "bringToFront", "sendToBack", "bringForward", "sendBackward", "align", "distribute", "applyAutoLayout", "resizeSelection", "penBegin", "penClick", "penDragHandle", "penCommit", "penCancel", "cropStart", "cropDrag", "cropCommit", "cropCancel", "pathEditBegin", "pathEditPress", "pathEditDrag", "pathEditRelease", "pathEditCommit", "pathEditCancel", "renderModel", "previewMove", "previewResize", "previewRotate", "contextMenu", "drainEvents", "sessionState", "executeCommand", "booleanUnion", "booleanSubtract", "booleanIntersect", "booleanExclude"
+# Wire ops covered: 88
+# "create", "delete", "move", "setBounds", "setRotation", "setStyle", "setLocked", "reorder", "group", "ungroup", "renameGroup", "reparentGroup", "moveToGroup", "setGroupLocked", "renameNode", "reparentNodes", "duplicateNodes", "select", "setTool", "copy", "paste", "duplicate", "cut", "nudge", "deleteSelected", "undo", "redo", "importScene", "importSvg", "exportScene", "pointerDown", "pointerMove", "pointerUp", "pointerCancel", "commitDraw", "keyDown", "wheel", "setViewport", "fitViewport", "fillViewport", "configure", "notifyAssetsChanged", "startTextAt", "textInput", "textBackspace", "textDelete", "textSetCaret", "compositionStart", "compositionUpdate", "compositionEnd", "commitText", "cancelText", "bringToFront", "sendToBack", "bringForward", "sendBackward", "align", "distribute", "applyAutoLayout", "resizeSelection", "penBegin", "penClick", "penDragHandle", "penCommit", "penCancel", "cropStart", "cropDrag", "cropCommit", "cropCancel", "pathEditBegin", "pathEditPress", "pathEditDrag", "pathEditRelease", "pathEditCommit", "pathEditCancel", "renderModel", "previewMove", "previewResize", "previewRotate", "contextMenu", "drainEvents", "sessionState", "executeCommand", "booleanUnion", "booleanSubtract", "booleanIntersect", "booleanExclude", "planPngExport"

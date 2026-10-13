@@ -23,7 +23,7 @@
     "tauri": "bun run --filter @fazelstudio/desktop tauri",
     "tauri:dev": "bun run --filter @fazelstudio/desktop tauri:dev",
     "tauri:build": "bun run --filter @fazelstudio/desktop tauri:build",
-    "verify:docs": "python3 scripts/verify-docs.py",
+    "verify:docs": "python scripts/verify-docs.py",
     "verify:bindings": "python3 scripts/gen_command_bindings.py --check",
     "verify:packages": "python3 scripts/verify_crate_publish.py",
     "i18n:verify": "bun run --filter @fazelstudio/desktop i18n:verify",

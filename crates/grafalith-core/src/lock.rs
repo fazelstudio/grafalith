@@ -1,11 +1,11 @@
 //! Lock / unlock operations.
 //!
-//! TS source: `packages/core/src/scene/lock-actions.ts`.
-//!
-//! Locked is a mutation guard, not a UI hint: locked elements are skipped
-//! by destructive paths (delete, group tagging), and move/resize/rotate
-//! skip them as well.
+//! Local flags live on each node while the observed state inherits through
+//! ancestors. Locking a group container makes every descendant effectively
+//! locked without rewriting stored child flags, and unlocking restores each
+//! descendant to its own stored flag.
 
+use crate::command::{Command, SetGroupLocked};
 use crate::document::Document;
 use crate::element::ElementId;
 use crate::EngineResult;
@@ -52,6 +52,56 @@ fn set_locked(doc: &mut Document, element_ids: &[ElementId], locked: bool) -> En
         doc.upsert(next)?;
     }
     Ok(())
+}
+
+/// Sets the local lock flag on group containers.
+pub fn lock_groups(doc: &mut Document, group_ids: &[ElementId]) -> EngineResult<()> {
+    set_group_locked(doc, group_ids, true)
+}
+
+/// Clears the local lock flag on group containers.
+pub fn unlock_groups(doc: &mut Document, group_ids: &[ElementId]) -> EngineResult<()> {
+    set_group_locked(doc, group_ids, false)
+}
+
+/// Shared group lock writer.
+fn set_group_locked(doc: &mut Document, group_ids: &[ElementId], locked: bool) -> EngineResult<()> {
+    let mut groups = doc.groups();
+    let mut touched = false;
+    for id in group_ids {
+        if let Some(record) = groups.iter_mut().find(|group| group.id == *id) {
+            if record.locked != locked {
+                record.locked = locked;
+                touched = true;
+            }
+        }
+    }
+    if touched {
+        doc.set_groups(groups)?;
+    }
+    Ok(())
+}
+
+/// Direct wrapper for the history-backed group lock command.
+pub fn apply_group_lock(
+    ctx: &mut crate::command::CommandContext,
+    ids: &[ElementId],
+    locked: bool,
+) -> EngineResult<crate::command::CommandOutcome> {
+    let mut cmd = SetGroupLocked::new(ids.to_vec(), locked);
+    cmd.execute(ctx)
+}
+
+/// Returns `true` when the node is effectively locked through itself or an
+/// ancestor container.
+pub fn is_effectively_locked(doc: &Document, id: &str) -> bool {
+    doc.effective_locked(id)
+}
+
+/// Returns `true` when the group container is effectively locked through
+/// itself or an ancestor container.
+pub fn is_group_effectively_locked(doc: &Document, group_id: &str) -> bool {
+    doc.group_effective_locked(group_id)
 }
 
 #[cfg(test)]

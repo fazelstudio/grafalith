@@ -3,16 +3,24 @@ import type { ContentBounds } from './viewport';
 
 /** One row in the layers panel, derived from the render model. */
 export interface NavigatorEntry {
-  /** Engine element id. */
+  /** Engine node id (element id or group id). */
   id: string;
-  /** Element kind (`rectangle`, `frame`, `text`, …). */
+  /** Element kind (`rectangle`, `frame`, `text`, …) or `'group'`. */
   kind: string;
-  /** Human-readable name; empty when the element carries no name. */
+  /** Human-readable name; empty when the node carries no name. */
   name: string;
   /** Nesting depth (frame children render indented). */
   depth: number;
-  /** Whether the element is in the current engine selection. */
+  /** Whether the row is in the current tree selection. */
   selected: boolean;
+  /** Local lock flag stored on the node itself. */
+  locked: boolean;
+  /** Observed lock through the node or an ancestor container. */
+  effectiveLocked: boolean;
+  /** True for group container rows. */
+  group: boolean;
+  /** Membership path, innermost group first (empty for root nodes). */
+  groupIds: string[];
 }
 
 /**
@@ -25,35 +33,74 @@ export function buildNavigatorEntries(
 ): NavigatorEntry[] {
   const selected = new Set(selection);
   const entries: NavigatorEntry[] = [];
-  const base = [...model.base].reverse();
-  for (const entry of base) {
+  const groups = new Map<string, NavigatorEntry>();
+  const groupMetadata = new Map((model.groups ?? []).map((group) => [group.id, group]));
+  const add = (entry: RenderModelDto['base'][number], depth = 0): void => {
+    const path = (Array.isArray(entry.groupIds) ? entry.groupIds : []).slice().reverse();
+    path.forEach((groupId, index) => {
+      if (!groups.has(groupId)) {
+        const meta = groupMetadata.get(groupId);
+        groups.set(groupId, {
+          id: groupId,
+          kind: 'group',
+          name: meta?.name ?? `Group-${groups.size + 1}`,
+          depth: index,
+          selected: selected.has(groupId),
+          locked: meta?.locked ?? false,
+          effectiveLocked: meta?.effectiveLocked ?? false,
+          group: true,
+          groupIds: path.slice(0, index),
+        });
+        entries.push(groups.get(groupId)!);
+      }
+    });
     entries.push({
       id: entry.id,
       kind: entry.kind,
-      name: entryName(entry.kind, entry.detail),
-      depth: 0,
+      name: entry.label !== '' ? entry.label : entryName(entry.kind, entry.detail),
+      depth: depth + path.length,
       selected: selected.has(entry.id),
+      locked: entry.locked,
+      effectiveLocked: entry.effectiveLocked,
+      group: false,
+      groupIds: entry.groupIds,
     });
+  };
+  const base = [...model.base].reverse();
+  for (const entry of base) {
+    add(entry);
   }
   const passes = [...model.frames].reverse();
   for (const pass of passes) {
-    entries.push({
-      id: pass.frame.id,
-      kind: pass.frame.kind,
-      name: entryName(pass.frame.kind, pass.frame.detail),
-      depth: 0,
-      selected: selected.has(pass.frame.id),
-    });
+    add(pass.frame);
     const children = [...pass.children].reverse();
     for (const child of children) {
-      entries.push({
-        id: child.id,
-        kind: child.kind,
-        name: entryName(child.kind, child.detail),
-        depth: 1,
-        selected: selected.has(child.id),
-      });
+      add(child, 1);
     }
+  }
+  for (const group of model.groups ?? []) {
+    if (groups.has(group.id)) continue;
+    let depth = 0;
+    let parent = group.parentGroupId;
+    const seen = new Set<string>();
+    while (parent && !seen.has(parent)) {
+      seen.add(parent);
+      depth += 1;
+      parent = groupMetadata.get(parent)?.parentGroupId ?? null;
+    }
+    const row: NavigatorEntry = {
+      id: group.id,
+      kind: 'group',
+      name: group.name,
+      depth,
+      selected: selected.has(group.id),
+      locked: group.locked,
+      effectiveLocked: group.effectiveLocked,
+      group: true,
+      groupIds: [],
+    };
+    groups.set(group.id, row);
+    entries.push(row);
   }
   return entries;
 }

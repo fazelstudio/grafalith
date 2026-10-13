@@ -60,7 +60,7 @@ export interface AppCommandContext {
   toggleStickyTool?: () => void;
   /** Targeted project for card-scoped commands (home menu, editor duplicate). */
   targetProjectId?: string;
-  /** Targeted kind for project creation (design, whiteboard, diagram). */
+  /** Targeted kind for project creation (design, whiteboard, slides). */
   targetKind?: string;
   /** Targeted name for creation and rename dialogs. */
   targetName?: string;
@@ -177,7 +177,7 @@ const APP_COMMANDS: readonly AppCommandDefinition[] = [
     scope: 'project',
     category: 'project',
     surfaces: ['menu', 'palette'],
-    keywords: ['new', 'create', 'project', 'design', 'whiteboard', 'diagram'],
+    keywords: ['new', 'create', 'project', 'design', 'whiteboard'],
     icon: 'plus',
     canExecute: (ctx) => needsCallback(ctx, 'newProject'),
     execute: (ctx) => ctx.newProject?.(ctx.targetKind ?? 'design'),

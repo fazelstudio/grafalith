@@ -1,0 +1,22 @@
+[package]
+name = "grafalith-pptx"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["fazelstudio"]
+description = "PowerPoint (.pptx) slide export foundation for the Grafalith engine: hand-written ZIP framing, CRC32, base64, and XML builders over a minimal deflate/XML core, plus a blank-slide package builder registered as an exporter capability."
+repository = "https://github.com/fazelstudio/grafalith"
+homepage = "https://github.com/fazelstudio/grafalith"
+keywords = ["powerpoint", "pptx", "slides", "export", "graphics"]
+categories = ["graphics", "encoding", "multimedia"]
+
+[dependencies]
+grafalith-core = { version = "0.1.0", path = "../grafalith-core" }
+# Deflate codec only (pure-Rust backend, no C, WASM-safe). ZIP framing,
+# CRC32, base64, and the XML builders are hand-written in this crate.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+# XML parsing for package verification and the future import stage.
+quick-xml = { version = "0.42", default-features = false }
+
+[lints]
+workspace = true

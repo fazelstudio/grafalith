@@ -15,6 +15,14 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.trash__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+
 .trash-card {
   min-height: 76px;
   display: flex;

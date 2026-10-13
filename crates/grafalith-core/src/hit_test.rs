@@ -297,7 +297,7 @@ pub fn hit_test_all(
         if filter.skip_deleted && base.is_deleted {
             continue;
         }
-        if filter.skip_locked && base.locked {
+        if filter.skip_locked && document.effective_locked(id.as_str()) {
             continue;
         }
         if filter.skip_hidden && base.hidden {
@@ -339,7 +339,7 @@ pub fn hit_test_top_indexed(
         if filter.skip_deleted && base.is_deleted {
             continue;
         }
-        if filter.skip_locked && base.locked {
+        if filter.skip_locked && document.effective_locked(id.as_str()) {
             continue;
         }
         if filter.skip_hidden && base.hidden {

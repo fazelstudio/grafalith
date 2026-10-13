@@ -18,8 +18,8 @@
 //! Module map (flat files, grouped by responsibility): `element` and
 //! `document` form the domain; `command` and `history` the history layer;
 //! `editor`, `editor_state`, `selection`, `gesture`, `text_session`, and
-//! `interaction` the session; group, lock, z-order, style, frame,
-//! alignment, arrow binding, constraints, auto-layout, clipboard,
+//! `interaction` the session; group, hierarchy, lock, z-order, style,
+//! frame, alignment, arrow binding, constraints, auto-layout, clipboard,
 //! components, assets, path editing, and boolean ops the operations;
 //! hit-testing, the render model, canvas mode, and theme the view; the
 //! shape/extension/serializer modules the extension points.
@@ -74,6 +74,7 @@ pub mod extension;
 pub mod frame;
 pub mod gesture;
 pub mod group;
+pub mod hierarchy;
 pub mod history;
 pub mod hit_test;
 pub mod interaction;

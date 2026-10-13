@@ -18,7 +18,7 @@ This script is the pre-publish gate for the crates.io channel. It verifies:
    the manifest parses and the packaged file set is clean (no fuzz harness,
    no build output, no stale artifacts).
 4. The internal dependency graph is acyclic and in topological order, so the
-   documented publish order (geometry -> core -> io/bindings/sdk/text) works.
+   documented publish order (geometry -> core -> io/pptx/bindings/sdk/text) works.
 
 Run with `python scripts/verify_crate_publish.py`.
 """
@@ -40,6 +40,7 @@ PUBLISHABLE = [
     "grafalith-geometry",
     "grafalith-core",
     "grafalith-io",
+    "grafalith-pptx",
     "grafalith-bindings",
     "grafalith-sdk",
     "grafalith-text",

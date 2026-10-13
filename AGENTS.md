@@ -1,334 +1,84 @@
-# AGENTS.md — Instructions for AI Coding Agents
+# AGENTS.md — Repository Instructions for AI Agents
 
-This document MUST be read before doing any task in this repository.
+Read this file before making any repository change. Also read any `AGENTS.md` in the directories you will modify.
 
-If a task instruction contradicts this document or an established project constraint, do not guess or silently override the constraint. Stop and ask the user for a decision.
+## 1. Agent execution standard
 
-## 1. Project
+The goal is to complete the requested scope correctly and thoroughly—not merely to produce a small diff or make the happy path work. Do not interpret scope control as permission to skip necessary edge cases, integration, tests, or documentation. At the same time, do not add speculative features, unnecessary abstractions, or unrelated refactors.
 
-Grafalith is a lightweight and efficient canvas drawing engine similar to Excalidraw and TLDraw.
+For non-trivial tasks, follow this workflow:
 
-The engine is a Rust workspace under `crates/*` and is distributed through:
+1. **Explore:** Read this file and applicable nested `AGENTS.md` files. Inspect relevant documentation, source, tests, manifests, callers, generated files, and host integrations before editing.
+2. **Analyze:** Compare intended behavior with current behavior. Trace the relevant flow end-to-end, identify the root cause or missing capability, and list invariants, failure modes, edge cases, and affected boundaries.
+3. **Decide:** Establish whether the existing implementation is correct, incomplete, incorrect, or inefficient before adding or replacing code. Reuse correct implementations; change them when evidence shows a defect or a contract gap. Do not create parallel implementations of the same responsibility.
+4. **Implement:** Complete the requested acceptance criteria across every affected layer within scope. Preserve architectural contracts, state ownership, error behavior, compatibility, and existing functionality. Do not stop after a plan, scaffolding, or a happy-path-only change.
+5. **Test:** Add or update meaningful unit, integration, and regression tests. Cover relevant invalid inputs, boundary conditions, failure paths, state transitions, and interactions with existing features—not just the new function in isolation.
+6. **Verify:** Run the relevant formatter, linter, tests, build, typecheck, code-generation checks, and manual host checks when applicable. For performance-sensitive changes, inspect complexity and allocations; benchmark when useful and feasible rather than claiming performance from intuition.
+7. **Review:** Inspect the complete diff for stale or duplicated logic, partial integrations, accidental scope creep, missed generated files, and documentation drift. Report the actual results and any remaining blockers.
 
-* npm as `@fazelstudio/grafalith` using `wasm-pack`
-* PyPI as `grafalith` using `maturin`
+Choose the simplest design that fully satisfies the requirements and established contracts. “Simple” must not mean incomplete; “thorough” must not mean over-engineered. If a blocker prevents full completion, finish all safe, independent work and state exactly what remains, why it is blocked, and what decision or environment is needed. Never silently leave known essential work unfinished or claim unverified success.
 
-The engine has zero framework dependencies. Engine crates must not import React, Vue, or other UI frameworks, and must not access the DOM or Canvas directly.
+## 2. Reference map
 
-Hosts such as the Tauri desktop application, browser applications, and custom UIs render the deterministic `RenderModel` produced by the engine.
+| Task | Read these references when relevant |
+|---|---|
+| Product scope or behavior | `docs/PRD.md` |
+| Data model, module boundaries, mutation, rendering, history, or protocol | `docs/ARCHITECTURE.md`, `DESIGN.md`, `crates/README.md`, relevant crate docs/source |
+| Public commands or generated host bindings | `docs/guides/commands.md`, `scripts/gen_command_bindings.py`, generated files |
+| JavaScript/TypeScript or Python integration | The matching guide under `docs/guides/` and the binding crate |
+| Desktop UI or localization | `apps/desktop/` instructions and `docs/guides/locale-guide.md` |
+| Source-code comments | `docs/guides/comment-guidelines.md` |
+| Build, test, lint, packaging, or release | `DEVELOPMENT.md` or `RELEASING.md` |
 
-## 2. Required Reading
+A task-specific instruction to read a document does not make that document optional. If a reference is missing or contradictory, inspect the source and report the discrepancy rather than inventing its contents.
 
-Before working on a task, read the documentation relevant to that task.
+## 3. Project boundaries
 
-### Always read
+- Grafalith's engine is implemented in Rust. Engine crates must remain independent of React, Vue, Tauri, DOM APIs, and host rendering APIs.
+- The engine produces deterministic render data (including the applicable `RenderModel` contract); hosts render it and own platform-specific UI and input integration.
+- Keep element/document data separate from behavior such as rendering, hit testing, and interaction handling.
+- Store document geometry in scene/document coordinates. Convert screen coordinates at the host input or rendering boundary.
+- All document mutations must pass through the established `Document` mutation path so versioning, invalidation, and invariants remain centralized.
+- User operations must use the established command/history mechanism and remain atomic and undoable where the operation is user-visible.
+- Preserve the repository's soft-delete behavior (`isDeleted`) unless an approved architecture change says otherwise.
+- `grafalith-bindings` owns the host JSON-string protocol. Wrapper crates and host adapters must not introduce competing protocol or domain implementations.
+- Follow dependency direction and crate responsibilities documented in `crates/README.md`, Cargo manifests, and the verified architecture contract.
 
-* `docs/PRD.md` — feature scope and explicit in/out boundaries.
-* `docs/ARCHITECTURE.md` — technical contract, data structures, rendering patterns, and spatial index.
-* `crates/README.md` — crate map, dependency direction, design rules, and parity notes.
+## 4. Scope and design decisions
 
-### Read when relevant
+- Change only what is required by the current task. Do not opportunistically fix unrelated issues or perform broad refactors.
+- Reuse existing APIs and abstractions when they are correct. Do not create parallel state, caches, command paths, or duplicated business rules without a demonstrated need.
+- Prefer measured performance improvements. Avoid unnecessary full-document cloning, repeated tree-wide scans, redundant allocations, polling, or per-event work in hot paths.
+- Do not guess ambiguous product behavior. Check the PRD, architecture/design notes, tests, and established conventions. If a consequential decision remains unresolved, explain the options and ask for direction.
+- Do not change established data contracts, dependency boundaries, serialization formats, or major rendering architecture without explicit maintainer approval.
+- Do not add a substantial dependency, especially one affecting WASM/native compatibility or bundle size, without reporting the trade-off and obtaining approval where required.
 
-* `docs/guides/locale-guide.md` when touching desktop UI text or locales.
-* `docs/guides/comment-guidelines.md` when writing, reviewing, or rewriting source-code comments or documentation.
+## 5. Documentation and generated files
 
-Do not deviate from an established architecture decision without explicit user approval.
+Documentation is part of the implementation. Update the smallest relevant set of documents in the same task:
 
-## 3. Scope
+- Public behavior or scope changes: `docs/PRD.md` or the relevant guide.
+- Architectural invariants or cross-crate contracts: `docs/ARCHITECTURE.md` and, if needed, `DESIGN.md`.
+- Crate responsibilities or dependency direction: `crates/README.md`.
+- Public commands/protocol: command guide and generated bindings through the repository's generator.
+- Development or release workflow: the relevant root guide.
 
-Work only on the task requested by the user in the current session.
+Do not duplicate long instructions across files; link to the canonical reference. Do not edit generated artifacts by hand when they are produced by a generator.
 
-Do not:
+## 6. Checks and definition of done
 
-* Start another task because it appears related.
-* Fix unrelated problems discovered while working.
-* Refactor unrelated code.
-* Change established architecture decisions without approval.
-* Modify project documentation outside the requested scope.
+Use `DEVELOPMENT.md` for canonical commands. Run the checks relevant to the change, review the final diff, and manually verify host behavior when a desktop interaction is affected and the environment permits it.
 
-Documentation sync is part of the requested scope: every change to engine
-crates (`crates/*`) or hosts (`apps/*`, `packages/*`, `examples/*`) must
-also update the related documents in the same session, so information stays
-relevant, valid, and current instead of going stale. Code without its doc
-update is incomplete.
+A task is complete only when:
 
-If completing the requested task requires changing an established architecture decision, stop and ask the user before making that change.
+- the change addresses the root cause and preserves existing invariants;
+- regression tests cover the important behavior and edge cases;
+- related docs and generated artifacts are current;
+- no unrelated files or changes were introduced;
+- the final report lists actual checks and their results, including any checks that could not run.
 
-## 4. Architecture Constraints
+Never claim a test, build, lint, benchmark, or manual check passed unless it was actually run.
 
-The following project constraints must be preserved.
+## 7. When instructions conflict
 
-* Elements are plain data, not classes. Behavior such as rendering and hit testing is implemented separately from element data.
-* Elements are stored in scene coordinates, not screen coordinates. Coordinate conversion occurs at the rendering or input boundary.
-* Every element mutation goes through `Document`, which is the sole version/nonce authority.
-* Every user intent is represented by a `Command` executed through `HistoryManager`.
-* Each user operation must produce one undoable, atomic history entry.
-* Element mutation follows the established validate-then-store flow.
-* Delete is a soft delete using `isDeleted = true`; elements are not removed from the scene map.
-* `grafalith-core` must not depend on host bindings, renderers, DOM/Canvas APIs, React, or Tauri.
-* `grafalith-bindings` is the only crate that owns the JSON-string protocol.
-* `grafalith` and `grafalith-python` are thin wrappers around `grafalith-bindings`.
-* Host adapters such as Tauri commands, browser JavaScript, and Python integration remain outside the engine crates.
-
-Do not change the element interfaces defined in `docs/ARCHITECTURE.md` without explicit user approval.
-
-## 5. Repository Structure
-
-```text
-crates/
-  grafalith-geometry/  # Pure 2D math: point, bounds, transform, hit, path, spatial, snap, viewport
-  grafalith-core/      # Document domain and editor session
-  grafalith-io/        # Interchange: versioned JSON schema, import pipeline, clipboard codec, PNG descriptors
-  grafalith-bindings/  # Host boundary: JSON-string protocol, Engine facade, render/session DTOs
-  grafalith/           # npm distribution through wasm-pack
-  grafalith-python/    # PyPI distribution through maturin/PyO3
-  grafalith-sdk/       # Rust SDK facade for extensions
-  grafalith-text/      # Text measurement and shaping helpers
-
-apps/
-  desktop/        # Tauri demo application and reference host
-
-packages/
-  grafalith-sdk/       # TypeScript SDK: typed client, extension registry, overlays
-
-examples/
-  custom-button/  # One toolbar scenario on three hosts (Rust/JS/Python)
-  ext-sticker/    # Standalone extension example (own workspace)
-
-scripts/
-  gen_command_bindings.py  # Single source for generated protocol bindings
-
-generated/
-  grafalith-commands.d.ts  # Generated TS bindings (checked by CI)
-  grafalith.pyi            # Generated Python stubs (checked by CI)
-
-docs/
-  PRD.md              # Product scope and explicit in/out boundaries
-  ARCHITECTURE.md     # Technical contract
-  README.md           # Documentation index
-  guides/             # Usage and contributor guides (js, python, desktop,
-                      # commands, extensions, comments, locales)
-```
-
-Dependency direction:
-
-```text
-grafalith / grafalith-python
-        ↓
-grafalith-bindings
-        ↓
-grafalith-io
-        ↓
-grafalith-core
-        ↓
-grafalith-geometry
-```
-
-The `workspace_wiring` test enforces this dependency direction.
-
-## 6. Code Conventions
-
-* Rust source is the engine source of truth.
-* Bun is used for the Tauri desktop application under `apps/desktop`.
-* Rust file names use `snake_case.rs`.
-* Rust types use `PascalCase`.
-* Rust functions, methods, and variables use `snake_case`.
-* TypeScript follows the repository's established TypeScript naming conventions.
-* Elements remain plain data; do not attach behavior such as rendering or hit testing to element types.
-* All element mutations go through `Document`.
-* All user intents go through `Command` and `HistoryManager`.
-* Deletion is implemented as a soft delete using `isDeleted`.
-* Public Rust items must have appropriate Rustdoc because workspace lints enforce `missing_docs`.
-
-Keep documentation concise and focused on behavior, contracts, constraints, and information useful to API consumers.
-
-For detailed source-code comment rules, follow:
-
-`docs/guides/comment-guidelines.md`
-
-## 7. Project Commands
-
-Canonical reference: `DEVELOPMENT.md` — the command list below is a quick
-summary; if they diverge, `DEVELOPMENT.md` wins.
-
-Run the commands relevant to the changes made.
-
-### Test
-
-```bash
-cargo test --workspace
-```
-
-### Lint
-
-The workspace must pass Clippy without warnings:
-
-```bash
-cargo clippy --workspace --all-targets -- -D warnings
-```
-
-### Format
-
-```bash
-cargo fmt --all
-cargo fmt --all -- --check
-```
-
-### Build
-
-```bash
-cargo build --workspace
-```
-
-### npm / WASM artifact
-
-Requires `wasm-pack`:
-
-```bash
-bun run build:wasm
-```
-
-### PyPI artifact
-
-Requires `maturin`:
-
-```bash
-bun run build:python
-```
-
-### Desktop application
-
-```bash
-bun run tauri:dev
-```
-
-Use the desktop application for manual verification when the task affects behavior that can be meaningfully verified there.
-
-## 8. Architecture Examples
-
-The following patterns are representative of the repository's architecture.
-
-```rust
-// Correct: element data remains separate from behavior.
-pub struct RectangleElement {
-    pub base: BaseElement,
-    pub roundness: Option<f64>,
-}
-
-pub fn render_rectangle(
-    ctx: &mut RenderContext,
-    element: &RectangleElement,
-) {
-    // ...
-}
-```
-
-Do not attach rendering behavior directly to the element:
-
-```rust
-// Wrong: behavior is attached to the data type.
-impl RectangleElement {
-    fn render(&self) {
-        // ...
-    }
-}
-```
-
-Element mutations must go through `Document`:
-
-```rust
-// Correct.
-document.upsert(element)?;
-```
-
-Do not mutate element state directly when doing so bypasses the established versioning and history rules:
-
-```rust
-// Wrong.
-element.x = new_x;
-```
-
-User intent must be represented as an undoable command:
-
-```rust
-// Correct: one user action produces one history entry.
-editor.move_elements(ids, dx, dy)?;
-```
-
-## 9. Definition of Done
-
-Before reporting a task as complete:
-
-1. Run the relevant formatter, linter, tests, and build checks.
-2. Update the related documents in the same session (code + docs ship
-   together): engine changes update `crates/README.md` and the relevant
-   `docs/guides/*`; host changes update the host README and the relevant
-   guide; contract changes update `docs/ARCHITECTURE.md` or `docs/PRD.md`;
-   new commands update `docs/guides/commands.md` and `generated/` via
-   `scripts/gen_command_bindings.py`. Leave no stale document behind.
-3. Verify that the implementation remains within the requested scope.
-4. Review the final diff for accidental or unrelated changes.
-5. Manually verify behavior in `apps/desktop` when the task affects behavior that requires desktop verification.
-6. Report any checks that could not be run and explain why.
-
-Do not claim a check passed unless it was actually run.
-
-## 10. Changes Requiring Explicit Approval
-
-Do not make the following changes without first reporting the issue and receiving user approval:
-
-* Add large dependencies to engine crates.
-* Add dependencies that affect WASM/native compatibility without justification.
-* Change `BaseElement` or other element interfaces defined by `docs/ARCHITECTURE.md`.
-* Add new fields to established element interfaces.
-* Replace the established dual-canvas architecture.
-* Replace Map-based scene storage with Array-based storage.
-* Change or delete documents under `docs/` unless explicitly requested.
-* Add React or other UI-framework dependencies to engine crates.
-* Introduce global mutation for theme or configuration.
-* Add computational-geometry dependencies without reporting the dependency and bundle-size impact.
-* Change an established architectural boundary documented in the repository.
-* Guess ambiguous interaction behavior when the behavior has not been established by the project's documentation or existing implementation.
-
-When an architecture change appears necessary, stop and ask the user before proceeding.
-
-## 11. Comments and Documentation
-
-Every code change ships with its documentation update. A document that
-describes changed behavior must be updated in the same session — never leave
-a relevant document outdated. If a guide, README, or contract no longer
-matches the implementation, the task is not done.
-
-Source-code comments must follow:
-
-`docs/guides/comment-guidelines.md`
-
-Desktop UI text and locales must follow:
-
-`docs/guides/locale-guide.md`
-
-The guidelines cover:
-
-* Comment purpose and content.
-* Clarity, concision, and consistency.
-* Self-contained comments.
-* API and module documentation.
-* TODO and FIXME comments.
-* Safety and correctness comments.
-* Restrictions on external references.
-* Restrictions on project-management information.
-* File and module descriptions.
-* When comments should be removed rather than rewritten.
-
-Do not duplicate the detailed comment rules in this file.
-
-## 12. When in Doubt
-
-If the user's instruction is ambiguous, or the task appears to require a decision not established by `docs/PRD.md`, `docs/ARCHITECTURE.md`, or the existing implementation:
-
-* Do not guess.
-* Do not silently choose an architecture.
-* Ask the user a concise question.
-* Explain the specific decision that needs to be made.
-
-One incorrect assumption about the engine's data model or architecture can affect the rest of the project.
+If the task conflicts with an established contract or requires a consequential architecture change, do not silently choose a direction. Describe the precise conflict and request maintainer approval. For ordinary implementation details already determined by source and tests, proceed without unnecessary questions.

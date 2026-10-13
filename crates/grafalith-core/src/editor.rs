@@ -28,10 +28,12 @@ use std::collections::HashSet;
 use crate::alignment::{AlignElements, AlignMode, DistributeAxis, DistributeElements};
 use crate::arrow_binding::{update_bound_arrows, update_bound_arrows_many};
 use crate::auto_layout::ApplyAutoLayout;
+use crate::canvas_mode::CanvasMode;
 use crate::command::{
-    Command, CommandOutcome, CreateElements, DeleteElements, GroupElements, MoveElements, Reorder,
-    ResizeElements, RotateElements, SetBounds, SetLocked, SetRotation, SetStyle, SetText,
-    StylePatch, UngroupElements,
+    Command, CommandOutcome, CreateElements, DeleteElements, DuplicateNodes, GroupElements,
+    MoveElements, MoveElementsToGroup, RenameNode, Reorder, ReparentGroup, ReparentNodes,
+    ResizeElements, RotateElements, SetBounds, SetGroupLocked, SetLocked, SetRotation, SetStyle,
+    SetText, StylePatch, UngroupElements,
 };
 use crate::constraints::apply_constraints;
 use crate::document::Document;
@@ -205,6 +207,13 @@ pub struct Editor {
     /// guides for a drag still in flight (hosts paint those from the live
     /// preview responses, not from here).
     last_snap_guides: Vec<SnapGuide>,
+    /// Latest draw commit by host-minted request id, for exactly-once
+    /// release semantics: a repeated `commit_draw` with the same id (a
+    /// transport retry or a duplicate release event) returns the stored
+    /// element id with no second mutation. Only the latest is remembered:
+    /// hosts serialize their inputs, so a retry always precedes any newer
+    /// gesture and a late duplicate can never slip past a newer commit.
+    last_draw_commit: Option<(String, ElementId)>,
     events: Vec<EditorEvent>,
 }
 
@@ -228,6 +237,7 @@ impl Editor {
             snap_config: SnapConfig::defaults(),
             theme: default_theme(),
             last_snap_guides: Vec::new(),
+            last_draw_commit: None,
             events: Vec::new(),
         }
     }
@@ -394,6 +404,12 @@ impl Editor {
     /// matching the TS gate (no surprise tool switches from config).
     pub fn set_enabled_tools(&mut self, tools: Option<Vec<String>>) {
         self.state.enabled_tools = tools;
+    }
+
+    /// Replaces the canvas mode (unbounded workboard or fixed-size page).
+    /// Per-project host config, applied at session start like the theme.
+    pub fn set_canvas_mode(&mut self, mode: CanvasMode) {
+        self.state.canvas_mode = mode;
     }
 
     /// Borrows the pointer-phase machine (deterministic, inspectable).
@@ -1100,15 +1116,15 @@ impl Editor {
         Ok(outcome)
     }
 
-    /// Deletes the current selection as one undoable step (TS
-    /// `deleteSelected` parity: frame children are released first, locked
-    /// elements are skipped, the selection clears).
+    /// Deletes the current selection as one undoable step. Frame children
+    /// release first, effectively locked nodes are skipped, source groups
+    /// normalize in the same entry, and the selection clears.
     pub fn delete_selected(&mut self) -> EngineResult<CommandOutcome> {
         let selected = self.state.selection.ids().to_vec();
         let outcome = self.history.transaction(&mut self.doc, |ctx| {
             for id in &selected {
                 let is_open_frame = matches!(ctx.doc().get(id.as_str()),
-                    Some(element) if element.element_type_name() == "frame" && !element.base().locked);
+                    Some(element) if element.element_type_name() == "frame" && !ctx.doc().effective_locked(id.as_str()));
                 if is_open_frame {
                     for child in frame_children(ctx.doc(), id.as_str()) {
                         if let Some(element) = ctx.doc().get(child.as_str()) {
@@ -1123,8 +1139,8 @@ impl Editor {
                 selected
                     .iter()
                     .filter(|id| {
-                        matches!(ctx.doc().get(id.as_str()),
-                            Some(element) if !element.base().locked)
+                        ctx.doc().get(id.as_str()).is_some()
+                            && !ctx.doc().effective_locked(id.as_str())
                     })
                     .cloned()
                     .collect(),
@@ -1187,8 +1203,9 @@ impl Editor {
         Ok(Some(group_id))
     }
 
-    /// Removes a group from every member as one undoable step (nested
-    /// memberships keep their other ids — TS `ungroup` parity).
+    /// Removes a group from every member as one undoable step. Children
+    /// promote to the dissolved parent with order, geometry, and local
+    /// locks preserved. Locked containers reject the command atomically.
     pub fn ungroup(&mut self, group_id: &ElementId) -> EngineResult<CommandOutcome> {
         let outcome = self.history.transaction(&mut self.doc, |ctx| {
             let mut cmd = UngroupElements::new(group_id.clone());
@@ -1196,6 +1213,116 @@ impl Editor {
         })?;
         self.after_mutation(&outcome);
         Ok(outcome)
+    }
+
+    /// Locks group containers as one undoable step. Descendants become
+    /// effectively locked without touching their stored flags.
+    pub fn lock_groups(&mut self, ids: Vec<ElementId>) -> EngineResult<CommandOutcome> {
+        let outcome = self
+            .history
+            .execute(&mut self.doc, SetGroupLocked::new(ids, true))?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
+
+    /// Unlocks group containers as one undoable step. Descendants restore
+    /// their own stored flags, so previously locked children stay locked.
+    pub fn unlock_groups(&mut self, ids: Vec<ElementId>) -> EngineResult<CommandOutcome> {
+        let outcome = self
+            .history
+            .execute(&mut self.doc, SetGroupLocked::new(ids, false))?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
+
+    /// Moves elements to a group or the root at an insertion index as one
+    /// undoable step. Locally locked leaves travel with their flag intact
+    /// while escaping a locked ancestor is rejected.
+    pub fn move_to_group(
+        &mut self,
+        ids: Vec<ElementId>,
+        group_id: Option<ElementId>,
+        index: Option<usize>,
+    ) -> EngineResult<CommandOutcome> {
+        let outcome = self.history.transaction(&mut self.doc, |ctx| {
+            let mut cmd = MoveElementsToGroup::with_index(ids.clone(), group_id.clone(), index);
+            cmd.execute(ctx)
+        })?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
+
+    /// Reparents whole nodes (elements and groups) at an insertion index as
+    /// one undoable step, preserving subtrees, order, geometry, and locks.
+    pub fn reparent_nodes(
+        &mut self,
+        ids: Vec<ElementId>,
+        parent: Option<ElementId>,
+        index: Option<usize>,
+    ) -> EngineResult<CommandOutcome> {
+        let outcome = self.history.transaction(&mut self.doc, |ctx| {
+            let mut cmd = ReparentNodes::new(ids.clone(), parent.clone(), index);
+            cmd.execute(ctx)
+        })?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
+
+    /// Reparents one group container, rewriting descendant paths so the
+    /// materialized membership matches the new parent chain.
+    pub fn reparent_group(
+        &mut self,
+        group_id: ElementId,
+        parent_id: Option<ElementId>,
+    ) -> EngineResult<CommandOutcome> {
+        let outcome = self.history.transaction(&mut self.doc, |ctx| {
+            let mut cmd = ReparentGroup {
+                group_id: group_id.clone(),
+                parent_id: parent_id.clone(),
+            };
+            cmd.execute(ctx)
+        })?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
+
+    /// Renames any node (group, frame, or labeled element) as one undoable
+    /// step. Names trim, empty names reject, and duplicates are allowed.
+    pub fn rename_node(&mut self, id: ElementId, name: String) -> EngineResult<CommandOutcome> {
+        let outcome = self.history.transaction(&mut self.doc, |ctx| {
+            let mut cmd = RenameNode::new(id.clone(), name.clone());
+            cmd.execute(ctx)
+        })?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
+
+    /// Duplicates a hierarchy selection with fresh ids, preserving parent
+    /// links, order adjacency, geometry, and local locks as one undoable
+    /// step. Locked nodes reject the command atomically.
+    pub fn duplicate_nodes(&mut self, ids: Vec<ElementId>) -> EngineResult<CommandOutcome> {
+        let outcome = self.history.transaction(&mut self.doc, |ctx| {
+            let mut cmd = DuplicateNodes::new(ids.clone());
+            cmd.execute(ctx)
+        })?;
+        self.after_mutation(&outcome);
+        Ok(outcome)
+    }
+
+    /// Reads the display name of any node.
+    pub fn node_name(&self, id: &str) -> String {
+        self.doc.node_name(id)
+    }
+
+    /// Returns `true` when the node is effectively locked through itself or
+    /// an ancestor container.
+    pub fn is_effectively_locked(&self, id: &str) -> bool {
+        self.doc.effective_locked(id)
+    }
+
+    /// Returns `true` when the group container is effectively locked.
+    pub fn is_group_effectively_locked(&self, group_id: &str) -> bool {
+        self.doc.group_effective_locked(group_id)
     }
 
     // -- selection intents ------------------------------------------------
@@ -1426,8 +1553,16 @@ impl Editor {
         }
         match button {
             PointerButton::Right => {
-                let hit =
-                    hit_test_top_indexed(&self.doc, scene[0], scene[1], HitTestFilter::selection());
+                let hit = hit_test_top_indexed(
+                    &self.doc,
+                    scene[0],
+                    scene[1],
+                    HitTestFilter {
+                        skip_deleted: true,
+                        skip_locked: false,
+                        skip_hidden: true,
+                    },
+                );
                 if let Some(hit_id) = hit.clone() {
                     if !self.state.selection.contains(&hit_id) {
                         self.right_click_select(&hit_id, modifiers.is_additive());
@@ -1453,6 +1588,28 @@ impl Editor {
                 });
             }
             PointerButton::Left => {}
+        }
+        let raw_hit = hit_test_top_indexed(
+            &self.doc,
+            scene[0],
+            scene[1],
+            HitTestFilter {
+                skip_deleted: true,
+                skip_locked: false,
+                skip_hidden: true,
+            },
+        );
+        if raw_hit
+            .as_ref()
+            .is_some_and(|id| self.doc.effective_locked(id.as_str()))
+        {
+            self.pointer_phase = EditorPointerPhase::Idle;
+            return Ok(PointerDownOutcome {
+                hit: None,
+                began_text_edit: None,
+                began_text_edit_is_new: None,
+                committed_text,
+            });
         }
         let hit = hit_test_top_indexed(&self.doc, scene[0], scene[1], HitTestFilter::selection());
         // Double-click carries edit intent, so it runs before the handles
@@ -1813,7 +1970,7 @@ impl Editor {
                         let is_open_frame = matches!(ctx.doc().get(id.as_str()),
                             Some(element) if element.element_type_name() == "frame"
                                 && !element.base().is_deleted
-                                && !element.base().locked);
+                                && !ctx.doc().effective_locked(id.as_str()));
                         if is_open_frame {
                             for child in frame_children(ctx.doc(), id.as_str()) {
                                 if !affected_set.contains(child.as_str())
@@ -1861,8 +2018,19 @@ impl Editor {
                 lock_aspect,
             } => {
                 let resized_id = id.clone();
+                // Preview and commit share the snapped point (guides only
+                // feed the live overlay, which the host clears on release).
+                let (point, _guides) = crate::interaction::snap_resize_point(
+                    &self.doc,
+                    &id,
+                    handle,
+                    scene,
+                    lock_aspect,
+                    &self.snap_config,
+                    self.state.viewport.zoom,
+                );
                 let outcome = self.history.transaction(&mut self.doc, |ctx| {
-                    let mut cmd = ResizeElements::new(id, handle, scene, lock_aspect);
+                    let mut cmd = ResizeElements::new(id, handle, point, lock_aspect);
                     let mut outcome = cmd.execute(ctx)?;
                     let follow = update_bound_arrows(ctx, &resized_id)?;
                     outcome.affected.extend(follow.affected);
@@ -1872,6 +2040,9 @@ impl Editor {
                 self.pending_collapse = None;
                 self.after_mutation(&outcome);
                 self.events.push(EditorEvent::GestureCommitted);
+                // Same transient rule as move drags: hosts paint the live
+                // preview guides mid-drag, so nothing may linger after release.
+                self.last_snap_guides.clear();
                 Ok(PointerUpOutcome::DragCommitted(outcome.changed))
             }
             EditorPointerPhase::DraggingRotate {
@@ -1898,7 +2069,10 @@ impl Editor {
                 additive,
             } => {
                 let bounds = rubber_band_bounds(&origin_scene, &scene);
-                let ids = query_in_bounds_indexed(&self.doc, &bounds);
+                let ids: Vec<ElementId> = query_in_bounds_indexed(&self.doc, &bounds)
+                    .into_iter()
+                    .filter(|id| !self.doc.effective_locked(id.as_str()))
+                    .collect();
                 if additive {
                     for id in &ids {
                         self.state.selection.add(id.clone());
@@ -1993,6 +2167,97 @@ impl Editor {
         self.state.selection.select(vec![id.clone()]);
         self.emit_selection();
         Ok(PointerUpOutcome::ShapeCreated(Some(id)))
+    }
+
+    /// Commits a shape-draw drag as one history entry without consulting
+    /// the pointer-phase machine.
+    ///
+    /// The host paints the drag ghost from its own press origin and cursor
+    /// and sends both corners (plus the scene-space trail for `freedraw`)
+    /// here on release, so the commit survives a press the phase machine
+    /// never tracked: a lost threshold transition, a cancelled capture, or
+    /// a stale active tool can no longer swallow the shape. The commit owns
+    /// capture release, so a normal release never goes through the
+    /// cancellation op and a stuck capture cannot block the store; the
+    /// release clears the phase silently (a completion, not a cancellation,
+    /// so no `GestureCancelled` event is queued for a committed shape).
+    /// Box shapes run the same
+    /// [`draw_box_element`](crate::interaction::draw_box_element) math
+    /// (including the minimum-size decline) as the drag-release path;
+    /// `freedraw` reuses [`Editor::commit_freedraw_stroke`]. Ids still come
+    /// from the document authority and the write still routes through
+    /// [`HistoryManager`] commands, so history, selection, and event
+    /// semantics match the pointer path exactly.
+    ///
+    /// `request_id` is minted by the host once per press and makes the
+    /// commit exactly-once: a repeat with the same id returns the stored
+    /// element id with no second mutation and no extra history entry (see
+    /// `last_draw_commit`). Absent ids (hosts built before the id existed)
+    /// always commit, without suppression. Below-minimum declines store
+    /// nothing and remember nothing; failed commits change nothing at all
+    /// (no history, no selection, and a live capture is left for its own
+    /// gesture to finish rather than torn down by a corrupt payload).
+    pub fn commit_draw(
+        &mut self,
+        request_id: Option<&str>,
+        shape: &str,
+        origin_scene: [f64; 2],
+        current_scene: [f64; 2],
+        trail: Option<Vec<[f64; 2]>>,
+    ) -> EngineResult<Option<ElementId>> {
+        if let (Some(request_id), Some((last_request, last_id))) =
+            (request_id, &self.last_draw_commit)
+        {
+            if last_request == request_id {
+                return Ok(Some(last_id.clone()));
+            }
+        }
+        if !crate::geometry::point_is_finite(&origin_scene)
+            || !crate::geometry::point_is_finite(&current_scene)
+            || trail.as_ref().is_some_and(|samples| {
+                samples
+                    .iter()
+                    .any(|point| !crate::geometry::point_is_finite(point))
+            })
+        {
+            return Err(crate::EngineError::InvalidInput(format!(
+                "draw commit points must be finite, got ({origin_scene:?}, {current_scene:?})"
+            )));
+        }
+        self.pointer_phase = EditorPointerPhase::Idle;
+        self.pending_collapse = None;
+        if shape == "freedraw" {
+            let stroke = trail.unwrap_or_default();
+            return match self.commit_freedraw_stroke(origin_scene, stroke)? {
+                PointerUpOutcome::ShapeCreated(id) => {
+                    if let (Some(request_id), Some(id)) = (request_id, &id) {
+                        self.last_draw_commit = Some((request_id.to_string(), id.clone()));
+                    }
+                    Ok(id)
+                }
+                _ => Ok(None),
+            };
+        }
+        let x = origin_scene[0].min(current_scene[0]);
+        let y = origin_scene[1].min(current_scene[1]);
+        let width = (current_scene[0] - origin_scene[0]).abs();
+        let height = (current_scene[1] - origin_scene[1]).abs();
+        let Some(element) =
+            draw_box_element(shape, self.doc.fresh_element_id(), x, y, width, height)
+        else {
+            return Ok(None);
+        };
+        let id = element.id().clone();
+        let outcome = self
+            .history
+            .execute(&mut self.doc, CreateElements::new(vec![element]))?;
+        self.after_mutation(&outcome);
+        self.state.selection.select(vec![id.clone()]);
+        self.emit_selection();
+        if let Some(request_id) = request_id {
+            self.last_draw_commit = Some((request_id.to_string(), id.clone()));
+        }
+        Ok(Some(id))
     }
 
     /// Cancels the pointer capture with no document or history effect
@@ -2447,17 +2712,34 @@ impl Editor {
     }
 
     /// Read-only resize preview (the `previewResize` protocol query): the
-    /// box a handle drag would commit, without touching the document or
-    /// history. Returns `None` for unknown/deleted/locked targets, exactly
-    /// like the commit path's unchanged no-op.
+    /// box a handle drag would commit plus its snap guides, without
+    /// touching the document or history. Returns `None` for
+    /// unknown/deleted/locked targets, exactly like the commit path's
+    /// unchanged no-op. The box is computed from the snapped point, so it
+    /// is what the commit below stores.
     pub fn preview_resize(
         &self,
         id: &ElementId,
         handle: HandleType,
         to_scene: [f64; 2],
         lock_aspect: bool,
-    ) -> EngineResult<Option<crate::command::ResizedBox>> {
-        crate::command::preview_resize_box(&self.doc, id, handle, to_scene, lock_aspect)
+    ) -> EngineResult<Option<(crate::command::ResizedBox, Vec<SnapGuide>)>> {
+        if !crate::geometry::point_is_finite(&to_scene) {
+            return Err(crate::EngineError::InvalidInput(format!(
+                "preview resize point must be finite, got ({to_scene:?})"
+            )));
+        }
+        let (point, guides) = crate::interaction::snap_resize_point(
+            &self.doc,
+            id,
+            handle,
+            to_scene,
+            lock_aspect,
+            &self.snap_config,
+            self.state.viewport.zoom,
+        );
+        let output = crate::command::preview_resize_box(&self.doc, id, handle, point, lock_aspect)?;
+        Ok(output.map(|resized| (resized, guides)))
     }
 
     /// Read-only rotation preview (the `previewRotate` protocol query): the
@@ -2908,7 +3190,7 @@ mod tests {
         // Box is 19.2 wide (2 chars at 0.6 factor); doubling it must double
         // the font, with the height following the content at the new size.
         // The read-only preview and the commit use the same math.
-        let preview = editor
+        let (preview, _) = editor
             .preview_resize(&id, HandleType::BottomRight, [48.4, 40.0], false)
             .unwrap()
             .expect("preview resolves");

@@ -105,6 +105,7 @@ export function EditorMenuBar({
   const { t } = useI18n();
   const [openMenu, setOpenMenu] = useState<TopMenu | null>(null);
   const [newExpanded, setNewExpanded] = useState(false);
+  const [exportExpanded, setExportExpanded] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRefs = useRef<Record<TopMenu, HTMLButtonElement | null>>({
     file: null,
@@ -115,6 +116,7 @@ export function EditorMenuBar({
   useEffect(() => {
     if (!openMenu) {
       setNewExpanded(false);
+      setExportExpanded(false);
       return;
     }
     const current: TopMenu = openMenu;
@@ -154,6 +156,20 @@ export function EditorMenuBar({
     setNewExpanded(false);
     setTimeout(() => {
       rootRef.current?.querySelector<HTMLElement>('[data-submenu-parent="new"]')?.focus();
+    }, 0);
+  }
+
+  function expandExportAndFocusFirstRow() {
+    setExportExpanded(true);
+    setTimeout(() => {
+      rootRef.current?.querySelector<HTMLElement>('[data-submenu="export"] button:not([disabled])')?.focus();
+    }, 0);
+  }
+
+  function collapseExportAndFocusParent() {
+    setExportExpanded(false);
+    setTimeout(() => {
+      rootRef.current?.querySelector<HTMLElement>('[data-submenu-parent="export"]')?.focus();
     }, 0);
   }
 
@@ -257,8 +273,64 @@ export function EditorMenuBar({
                 </div>
               ) : null}
             </div>
+            <div
+              className="editor-menu__submenu-wrap"
+              onMouseEnter={() => setExportExpanded(true)}
+              onMouseLeave={() => setExportExpanded(false)}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={exportExpanded}
+                data-submenu-parent="export"
+                className="editor-menu__item editor-menu__item--parent"
+                onClick={() => setExportExpanded((value) => !value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    expandExportAndFocusFirstRow();
+                  }
+                }}
+              >
+                <span className="editor-menu__label">{t('editor.menu.export')}</span>
+                <span className="editor-menu__arrow" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+              {exportExpanded ? (
+                <div
+                  className="editor-menu__submenu"
+                  role="menu"
+                  aria-label={t('editor.menu.export')}
+                  data-submenu="export"
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowLeft') {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      collapseExportAndFocusParent();
+                    }
+                  }}
+                >
+                  {menusFor('menubar.file')
+                    .filter((row) => row.id.startsWith('file.export'))
+                    .map((row) => (
+                      <span key={row.id}>
+                        <RegistryRow
+                          row={row}
+                          context={context}
+                          appContext={appContext}
+                          onPickEngine={pickCommand}
+                          onPickApp={(id) => pickAppCommand(id)}
+                        />
+                      </span>
+                    ))}
+                </div>
+              ) : null}
+            </div>
             {menusFor('menubar.file')
-              .filter((row) => row.id !== 'file.new')
+              .filter((row) => row.id !== 'file.new' && !row.id.startsWith('file.export'))
               .map((row, index, rows) => {
                 const previous = rows[index - 1];
                 const separator = previous !== undefined && previous.group !== row.group;
@@ -355,6 +427,7 @@ interface CanvasContextMenuProps {
   y: number;
   intents: readonly string[];
   context: CommandContext;
+  labelOverrides?: Readonly<Record<string, string>>;
   onExecute: (id: string) => void;
   onClose: () => void;
 }
@@ -364,7 +437,7 @@ interface CanvasContextMenuProps {
  * through the shared command registry (labels, shortcuts, enablement).
  * Unknown intents fall back to the raw label instead of breaking the menu.
  */
-export function CanvasContextMenu({ x, y, intents, context, onExecute, onClose }: CanvasContextMenuProps) {
+export function CanvasContextMenu({ x, y, intents, context, labelOverrides, onExecute, onClose }: CanvasContextMenuProps) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -420,7 +493,7 @@ export function CanvasContextMenu({ x, y, intents, context, onExecute, onClose }
             onClick={() => onExecute(intent)}
           >
             <span className="editor-contextmenu__label">
-              {command ? t(command.labelKey) : intent}
+              {labelOverrides?.[intent] ?? (command ? t(command.labelKey) : intent)}
             </span>
             {shortcut ? <kbd className="ui-shortcut">{shortcut}</kbd> : null}
           </button>

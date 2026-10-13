@@ -43,7 +43,7 @@ export type DrawDetailDto =
   | { type: 'text'; text: string; fontSize: number; fontFamily: string; align: 'left' | 'center' | 'right'; borderColor: string | null }
   | { type: 'image'; assetId: string; ready: boolean }
   | { type: 'frame'; name: string; clipContent: boolean }
-  | { type: 'arrow'; hasStart: boolean; hasEnd: boolean }
+  | { type: 'arrow'; start: string | null; end: string | null }
   | { type: 'path'; closed: boolean }
   | { type: 'custom'; typeName: string };
 
@@ -55,8 +55,21 @@ export interface PathSegmentDto {
 
 export interface DrawEntryDto {
   id: string;
+  locked: boolean;
+  /** Effective lock through the element or an ancestor container. */
+  effectiveLocked: boolean;
+  /** Display name for the Layers panel (empty when unnamed; never identity). */
+  label: string;
+  groupIds: string[];
   kind: string;
   bounds: BoundsDto;
+  /**
+   * Unrotated paint/chrome frame. Hosts paint shape extents from this and
+   * rotate by `rotation`; painting `bounds` dims rotated would double-apply
+   * the rotation and grow the shape at non-90° angles. Optional for
+   * backward-compat with cached models — fall back to `bounds`.
+   */
+  frame?: BoundsDto;
   rotation: number;
   paint: PaintDto;
   strokeColor: string;
@@ -78,6 +91,8 @@ export interface FramePassDto {
 
 export interface SelectionOverlayDto {
   bounds: BoundsDto;
+  /** Unrotated frame for outline/handles; falls back to `bounds`. */
+  frame?: BoundsDto;
   handles: [number, number][];
   rotateHandle: [number, number];
   rotation: number;
@@ -107,6 +122,24 @@ export interface RenderModelDto {
   textEditing: TextStateDto | null;
   viewport: ViewportDto;
   assetGeneration: number;
+  groups: GroupDto[];
+  labels: ElementLabelDto[];
+  elementOrder: string[];
+}
+
+export interface GroupDto {
+  id: string;
+  name: string;
+  parentGroupId: string | null;
+  /** Local container lock. */
+  locked: boolean;
+  /** Effective lock through the container or an ancestor. */
+  effectiveLocked: boolean;
+}
+
+export interface ElementLabelDto {
+  id: string;
+  name: string;
 }
 
 export interface PhaseDto {
@@ -123,6 +156,8 @@ export interface PhaseDto {
 export interface SessionStateDto {
   selection: string[];
   tool: string;
+  /** Canvas mode echo: infinite workboard or bounded page in scene units. */
+  canvasMode: { mode: string; width?: number; height?: number };
   viewport: ViewportDto;
   textEditing: TextStateDto | null;
   pointerPhase: PhaseDto;
@@ -156,11 +191,39 @@ export function parseBatchResult(raw: string): BatchResult {
   return JSON.parse(raw) as BatchResult;
 }
 
-/** Find the last successful result for `op` in a batch result. */
+/**
+ * Find the last successful result for `op` in a batch result.
+ *
+ * Never throws: whole-batch error envelopes carry no `results` array, and
+ * every caller chains off possibly-untrusted transport payloads. A
+ * malformed batch yields `undefined` (treated downstream as a failed
+ * crossing) instead of an unhandled rejection that would strand gesture
+ * state in every pointer handler.
+ */
 export function lastResultData(batch: BatchResult, op: string): unknown {
-  for (let i = batch.results.length - 1; i >= 0; i--) {
-    const entry = batch.results[i];
-    if (entry.op === op && entry.ok) return entry.data;
+  const results = Array.isArray((batch as { results?: unknown })?.results)
+    ? (batch.results as { op: string; ok: boolean; data?: unknown }[])
+    : [];
+  for (let i = results.length - 1; i >= 0; i--) {
+    const entry = results[i];
+    if (entry && entry.op === op && entry.ok) return entry.data;
+  }
+  return undefined;
+}
+
+/** Find the last result entry for `op` regardless of success, if any. */
+export function lastResultEntry(
+  batch: BatchResult,
+  op: string,
+): { ok: boolean; code?: string; message?: string } | undefined {
+  const results = Array.isArray((batch as { results?: unknown })?.results)
+    ? (batch.results as { op: string; ok: boolean; code?: string; message?: string }[])
+    : [];
+  for (let i = results.length - 1; i >= 0; i--) {
+    const entry = results[i];
+    if (entry && entry.op === op) {
+      return { ok: entry.ok, code: entry.code, message: entry.message };
+    }
   }
   return undefined;
 }

@@ -14,9 +14,10 @@
 //! masks, clip paths, filters, and images count as skips; stroke maps width
 //! + dash presence only (solid vs dashed); text maps one chunk to one
 //! element (first span wins for the string, chunk position wins for
-//! placement) with per-span styling dropped; element ids mint from a local
-//! counter (`svg-1`, …), and like file import this path *replaces* document
-//! content, so counter collisions with cleared content cannot happen.
+//! placement) with per-span styling dropped; element ids mint from the
+//! default local counter (`el-1`, …) and group ids as `svg-group-N`, and
+//! like file import this path *replaces* document content, so counter
+//! collisions with cleared content cannot happen.
 
 use grafalith_core::document::{Document, ImportSummary, SCHEMA_VERSION};
 use grafalith_core::element::{
@@ -76,6 +77,8 @@ pub fn import_svg_str(doc: &mut Document, svg: &str) -> EngineResult<ImportSumma
         legacy_version: SCHEMA_VERSION,
         elements: converted,
         element_order: order,
+        groups: vec![],
+        labels: vec![],
     };
     let summary = doc.apply_snapshot(&snapshot)?;
     Ok(ImportSummary {
@@ -107,6 +110,8 @@ pub fn import_svg_str_tracked(
         legacy_version: SCHEMA_VERSION,
         elements: converted,
         element_order: order,
+        groups: vec![],
+        labels: vec![],
     };
     let plan = Document::plan_snapshot(&snapshot)?;
     let imported = plan.imported;

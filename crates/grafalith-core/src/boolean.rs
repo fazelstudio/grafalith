@@ -101,7 +101,7 @@ fn live_operand(doc: &Document, op: &'static str, id: &ElementId) -> EngineResul
             id.as_str()
         )));
     }
-    if base.locked {
+    if doc.effective_locked(id.as_str()) {
         return Err(EngineError::InvalidInput(format!(
             "boolean.{op}: element '{}' is locked",
             id.as_str()

@@ -8,12 +8,6 @@ const common = {
     maximize: 'Maximize',
     restore: 'Restore',
     retry: 'Retry',
-    open: 'Open',
-    back: 'Back',
-    save: 'Save',
-  },
-  states: {
-    loading: 'Loading…',
   },
 };
 

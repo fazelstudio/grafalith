@@ -96,6 +96,68 @@ pub enum BatchOp {
         #[serde(rename = "groupId")]
         group_id: String,
     },
+    /// Rename a persistent group.
+    RenameGroup {
+        /// Group id.
+        #[serde(rename = "groupId")]
+        group_id: String,
+        /// New display name.
+        name: String,
+    },
+    /// Move a persistent group under another group or to the root.
+    ReparentGroup {
+        /// Group being moved.
+        #[serde(rename = "groupId")]
+        group_id: String,
+        /// New parent group, or root.
+        #[serde(rename = "parentGroupId")]
+        parent_group_id: Option<String>,
+    },
+    /// Moves elements into a group or to the root.
+    MoveToGroup {
+        /// Elements to move.
+        ids: Vec<String>,
+        /// Destination group, or root.
+        #[serde(rename = "groupId")]
+        group_id: Option<String>,
+        /// Parent-relative insertion index (absent appends).
+        #[serde(default)]
+        index: Option<usize>,
+    },
+    /// Set the local lock flag on group containers as one undo step.
+    /// Descendants become effectively locked without touching child flags.
+    SetGroupLocked {
+        /// Group ids to update.
+        ids: Vec<String>,
+        /// Flag value to write.
+        locked: bool,
+    },
+    /// Rename any node (group, frame, or labeled element) as one undo step.
+    /// Names trim, empty names reject, duplicates are allowed.
+    RenameNode {
+        /// Node id (group id or element id).
+        id: String,
+        /// New display name.
+        name: String,
+    },
+    /// Reparent whole nodes (elements and groups) at an insertion index as
+    /// one undo step, preserving subtrees, order, geometry, and locks.
+    ReparentNodes {
+        /// Nodes to move (element ids and group ids).
+        ids: Vec<String>,
+        /// Destination parent group, or root.
+        #[serde(rename = "parentGroupId")]
+        parent_group_id: Option<String>,
+        /// Parent-relative insertion index (absent appends).
+        #[serde(default)]
+        index: Option<usize>,
+    },
+    /// Duplicate a hierarchy selection with fresh ids, preserving parents,
+    /// order adjacency, geometry, and local locks as one undo step.
+    DuplicateNodes {
+        /// Nodes to duplicate (element ids and group ids).
+        ids: Vec<String>,
+    },
     /// Replace the engine-side selection (session state, no history).
     Select {
         /// Selected ids.
@@ -200,6 +262,37 @@ pub enum BatchOp {
     },
     /// Pointer stream aborted (touch interruption, browser gesture).
     PointerCancel,
+    /// Commit a shape-draw drag as one history entry, independent of the
+    /// pointer-phase machine: the host sends the press origin, the release
+    /// point, and (for `freedraw`) the scene-space trail it already paints
+    /// as a ghost, and the engine mints the id, validates, and stores
+    /// through the same command path the drag-release commit uses. The
+    /// commit releases the pointer capture itself, so a normal release
+    /// never goes through [`BatchOp::PointerCancel`]: cancellation stays a
+    /// pure abort (no object), completion stays a pure store. Below the
+    /// minimum drag size this stores nothing (`id` is null), exactly like
+    /// a tap on a draw tool.
+    CommitDraw {
+        /// Host-minted gesture identity (one per press): a repeat with the
+        /// same id returns the stored element id with no second mutation,
+        /// so transport retries and duplicate releases cannot duplicate
+        /// the shape. Optional so hosts built before the id existed keep
+        /// committing (without duplicate suppression) across a partial
+        /// upgrade instead of failing the whole batch parse.
+        #[serde(default, rename = "requestId")]
+        request_id: Option<String>,
+        /// Shape being drawn (`rectangle`, `ellipse`, `line`, `arrow`,
+        /// `freedraw`, `frame`, `image`).
+        shape: String,
+        /// Scene-space press origin (the ghost origin the host painted).
+        origin: PointJson,
+        /// Scene-space release point.
+        current: PointJson,
+        /// Scene-space stroke samples, press origin first (only `freedraw`
+        /// reads this; other shapes derive their box from the two corners).
+        #[serde(default)]
+        trail: Option<Vec<PointJson>>,
+    },
     /// Key pressed (never forwarded for IME-composing or field-owned keys —
     /// the host owns focus guards).
     KeyDown {
@@ -465,6 +558,10 @@ pub enum BatchOp {
         /// Partial snap-config update (merged over the current config).
         #[serde(default)]
         snap: Box<Option<SnapConfigJson>>,
+        /// Canvas mode update (`None` = unchanged). Per-project host config,
+        /// applied at session start; the mode echoes in `sessionState`.
+        #[serde(default, rename = "canvasMode")]
+        canvas_mode: Option<CanvasModeJson>,
     },
     /// Tell the engine async asset availability changed (image/font load
     /// completed). Bumps the asset generation — the explicit invalidation
@@ -477,6 +574,14 @@ pub enum BatchOp {
         /// Query parameters (canvas size, grid hint, ready assets).
         #[serde(flatten)]
         query: RenderQueryJson,
+    },
+    /// Plan a PNG export from options (returned in `data`; pure math —
+    /// canvas allocation and rasterization stay host-side).
+    PlanPngExport {
+        /// Export options (`background`, `padding`, `scale`); absent means
+        /// engine defaults (transparent, 20 scene units, scale 2).
+        #[serde(default)]
+        options: Option<Value>,
     },
     /// Ask core which context-menu intents apply to the current selection
     /// (returned in `data`; the host renders the menu).
@@ -703,6 +808,10 @@ pub struct RenderQueryJson {
     /// other ids arrive as `ready: false` placeholders, TS parity).
     #[serde(default)]
     pub ready_images: Vec<String>,
+    /// Viewport override for one-shot reads (export); absent means the
+    /// live session viewport. Never mutates the session.
+    #[serde(default)]
+    pub viewport: Option<ViewportJson>,
 }
 
 /// Scalar style patch.
@@ -734,6 +843,26 @@ pub struct StylePatchJson {
     /// (`{"type":"solid"|"gradient", …}`) parses through the shared io
     /// fill parser (same validation as file import).
     pub background: Option<Value>,
+}
+
+/// Canvas mode update for `configure` (additive: absent = unchanged).
+///
+/// `{"mode":"infinite"}` selects the unbounded workboard;
+/// `{"mode":"bounded","width":…,"height":…}` selects a fixed-size page at
+/// the origin in scene units (validated finite and positive, like viewport
+/// sizes).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum CanvasModeJson {
+    /// Unbounded workboard, no visible boundaries.
+    Infinite,
+    /// Fixed `width` × `height` page at the origin.
+    Bounded {
+        /// Page width in scene units.
+        width: f64,
+        /// Page height in scene units.
+        height: f64,
+    },
 }
 
 /// Scene-space point for paste targets.
@@ -1009,6 +1138,13 @@ pub fn op_name(op: &BatchOp) -> &'static str {
         BatchOp::Reorder { .. } => "reorder",
         BatchOp::Group { .. } => "group",
         BatchOp::Ungroup { .. } => "ungroup",
+        BatchOp::RenameGroup { .. } => "renameGroup",
+        BatchOp::ReparentGroup { .. } => "reparentGroup",
+        BatchOp::MoveToGroup { .. } => "moveToGroup",
+        BatchOp::SetGroupLocked { .. } => "setGroupLocked",
+        BatchOp::RenameNode { .. } => "renameNode",
+        BatchOp::ReparentNodes { .. } => "reparentNodes",
+        BatchOp::DuplicateNodes { .. } => "duplicateNodes",
         BatchOp::Select { .. } => "select",
         BatchOp::SetTool { .. } => "setTool",
         BatchOp::Copy { .. } => "copy",
@@ -1027,6 +1163,7 @@ pub fn op_name(op: &BatchOp) -> &'static str {
         BatchOp::PointerMove { .. } => "pointerMove",
         BatchOp::PointerUp { .. } => "pointerUp",
         BatchOp::PointerCancel => "pointerCancel",
+        BatchOp::CommitDraw { .. } => "commitDraw",
         BatchOp::KeyDown { .. } => "keyDown",
         BatchOp::Wheel { .. } => "wheel",
         BatchOp::StartTextAt { .. } => "startTextAt",
@@ -1079,5 +1216,6 @@ pub fn op_name(op: &BatchOp) -> &'static str {
         BatchOp::BooleanSubtract { .. } => "booleanSubtract",
         BatchOp::BooleanIntersect { .. } => "booleanIntersect",
         BatchOp::BooleanExclude { .. } => "booleanExclude",
+        BatchOp::PlanPngExport { .. } => "planPngExport",
     }
 }

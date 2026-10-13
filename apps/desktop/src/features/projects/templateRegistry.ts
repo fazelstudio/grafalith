@@ -19,7 +19,7 @@ export function buildBlankScene(): string {
   return buildBlankSceneEnvelope();
 }
 
-// All three editor families start from the same blank scene for now; the
+// Both editor families start from the same blank scene for now; the
 // template identity only decides the stored project kind, which selects
 // the workspace shell used when the project opens.
 const TEMPLATES: readonly ProjectTemplateDefinition[] = [
@@ -42,12 +42,12 @@ const TEMPLATES: readonly ProjectTemplateDefinition[] = [
     buildScene: buildBlankScene,
   },
   {
-    id: 'diagram',
-    labelKey: 'projects.templates.diagram',
-    defaultLabel: 'Diagram',
-    descriptionKey: 'projects.templates.diagramDescription',
-    defaultDescription: 'An empty diagram canvas.',
-    kind: 'diagram',
+    id: 'slides',
+    labelKey: 'projects.templates.slides',
+    defaultLabel: 'Slides',
+    descriptionKey: 'projects.templates.slidesDescription',
+    defaultDescription: 'An empty 16:9 slide canvas.',
+    kind: 'slides',
     buildScene: buildBlankScene,
   },
 ];

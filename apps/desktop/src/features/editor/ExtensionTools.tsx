@@ -12,12 +12,13 @@ import { resolveIcon } from '../../ui/iconRegistry';
 import { getExtensionHost } from '../../platform/extensions/extensionHost';
 import { getExtensionStatuses } from '../../platform/extensions/extensionStatus';
 import { extensionEditorToolsFor } from '../../platform/extensions/extensionContributions';
+import type { ProjectKind } from '../../platform/projects/types';
 
 /** Per-kind extension tool buttons rendered after the built-in tools. */
 export function ExtensionTools({
   kind,
 }: {
-  kind: 'design' | 'whiteboard' | 'diagram';
+  kind: ProjectKind;
 }): React.JSX.Element | null {
   const { notify } = useToast();
   const { t } = useI18n();

@@ -441,6 +441,10 @@ fn manual_record_entry_round_trip() {
         element_updates: updates,
         order_before: None,
         order_after: None,
+        groups_before: None,
+        groups_after: None,
+        labels_before: None,
+        labels_after: None,
     });
     assert_eq!(history.undo_len(), 2);
     assert!(history.undo(&mut doc).unwrap());

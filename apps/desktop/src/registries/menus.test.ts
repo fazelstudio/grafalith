@@ -38,4 +38,14 @@ describe('menu registry', () => {
     }
     expect(menusFor('menubar.file').map((row) => row.id)).toContain('file.save');
   });
+
+  test('file export offers png, svg, and pdf rows for the export submenu', () => {
+    const ids = menusFor('menubar.file').map((row) => row.id);
+    expect(ids).toContain('file.exportPng');
+    expect(ids).toContain('file.exportSvg');
+    expect(ids).toContain('file.exportPdf');
+    for (const commandId of ['exportPng', 'exportSvg', 'exportPdf'] as const) {
+      expect(commandRegistry.get(commandId), `missing command "${commandId}"`).toBeDefined();
+    }
+  });
 });

@@ -22,12 +22,6 @@ export interface EngineGap {
 /** Capabilities omitted from the inspector, tools, and commands by design. */
 export const ENGINE_GAPS: readonly EngineGap[] = [
   {
-    id: 'gradient-fill',
-    area: 'style',
-    description: 'Gradient backgrounds are read-only: protocol v1 rejects gradient setStyle.',
-    unblocks: 'Scalar style patch carrying gradient stops (protocol v2).',
-  },
-  {
     id: 'font-editing',
     area: 'text',
     description: 'Font size/family/alignment have no direct write op; text edits go through the overlay session.',

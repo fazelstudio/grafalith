@@ -44,11 +44,11 @@ Reference Tauri host for the Grafalith canvas engine.
   (`src/features/extension-manager/`) with enable/disable/reload/uninstall
   without restarting plus per-extension and system output channels
   (`src/features/output-panel/`).
-  The editor menubar is File/Edit/View only (File holds New, Save,
-  Duplicate, and Back to home), and the titlebar quick-open
+   The editor menubar is File/Edit/View only (File holds New, Save,
+   Duplicate, Export (PNG, SVG, PDF), and Back to home), and the titlebar quick-open
   pill (layer list, `>` for commands) reuses the command registry and the
   render-model navigator instead of duplicating their logic.
-- Every editor family (design, whiteboard, diagram) renders through the
+- Every editor family (design, whiteboard, slides) renders through the
   single `EditorShell` master template in
   `src/features/editor/shell/EditorShell.tsx`: titlebar capsule, menubar,
   activity bar, left dock, canvas, right dock, and status bar. Kind editors
@@ -57,7 +57,8 @@ Reference Tauri host for the Grafalith canvas engine.
   Never duplicate that layout per kind.
 - Everything that varies per family lives in the single kind registry
   (`src/features/projects/projectKinds.ts`): display label, empty-canvas
-  hint, and starting template. Menus, home, cards, and editors consume it;
+  hint, starting template, and create-menu icon. Menus, home, cards, and
+  editors consume it;
   the template owns the kind mapping and the reverse lookup is derived, so
   the mapping is stored once. The `ProjectKind` union mirrors
   `PROJECT_KINDS` in `src-tauri/src/projects.rs` — extend both together.
@@ -65,7 +66,7 @@ Reference Tauri host for the Grafalith canvas engine.
   `src/features/editor/palette/`), shared by the command palette overlay
   and the titlebar quick switcher. Shortcut chips all format through
   `formatShortcut`; never hardcode labels like `Ctrl+S`.
-- Projects carry a `kind` (`design` | `whiteboard` | `diagram`) in project
+- Projects carry a `kind` (`design` | `whiteboard` | `slides`) in project
   metadata (Tauri and browser stores share the contract); unknown or missing
   kinds normalize to `design` through the single `normalizeProjectKind`
   helper.
@@ -76,11 +77,16 @@ Reference Tauri host for the Grafalith canvas engine.
   is no recovery banner; the close dialog stays the single unsaved-changes
   gate.
 - User-facing text belongs in `src/app/i18n/` and must keep English and
-  Indonesian key sets in parity.
+  Indonesian key sets in parity. `src/app/i18n/resources.tsx` is the single
+  locale registry (codes, dictionaries, translator, diagnostics) — every
+  file that needs locale imports from there, never from `en/*` or `id/*`
+  directly. `bun run i18n:verify` enforces the full contract.
 - Workspace pages (Projects, Trash, Settings) share the
   `workspace-page-header` / `workspace-page-title` /
   `workspace-page-description` header composition from
   `src/app/shell/shell.css` with `22px 28px 48px` page padding.
+  Projects and Trash render a centered single-sentence empty message only
+  when the list is completely empty.
 - Settings sections are registry-driven (`settingSectionRegistry` in
   `src/features/settings/settingsDescriptors.ts`); the sidebar renders
   entries from the registry with icons resolved through one map, and the
@@ -114,6 +120,18 @@ background fill independent. A transparent background therefore does not hide
 the text. The canvas renderer also isolates text paint state and preserves
 horizontal alignment, opacity, and the font fallback used by the editing
 overlay.
+
+Inspector color fields use a themed popover picker (react-colorful): Fill
+supports solid colors and linear/radial gradients, Stroke and Border stay
+solid-only, and the swatch row blends built-in templates with per-project
+recents (newest first, capped at the template count). Gradient stops ride
+on the hue bar with no default pointers: click a dot to select it, drag
+a dot along the bar to recolor its hue, double-click the bar to add
+a stop there (up to five), the minus button removes the selected stop
+(minimum two). The Solid/Gradient switch remembers each side, so
+toggling back restores the previous fill instead of rebuilding it. Transform numbers (x,
+y, width, height, rotation) display and commit to one decimal; x, y, and
+rotation each have a reset button back to 0.
 
 ## Run
 

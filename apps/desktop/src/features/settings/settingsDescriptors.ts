@@ -1,5 +1,5 @@
 import { createRegistry, type Descriptor } from '../../registries';
-import { DEFAULT_LOCALE, isLocale } from '../../app/i18n/locales';
+import { DEFAULT_LOCALE, isLocale } from '../../app/i18n/resources';
 import { DEFAULT_THEME_MODE, isThemeMode } from '../../app/theme/tokens';
 import {
   AUTOSAVE_DELAY_MS,

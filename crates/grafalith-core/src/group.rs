@@ -14,11 +14,24 @@ use crate::element::ElementId;
 use crate::EngineResult;
 
 /// Creates a group from the given element ids and returns the fresh group
-/// id. Only stored, non-deleted elements are tagged; unknown or deleted
-/// ids are skipped (TS parity). The id is minted even when nothing is
-/// tagged (TS parity).
+/// id. Unknown and deleted ids are skipped, but an effectively locked
+/// member rejects the whole operation before any member is changed.
 pub fn group_elements(doc: &mut Document, element_ids: &[ElementId]) -> EngineResult<ElementId> {
     let group_id = doc.next_group_id();
+    for id in element_ids {
+        let Some(element) = doc.get(id.as_str()) else {
+            continue;
+        };
+        if element.base().is_deleted {
+            continue;
+        }
+        if doc.effective_locked(id.as_str()) {
+            return Err(crate::EngineError::InvalidInput(format!(
+                "cannot group locked element '{}'",
+                id.as_str()
+            )));
+        }
+    }
     for id in element_ids {
         let Some(element) = doc.get(id.as_str()) else {
             continue;

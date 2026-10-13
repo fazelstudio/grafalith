@@ -450,6 +450,7 @@ fn configure_theme_and_snap_apply_and_reject_atomically() {
             ..Default::default()
         })),
         snap: Box::new(None),
+        canvas_mode: None,
     }]);
     assert_eq!(bad.applied, 0);
     assert!(!bad.results[0].ok);
@@ -764,18 +765,7 @@ fn context_menu_follows_selection_exactly() {
     );
     assert_eq!(
         data(results, 7, "contextMenu")["intents"],
-        json!([
-            "delete",
-            "duplicate",
-            "bringToFront",
-            "sendToBack",
-            "bringForward",
-            "sendBackward",
-            "group",
-            "ungroup",
-            "lock",
-            "unlock"
-        ])
+        json!(["unlock"])
     );
 }
 
@@ -1173,6 +1163,7 @@ fn preview_queries_agree_with_commit_without_mutating() {
     let resize = data(results, 1, "previewResize");
     assert_eq!(resize["changed"], true);
     assert!(resize["width"].as_f64().expect("width") > 100.0);
+    assert!(resize["guides"].is_array());
     let rotate = data(results, 2, "previewRotate");
     assert_eq!(rotate["changed"], true);
     assert!(rotate["rotation"].is_number());
@@ -1181,6 +1172,29 @@ fn preview_queries_agree_with_commit_without_mutating() {
         data(results, 3, "sessionState")["pointerPhase"]["kind"],
         "idle"
     );
+}
+
+#[test]
+fn preview_resize_snaps_the_dragged_edge_and_reports_guides() {
+    let mut engine = engine_with_rect("r1", 10.0, 10.0);
+    apply(
+        &mut engine,
+        json!([{ "op": "create", "element": rect("r2", 200.0, 10.0) }]),
+    );
+    let nonce_before = engine.scene_nonce();
+    let result = apply(
+        &mut engine,
+        json!([{ "op": "previewResize", "id": "r1", "handle": "middle-right", "x": 297.0, "y": 30.0 }]),
+    );
+    let results = applied(&result, 1);
+    let resize = data(results, 0, "previewResize");
+    assert_eq!(resize["changed"], true);
+    assert_eq!(resize["width"], 290.0);
+    let guides = resize["guides"].as_array().expect("guides array");
+    assert_eq!(guides.len(), 1);
+    assert_eq!(guides[0]["vertical"], true);
+    assert_eq!(guides[0]["position"], 300.0);
+    assert_eq!(engine.scene_nonce(), nonce_before, "previews never mutate");
 }
 
 #[test]

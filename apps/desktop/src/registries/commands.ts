@@ -39,12 +39,17 @@ export interface ViewActions {
   resetZoom: () => Promise<void>;
   fitContent: () => Promise<void>;
   fitSelection: () => Promise<void>;
+  /** Watcher kick for host-driven mutations: one fresh frame follows. */
+  refreshFrame: () => void;
 }
 
 /** Document file actions the host wires for document commands. */
 export interface FileActions {
   exportScene: () => Promise<void>;
   importScene: () => Promise<void>;
+  exportPng: () => Promise<void>;
+  exportSvg: () => Promise<void>;
+  exportPdf: () => Promise<void>;
 }
 
 /** UI actions the host wires for application commands. */
@@ -192,7 +197,11 @@ function resultFromBatch(raw: string, op: string): CommandResult {
 async function runOp(ctx: CommandContext, op: string, ops: unknown[]): Promise<CommandResult> {
   try {
     const raw = await ctx.sendBatch(ops);
-    return resultFromBatch(raw, op);
+    const result = resultFromBatch(raw, op);
+    // The canvas frame watcher sleeps while clean: every applied command
+    // wakes it for exactly one fresh frame instead of polling on a timer.
+    if (result.status === 'ok') ctx.view?.refreshFrame?.();
+    return result;
   } catch (error) {
     return engineError('transportError', error instanceof Error ? error.message : String(error));
   }
@@ -437,7 +446,7 @@ const COMMANDS: readonly CommandDefinition[] = [
     icon: 'selectAll',
     keywords: ['select', 'all'],
     shortcuts: [{ key: 'a', ctrlOrCmd: true }],
-    surfaces: ['menu', 'palette'],
+    surfaces: ['menu', 'contextMenu', 'palette'],
     canExecute: (ctx) => (ctx.documentIds.length > 0 ? enabled() : disabled('no-document')),
     execute: async (ctx) => {
       if (ctx.documentIds.length === 0) return { status: 'disabled', reason: 'no-document' };
@@ -654,8 +663,26 @@ const COMMANDS: readonly CommandDefinition[] = [
     keywords: ['lock', 'protect'],
     surfaces: ['menu', 'contextMenu', 'palette'],
     canExecute: (ctx) => needsSelection(ctx, 1),
-    execute: async (ctx) =>
-      runOp(ctx, 'setLocked', [{ op: 'setLocked', ids: [...ctx.selection], locked: true }]),
+    execute: async (ctx) => {
+      // Lock is a toggle in the editor UI: a mixed or unlocked selection is
+      // locked as one operation; an entirely locked selection is unlocked.
+      try {
+        const sceneJson = await ctx.engine.exportScene();
+        const scene = JSON.parse(sceneJson) as {
+          elements?: { id?: string; locked?: boolean; isDeleted?: boolean }[];
+        };
+        const byId = new Map((scene.elements ?? []).map((element) => [element.id, element]));
+        const selected = ctx.selection
+          .map((id) => byId.get(id))
+          .filter((element): element is { id?: string; locked?: boolean; isDeleted?: boolean } =>
+            element !== undefined && element.isDeleted !== true,
+          );
+        const locked = selected.length > 0 && selected.every((element) => element.locked === true);
+        return runOp(ctx, 'setLocked', [{ op: 'setLocked', ids: [...ctx.selection], locked: !locked }]);
+      } catch (error) {
+        return engineError('engineError', error instanceof Error ? error.message : String(error));
+      }
+    },
   },
   {
     id: 'unlock',
@@ -843,6 +870,72 @@ const COMMANDS: readonly CommandDefinition[] = [
       if (!ctx.files) return { status: 'disabled', reason: 'unavailable' };
       try {
         await ctx.files.importScene();
+        return { status: 'ok' };
+      } catch (error) {
+        return engineError('engineError', error instanceof Error ? error.message : String(error));
+      }
+    },
+  },
+  {
+    id: 'exportPng',
+    labelKey: 'editor.commands.exportPng',
+    defaultLabel: 'Export PNG',
+    descriptionKey: 'editor.commands.exportPngDescription',
+    defaultDescription: 'Export the canvas to a PNG file',
+    scope: 'project',
+    category: 'document',
+    icon: 'export',
+    keywords: ['export', 'png', 'image', 'download', 'picture'],
+    surfaces: ['menu', 'palette'],
+    canExecute: (ctx) => (ctx.files ? enabled() : disabled('unavailable')),
+    execute: async (ctx) => {
+      if (!ctx.files) return { status: 'disabled', reason: 'unavailable' };
+      try {
+        await ctx.files.exportPng();
+        return { status: 'ok' };
+      } catch (error) {
+        return engineError('engineError', error instanceof Error ? error.message : String(error));
+      }
+    },
+  },
+  {
+    id: 'exportSvg',
+    labelKey: 'editor.commands.exportSvg',
+    defaultLabel: 'Export SVG',
+    descriptionKey: 'editor.commands.exportSvgDescription',
+    defaultDescription: 'Export the canvas to an SVG file',
+    scope: 'project',
+    category: 'document',
+    icon: 'export',
+    keywords: ['export', 'svg', 'vector', 'download', 'picture'],
+    surfaces: ['menu', 'palette'],
+    canExecute: (ctx) => (ctx.files ? enabled() : disabled('unavailable')),
+    execute: async (ctx) => {
+      if (!ctx.files) return { status: 'disabled', reason: 'unavailable' };
+      try {
+        await ctx.files.exportSvg();
+        return { status: 'ok' };
+      } catch (error) {
+        return engineError('engineError', error instanceof Error ? error.message : String(error));
+      }
+    },
+  },
+  {
+    id: 'exportPdf',
+    labelKey: 'editor.commands.exportPdf',
+    defaultLabel: 'Export PDF',
+    descriptionKey: 'editor.commands.exportPdfDescription',
+    defaultDescription: 'Export the canvas to a PDF file',
+    scope: 'project',
+    category: 'document',
+    icon: 'export',
+    keywords: ['export', 'pdf', 'document', 'download', 'print'],
+    surfaces: ['menu', 'palette'],
+    canExecute: (ctx) => (ctx.files ? enabled() : disabled('unavailable')),
+    execute: async (ctx) => {
+      if (!ctx.files) return { status: 'disabled', reason: 'unavailable' };
+      try {
+        await ctx.files.exportPdf();
         return { status: 'ok' };
       } catch (error) {
         return engineError('engineError', error instanceof Error ? error.message : String(error));

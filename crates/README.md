@@ -1,148 +1,110 @@
-# crates — Grafalith Rust engine
+# Grafalith Rust Engine (`crates/`)
 
-The Rust workspace is the single source of truth for the engine. Hosts
-(browser JS, Python, Tauri desktop) are thin adapters over the JSON-string
-protocol — all engine rules live here.
+The Rust workspace is the source of truth for engine behavior. Browser, Python,
+and Tauri hosts adapt the engine through its public bindings; engine crates must
+remain independent of UI frameworks and DOM/Canvas APIs.
 
-## Crate responsibilities (one-way dependency)
+## Crate map
+
+The diagram below shows the primary engine dependency path. It is not a complete
+dependency graph for every workspace member; verify exact dependency edges in
+individual `Cargo.toml` files and keep this section synchronized when they change.
 
 ```text
-grafalith  ─┐
-            ├─▶ grafalith-bindings ─▶ grafalith-io ─▶ grafalith-core ─▶ grafalith-geometry
-grafalith-python ┘        │              │           │            │
-                     │              │           │            │
-               JSON string      envelope +   domain      pure math
-               batch protocol   clipboard   (no DOM,     (no deps)
-               + DTOs           codec       no React,
-                                           no Tauri)
+Host applications / package wrappers
+              │
+              ▼
+     grafalith-bindings
+              │
+              ▼
+         grafalith-io
+              │
+              ▼
+        grafalith-core
+              │
+              ▼
+      grafalith-geometry
+
+Additional workspace crates: grafalith-pptx, grafalith-sdk, grafalith-text,
+grafalith (WASM/npm), and grafalith-python (Python/PyO3).
 ```
 
-- **`grafalith-geometry`** — pure 2D math, zero deps: `point`, `rect` (`Bounds`),
-  `segment`, `rotation`, `hit`, `path`, `transform` (resize/rotate/handles),
-  `spatial` (`SpatialGrid`), `snap`, `viewport`.
-- **`grafalith-core`** — persistent domain + editor session (see the module map in
-  `grafalith-core/src/lib.rs`): `domain`, `history`, `session`, `ops`, `view`,
-  `ext`. `Document` is the sole version/nonce authority; all mutation goes
-  through `Command` (two-phase validate-then-store, one history entry per
-  intent). Text creation stays provisional inside the edit session's history
-  transaction, so committing empty text leaves no element or undo entry.
-- **`grafalith-io`** — interchange: `schema` (versioned DTOs, lenient-version /
-  strict-data), `pipeline` (`export/import`, staged plan, PNG descriptors),
-  `clipboard_codec` (versioned envelope + bare-array compatibility).
-- **`grafalith-bindings`** — the only stateful surface (`Engine`):
-  `protocol` (JSON-string `BatchOp`, `PROTOCOL_VERSION`), `engine` (dispatch,
-  reuses the same command/io machinery), `render_dto`/`session` shapes,
-  `wasm::JsEngine` (string-only), `tauri` (thin wrapper, no Tauri dep).
-- **`grafalith`** — npm distribution (`wasm-pack`), published as
-  `@fazelstudio/grafalith`. Thin, string-only.
-- **`grafalith-python`** — PyPI distribution (`maturin`/PyO3), published as
-  `grafalith`. Thin, dict-in/dict-out.
-- **`grafalith-sdk`** — Rust SDK facade for extensions.
-- **`grafalith-text`** — Text measurement and shaping helpers.
-
-The SDK facade re-exports the engine extension traits plus the host-side
-packaging   modules: `manifest` (`.grlt` validation mirroring the TS SDK),
-`discovery` (installed-package listing), `storage` (per-extension JSON
-storage), `notification` (toast routing DTOs), `status` (lifecycle states
-mirroring the desktop status machine), `dependency` (activation-order
-resolution: missing/blocked/circular reports). The Tauri host calls these
-from `apps/desktop/src-tauri/src/extensions.rs`.
-
-## Distribution channels
-
-| Registry | Package | Built from |
+| Crate / workspace member | Responsibility | Boundary |
 |---|---|---|
-| npm | `@fazelstudio/grafalith` | `crates/grafalith` (wasm-pack `cdylib`) |
-| PyPI | `grafalith` | `crates/grafalith-python` (maturin) |
-| crates.io | `grafalith-geometry`, `grafalith-core`, `grafalith-io`, `grafalith-bindings`, `grafalith-sdk`, `grafalith-text` | the engine crates (`rlib` libraries) |
+| `grafalith-geometry` | Pure 2D math: points, bounds, segments, transforms, path math, hit testing, spatial grid, snapping, and viewport calculations. | No document/session state or host UI dependencies. |
+| `grafalith-core` | Document domain, editor session, elements, selection, commands/history, hierarchy, transforms, constraints, assets, components, and render-model construction. | Must not depend on host bindings, DOM/Canvas, React, Tauri, or a host renderer. |
+| `grafalith-io` | Versioned document interchange, import/export pipelines, clipboard codecs, and export descriptors. | Converts data at the interchange boundary; domain mutations still go through core commands. |
+| `grafalith-bindings` | Host-facing `Engine` facade, JSON-string protocol, command dispatch, protocol DTOs, and host-compatible session/render data. | The public protocol boundary; keep it thin and independent of UI-framework code. |
+| `grafalith` | WASM/npm distribution, published as `@fazelstudio/grafalith`. | Thin package wrapper over bindings. |
+| `grafalith-python` | Python/PyO3 distribution, published on PyPI as `grafalith`. | Thin package wrapper over bindings. Confirm the Cargo package name in its manifest. |
+| `grafalith-sdk` | Rust-facing SDK facade for engine extensions and related extension-package APIs. | Keep extension-facing APIs stable and avoid exposing unnecessary engine internals. |
+| `grafalith-text` | Text measurement and shaping helpers. | Keep platform-dependent measurement separate from deterministic core behavior. |
+| `grafalith-pptx` | PowerPoint `.pptx` export support, including slide package/XML generation and an exporter capability. | Keep PPTX-specific behavior outside the generic core; verify its exact dependency edges in `Cargo.toml`. |
 
-Only the six engine crates above are publishable to crates.io. The other
-workspace members are build artifacts or hosts, not libraries Rust code can
-depend on, and are pinned with `publish = false` so a stray
-`cargo publish -p <name>` cannot claim a registry name:
+For implementation details and public contracts, see [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). For user-visible scope and exclusions, see [`../docs/PRD.md`](../docs/PRD.md).
 
-| Crate | Why `publish = false` |
+## Core invariants
+
+- Elements are serializable data; rendering, hit testing, and other behavior live in separate functions/systems.
+- Elements use document/scene coordinates. Screen-to-scene conversion belongs at the input/rendering boundary.
+- `Document` owns document mutation and version/nonce updates. Do not mutate stored element data around the established mutation path.
+- Every user operation is represented by a command and follows the established history/transaction mechanism. A single user action should produce one atomic undo entry.
+- Mutations validate before storing changes. Failed validation must not leave partial document state.
+- Deletion follows the documented soft-delete policy; do not remove records directly unless an established cleanup/compaction path requires it.
+- State is instance-scoped. Do not introduce mutable global singletons.
+- The engine produces deterministic render data; hosts perform rasterization and own DOM, canvas, native window, clipboard, file-dialog, and other UI-specific behavior.
+- Protocol changes must preserve compatibility. Add operations compatibly where possible and update generated bindings and command documentation in the same change. Increment `PROTOCOL_VERSION` only according to the documented compatibility policy.
+- Hierarchy membership, group records, z-order, and labels are related document state. Any representations stored in parallel must be updated atomically and kept consistent by invariants and tests.
+- Spatial-query data and caches must be invalidated or updated through the established document mutation path; never let derived state become an independent source of truth.
+- Async asset fetching belongs to the host. Core stores the documented asset reference/data representation and receives explicit invalidation/update signals where required.
+
+## Feature ownership at a glance
+
+| Capability | Primary crate / area |
 |---|---|
-| `grafalith` | wasm-pack `cdylib`, no `rlib` — the npm artifact |
-| `grafalith-py` | PyO3 extension module — the PyPI artifact |
-| `grafalith-desktop` | Tauri application host (`apps/desktop/src-tauri`) |
-| `ext-sticker` | out-of-workspace teaching example |
+| Geometry, transforms, bounds, snapping, spatial queries | `grafalith-geometry` |
+| Elements, document state, editor session, selection, gestures | `grafalith-core` |
+| Commands, transactions, undo/redo, hierarchy, lock, z-order | `grafalith-core` |
+| Render model, hit-test queries, canvas/view policy | `grafalith-core` |
+| Versioned document schema, clipboard codec, import/export | `grafalith-io` |
+| JSON protocol and host dispatch | `grafalith-bindings` |
+| Text shaping/measurement abstractions | `grafalith-text` and the documented core interface |
+| PowerPoint package export | `grafalith-pptx` |
+| WASM/npm package | `grafalith` |
+| Python/PyPI package | `grafalith-python` |
+| Extension-facing Rust facade | `grafalith-sdk` |
 
-Each channel keeps the same `0.1.0` version, and the crates.io publish order
-follows the dependency arrow: `grafalith-geometry` → `grafalith-core` →
-`grafalith-io` → `grafalith-bindings` / `grafalith-sdk` / `grafalith-text`.
+This table identifies primary ownership, not permission to bypass command or module boundaries.
 
-`bun run verify:packages` (CI) enforces all of the above: required registry
-metadata, the `publish = false` guards, a clean `cargo package --list` file
-set, and a topological publish order. Publishing commands live in
-[`../DEVELOPMENT.md`](../DEVELOPMENT.md#publishing).
+## Extension SDK status
 
-## Main rules
+The workspace contains a `grafalith-sdk` crate and extension-related APIs. Distinguish implementation in the repository from public release status: consult [`../DEVELOPMENT.md`](../DEVELOPMENT.md) and package verification before describing a crate as published or release-ready.
 
-- `grafalith-core` must not depend on any host binding, renderer, DOM/Canvas,
-  React, or Tauri (enforced by the `workspace_wiring` test).
-- All fallible ops → `EngineResult<T, EngineError>`; `panic!` is reserved for
-  must-never-fail invariants and never crosses an FFI boundary.
-- Instance-scoped state: no global singletons; many `Engine`
-  instances coexist (multi-canvas, multi-document).
-- Render is data (`RenderModel`/`DrawEntry`/`PaintDesc`), not raster: hosts
-  (Canvas2D, Skia, …) draw; the engine never touches canvas/DOM.
-- `Document` owns its query accelerator: a `SpatialGrid` synced on every
-  mutation (tombstones evicted), backing viewport culling (`RenderModel`)
-  and host hit-testing (`query_spatial`, `rebuild_spatial`, `raw_bounds`).
-- `AssetStore` is synchronous in core (`Bytes`/`Url`); async/blob fetching is
-  a host concern that bumps the explicit `asset_generation`.
-- The protocol grows additively (`align`, `distribute`, `applyAutoLayout`,
-  `resizeSelection`, `pen`/`crop`/`pathEdit` sessions); `PROTOCOL_VERSION`
-  is bumped only for breaking changes.
+Extension capabilities may include shapes, commands, serialization, import, and export. Keep extension lifecycle and registration instance-scoped, and expose only documented public contracts. Desktop-specific installation, UI notifications, and operating-system integration must remain in the appropriate host layer unless the established architecture explicitly assigns a portable DTO or validation API to the SDK.
 
-## Standard commands
+## Distribution and publishing
 
-Canonical reference: [`../DEVELOPMENT.md`](../DEVELOPMENT.md).
+Distribution channels are:
+
+| Channel | Distribution | Source |
+|---|---|---|
+| npm | `@fazelstudio/grafalith` | `crates/grafalith` (WASM via `wasm-pack`) |
+| PyPI | `grafalith` | `crates/grafalith-python` (PyO3 via `maturin`) |
+| crates.io | Publishable Rust libraries | Individual publishable workspace crates |
+
+Which workspace members are publishable, their Cargo package names, version alignment, and dependency-respecting publish order must match the manifests and the repository's package-verification script. Do not treat directory names, Cargo package names, library names, and registry distribution names as interchangeable.
+
+Publishing commands and release requirements are maintained in [`../DEVELOPMENT.md`](../DEVELOPMENT.md#publishing). The verification script is the authoritative automated check for package metadata and publish constraints.
+
+## Validation commands
+
+Use [`../DEVELOPMENT.md`](../DEVELOPMENT.md) as the canonical command reference. Common Rust checks are:
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo build --workspace
 ```
 
-## Readiness for the future extension SDK
-
-The engine is deliberately architected for a future public extension SDK (the
-"VSCode extension" model) without shipping the SDK yet:
-
-- **Command-based core** — every user intent is one atomic `Command` executed
-  via `HistoryManager`; the protocol batch is a command list. Hosts build
-  tool buttons by calling commands (CodeMirror 6 style).
-- **Extension = installable unit** — `Extension` trait + `ExtensionMetadata` +
-  lifecycle (register → activate → deactivate → dispose) + protocol-version
-  compatibility check. Instance-scoped, no globals.
-- **Extension = registered capability** — `ShapeExtension`,
-  `CommandExtension`, `SerializerExtension`, `ImporterExtension`,
-  `ExporterExtension`. Extensions declare capabilities through `ExtensionContext`,
-  which is backed by the registry's persistent capability storage
-  (`tools`/`shapes`/`commands`/`serializers`/`importers`/`exporters`).
-- **Dispatch seam** — `ExtensionRegistry::command_by_id` is the lookup point
-  for the future `executeCommand` protocol op; the SDK will re-export the
-  registry surface so extension authors never touch engine internals.
-
-When the SDK ships, it will be a thin facade crate (`grafalith-sdk`) over these
-public surfaces — no engine changes required.
-
-## Feature map (engine)
-
-| Area | Module(s) | Notes |
-|---|---|---|
-| Element model (11 types + custom) | `element` | plain data; factories + validate + bounds per type |
-| Document store | `document` | id map + explicit z-order + version/nonce authority; soft/hard delete; snapshots |
-| History / commands | `command`, `history` | inversion via exact snapshots, not re-execution; transactions |
-| Editor session | `editor`, `editor_state`, `selection`, `gesture`, `text_session`, `interaction` | normalized input; pointer phase machine; drainable event queue |
-| Domain ops | `group`, `lock`, `zorder`, `style`, `frame`, `alignment`, `arrow_binding`, `constraints`, `auto_layout`, `clipboard`, `components`, `assets`, `path_edit` | follow-binding + constraint propagation inside the same transaction (no hidden `afterUpsert`) |
-| View | `hit_test`, `render_model`, `canvas_mode`, `theme` | render as deterministic DTO; frame-clip partition; instance resolve |
-| Extensions | `shape_registry`, `shape_extension`, `extension`, `command_extension`, `serializer` | instance-scoped, no globals |
-| Interchange | `grafalith-io/*` | versioned schema, staged import, clipboard codec, PNG plan |
-| Host boundary | `grafalith-bindings/*` | JSON-string batch, per-op atomic, error envelopes |
-
-What stays host-side (by design, not a gap): Canvas2D rasterization, DOM
-(textarea overlay, OS clipboard, file download), pixel-exact text measuring
-(core provides a trait + deterministic fallback), and all UI chrome.
+Run the relevant WASM, Python, binding-generation, desktop, and documentation checks when a change affects those surfaces. Do not claim a check passed unless it was actually run.

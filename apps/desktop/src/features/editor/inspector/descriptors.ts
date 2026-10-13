@@ -1,9 +1,12 @@
 import type { DrawEntryDto, Engine } from '../../../hooks/useEngine';
+import type { FillPreview } from '../../../render/drawModel';
 import type { CommandResult } from '../../../registries';
+import { fillToPatch, isGradientFill, paintToFill, type FillValue } from './colorSwatches';
 
 /** Control template a field renders through (no bespoke JSX per property). */
 export type InspectorControlType =
   | 'number'
+  | 'opacity'
   | 'text'
   | 'color'
   | 'select'
@@ -11,6 +14,19 @@ export type InspectorControlType =
   | 'segmented'
   | 'alignment'
   | 'readonly';
+
+/** Display precision for transform numbers: one decimal (Figma-style). */
+export const TRANSFORM_DECIMALS = 1;
+
+/**
+ * Rounds to one decimal for inspector display and commits. Storage keeps
+ * full float precision (repeated gestures would drift if the engine
+ * rounded), so long fractions like 619.2807… render as 619.3.
+ */
+export function roundToTenth(value: number): number {
+  const rounded = Math.round(value * 10) / 10;
+  return rounded === 0 ? 0 : rounded;
+}
 
 /** Sentinel for multi-selection values that differ across the selection. */
 export const MIXED = Symbol('mixed');
@@ -22,6 +38,14 @@ export interface InspectorFieldContext {
   selection: readonly string[];
   sendBatch: (ops: unknown[]) => Promise<string>;
   engine: Engine;
+  /** Open project for per-project chrome such as color recents. */
+  projectId: string;
+  /**
+   * Uncommitted fill preview shared with the canvas loop by ref (never
+   * React state). Writers set it during drags and clear it on commit,
+   * cancel, or close; Canvas only ever reads it.
+   */
+  fillPreviewRef: { current: FillPreview | null };
   /** Write path: one inspector command per op (bounds, rotation, style). */
   commit: (commandId: string, op: string, ops: unknown[]) => Promise<CommandResult>;
 }
@@ -39,6 +63,8 @@ export interface InspectorFieldDefinition {
   validate?: (value: Exclude<FieldValue, Mixed>) => string | undefined;
   disabled?: (ctx: InspectorFieldContext) => boolean;
   visible?: (ctx: InspectorFieldContext) => boolean;
+  /** Gradient tools render for this color field (fill only; strokes stay solid). */
+  allowGradient?: boolean;
   options?: readonly { value: string; labelKey: string; defaultLabel: string }[];
   min?: number;
   max?: number;
@@ -46,6 +72,35 @@ export interface InspectorFieldDefinition {
   unit?: string;
   placeholderKey?: string;
   defaultPlaceholder?: string;
+  /**
+   * Reset target rendered as a button beside the input. Set for x/y/rotation
+   * (each resets to 0); absent means no reset button.
+   */
+  resetValue?: number;
+  /**
+   * Reserves reset-button space without rendering the button, so the input
+   * matches the width of siblings that have one (width/height align with
+   * x/y). No behavior, layout only.
+   */
+  reserveResetSpace?: boolean;
+  /**
+   * Quick-pick values in the opacity menu (single click opens, double-click
+   * edits inline). Free typing in edit mode still allows any value within
+   * min/max.
+   */
+  presets?: readonly number[];
+  /**
+   * Stacked layout: label above, control below full width (like fields
+   * inside a row). Single fields default to label-left/input-right.
+   */
+  stacked?: boolean;
+  /**
+   * Caps a stacked control at one row-cell width, matching inputs that
+   * share a row (rotation aligns with x/y). Layout only.
+   */
+  halfWidth?: boolean;
+  /** Row group id: consecutive fields sharing one render side by side. */
+  row?: string;
 }
 
 /** One inspector section: configuration + adapter, rendered generically. */
@@ -64,12 +119,18 @@ function mixedIf<T>(values: readonly T[]): T | Mixed {
   return values.every((value) => value === first) ? first : MIXED;
 }
 
+function entryFrame(entry: DrawEntryDto): DrawEntryDto['bounds'] {
+  return entry.frame ?? entry.bounds;
+}
+
 function entryWidth(entry: DrawEntryDto): number {
-  return entry.bounds.maxX - entry.bounds.minX;
+  const frame = entryFrame(entry);
+  return frame.maxX - frame.minX;
 }
 
 function entryHeight(entry: DrawEntryDto): number {
-  return entry.bounds.maxY - entry.bounds.minY;
+  const frame = entryFrame(entry);
+  return frame.maxY - frame.minY;
 }
 
 function radiansToDegrees(radians: number): number {
@@ -78,11 +139,6 @@ function radiansToDegrees(radians: number): number {
 
 function degreesToRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
-}
-
-function solidFillColor(entry: DrawEntryDto): string | null {
-  if (entry.paint.type === 'solid') return entry.paint.color;
-  return null;
 }
 
 /** Op name to the inspector command owning it (one intent per write). */
@@ -114,7 +170,7 @@ function numberField(
   defaultLabel: string,
   read: (ctx: InspectorFieldContext) => number | Mixed,
   write: (value: number, ctx: InspectorFieldContext) => Promise<CommandResult>,
-  opts: { min?: number; max?: number; step?: number; unit?: string } = {},
+  opts: { min?: number; max?: number; step?: number; unit?: string; row?: string; resetValue?: number; reserveResetSpace?: boolean; presets?: readonly number[]; stacked?: boolean; halfWidth?: boolean } = {},
 ): InspectorFieldDefinition {
   return {
     id,
@@ -137,6 +193,32 @@ function numberField(
   };
 }
 
+/** One rendered unit: a lone field or a side-by-side row of fields. */
+export type FieldRowGroup<T extends { id: string; row?: string }> =
+  | { kind: 'single'; field: T }
+  | { kind: 'row'; key: string; fields: T[] };
+
+/**
+ * Groups consecutive fields sharing a `row` id into side-by-side rows.
+ * A grouped id appearing alone renders full width like an ungrouped field.
+ */
+export function groupFieldRows<T extends { id: string; row?: string }>(fields: readonly T[]): FieldRowGroup<T>[] {
+  const groups: FieldRowGroup<T>[] = [];
+  for (const field of fields) {
+    const last = groups[groups.length - 1];
+    if (field.row !== undefined && last !== undefined && last.kind === 'row' && last.key === field.row) {
+      last.fields.push(field);
+    } else if (field.row !== undefined) {
+      groups.push({ kind: 'row', key: field.row, fields: [field] });
+    } else {
+      groups.push({ kind: 'single', field });
+    }
+  }
+  return groups.map((group) =>
+    group.kind === 'row' && group.fields.length < 2 ? { kind: 'single', field: group.fields[0] } : group,
+  );
+}
+
 /** Transform section: x/y/width/height via setBounds, rotation via setRotation. */
 const transformSection: InspectorSectionDefinition = {
   id: 'transform',
@@ -149,7 +231,7 @@ const transformSection: InspectorSectionDefinition = {
       'x',
       'editor.inspector.positionX',
       'X',
-      (ctx) => (ctx.entries.length === 1 ? ctx.entries[0].bounds.minX : MIXED),
+      (ctx) => (ctx.entries.length === 1 ? roundToTenth(entryFrame(ctx.entries[0]).minX) : MIXED),
       async (value, ctx) => {
         const entry = ctx.entries[0];
         if (!entry) return { status: 'notApplicable' };
@@ -157,20 +239,20 @@ const transformSection: InspectorSectionDefinition = {
           {
             op: 'setBounds',
             id: entry.id,
-            x: value,
-            y: entry.bounds.minY,
-            width: Math.max(entryWidth(entry), 1),
-            height: Math.max(entryHeight(entry), 1),
+            x: roundToTenth(value),
+            y: roundToTenth(entryFrame(entry).minY),
+            width: Math.max(roundToTenth(entryWidth(entry)), 1),
+            height: Math.max(roundToTenth(entryHeight(entry)), 1),
           },
         ]);
       },
-      { step: 1 },
+      { step: 0.1, row: 'position', resetValue: 0 },
     ),
     numberField(
       'y',
       'editor.inspector.positionY',
       'Y',
-      (ctx) => (ctx.entries.length === 1 ? ctx.entries[0].bounds.minY : MIXED),
+      (ctx) => (ctx.entries.length === 1 ? roundToTenth(entryFrame(ctx.entries[0]).minY) : MIXED),
       async (value, ctx) => {
         const entry = ctx.entries[0];
         if (!entry) return { status: 'notApplicable' };
@@ -178,20 +260,20 @@ const transformSection: InspectorSectionDefinition = {
           {
             op: 'setBounds',
             id: entry.id,
-            x: entry.bounds.minX,
-            y: value,
-            width: Math.max(entryWidth(entry), 1),
-            height: Math.max(entryHeight(entry), 1),
+            x: roundToTenth(entryFrame(entry).minX),
+            y: roundToTenth(value),
+            width: Math.max(roundToTenth(entryWidth(entry)), 1),
+            height: Math.max(roundToTenth(entryHeight(entry)), 1),
           },
         ]);
       },
-      { step: 1 },
+      { step: 0.1, row: 'position', resetValue: 0 },
     ),
     numberField(
       'width',
       'editor.inspector.width',
       'Width',
-      (ctx) => (ctx.entries.length === 1 ? entryWidth(ctx.entries[0]) : MIXED),
+      (ctx) => (ctx.entries.length === 1 ? roundToTenth(entryWidth(ctx.entries[0])) : MIXED),
       async (value, ctx) => {
         const entry = ctx.entries[0];
         if (!entry) return { status: 'notApplicable' };
@@ -199,20 +281,20 @@ const transformSection: InspectorSectionDefinition = {
           {
             op: 'setBounds',
             id: entry.id,
-            x: entry.bounds.minX,
-            y: entry.bounds.minY,
-            width: Math.max(value, 1),
-            height: Math.max(entryHeight(entry), 1),
+            x: roundToTenth(entryFrame(entry).minX),
+            y: roundToTenth(entryFrame(entry).minY),
+            width: Math.max(roundToTenth(value), 1),
+            height: Math.max(roundToTenth(entryHeight(entry)), 1),
           },
         ]);
       },
-      { min: 1, step: 1 },
+      { min: 1, step: 0.1, row: 'size', reserveResetSpace: true },
     ),
     numberField(
       'height',
       'editor.inspector.height',
       'Height',
-      (ctx) => (ctx.entries.length === 1 ? entryHeight(ctx.entries[0]) : MIXED),
+      (ctx) => (ctx.entries.length === 1 ? roundToTenth(entryHeight(ctx.entries[0])) : MIXED),
       async (value, ctx) => {
         const entry = ctx.entries[0];
         if (!entry) return { status: 'notApplicable' };
@@ -220,33 +302,33 @@ const transformSection: InspectorSectionDefinition = {
           {
             op: 'setBounds',
             id: entry.id,
-            x: entry.bounds.minX,
-            y: entry.bounds.minY,
-            width: Math.max(entryWidth(entry), 1),
-            height: Math.max(value, 1),
+            x: roundToTenth(entryFrame(entry).minX),
+            y: roundToTenth(entryFrame(entry).minY),
+            width: Math.max(roundToTenth(entryWidth(entry)), 1),
+            height: Math.max(roundToTenth(value), 1),
           },
         ]);
       },
-      { min: 1, step: 1 },
+      { min: 1, step: 0.1, row: 'size', reserveResetSpace: true },
     ),
     numberField(
       'rotation',
       'editor.inspector.rotation',
       'Rotation',
-      (ctx) => (ctx.entries.length === 1 ? radiansToDegrees(ctx.entries[0].rotation) : MIXED),
+      (ctx) => (ctx.entries.length === 1 ? roundToTenth(radiansToDegrees(ctx.entries[0].rotation)) : MIXED),
       async (value, ctx) => {
         const entry = ctx.entries[0];
         if (!entry) return { status: 'notApplicable' };
         return runWriteOp(ctx, 'setRotation', [
-          { op: 'setRotation', id: entry.id, rotation: degreesToRadians(value) },
+          { op: 'setRotation', id: entry.id, rotation: degreesToRadians(roundToTenth(value)) },
         ]);
       },
-      { step: 1, unit: '°' },
+      { step: 0.1, unit: '°', resetValue: 0, stacked: true, halfWidth: true },
     ),
   ],
 };
 
-/** Style section: only scalar setStyle fields the protocol supports (no gradients). */
+/** Style section: scalar setStyle fields plus gradient fills (strokes stay solid). */
 const styleSection: InspectorSectionDefinition = {
   id: 'style',
   titleKey: 'editor.inspector.styleTitle',
@@ -259,16 +341,26 @@ const styleSection: InspectorSectionDefinition = {
       labelKey: 'editor.inspector.fill',
       defaultLabel: 'Fill',
       control: 'color',
-      read: (ctx) => mixedIf(ctx.entries.map((entry) => solidFillColor(entry) ?? MIXED)) as FieldValue,
+      allowGradient: true,
+      read: (ctx) => mixedIf(ctx.entries.map((entry) => paintToFill(entry.paint))) as FieldValue,
       write: async (value, ctx) => {
-        if (typeof value !== 'string' || value.trim() === '') {
-          return { status: 'validationError', message: 'Fill must be a color string' };
+        // The wire accepts gradient objects beyond the scalar FieldValue union.
+        const fill = value as unknown as FillValue;
+        if (typeof fill === 'string') {
+          if (fill.trim() === '') {
+            return { status: 'validationError', message: 'Fill must be a color string' };
+          }
+          return runWriteOp(ctx, 'setStyle', [
+            { op: 'setStyle', ids: [...ctx.selection], patch: { background: fill } },
+          ]);
+        }
+        if (!isGradientFill(fill)) {
+          return { status: 'validationError', message: 'Fill must be a color or gradient' };
         }
         return runWriteOp(ctx, 'setStyle', [
-          { op: 'setStyle', ids: [...ctx.selection], patch: { background: value } },
+          { op: 'setStyle', ids: [...ctx.selection], patch: { background: fillToPatch(fill) } },
         ]);
       },
-      disabled: (ctx) => ctx.entries.some((entry) => solidFillColor(entry) === null),
     },
     {
       id: 'stroke',
@@ -337,17 +429,21 @@ const styleSection: InspectorSectionDefinition = {
         ]);
       },
     },
-    numberField(
-      'opacity',
-      'editor.inspector.opacity',
-      'Opacity',
-      (ctx) => mixedIf(ctx.entries.map((entry) => entry.opacity)),
-      async (value, ctx) =>
-        runWriteOp(ctx, 'setStyle', [
-          { op: 'setStyle', ids: [...ctx.selection], patch: { opacity: value } },
-        ]),
-      { min: 0, max: 100, step: 1, unit: '%' },
-    ),
+    {
+      // Number plumbing is shared; only the control template differs.
+      ...numberField(
+        'opacity',
+        'editor.inspector.opacity',
+        'Opacity',
+        (ctx) => mixedIf(ctx.entries.map((entry) => entry.opacity)),
+        async (value, ctx) =>
+          runWriteOp(ctx, 'setStyle', [
+            { op: 'setStyle', ids: [...ctx.selection], patch: { opacity: value } },
+          ]),
+        { min: 0, max: 100, step: 1, presets: [0, 25, 50, 75, 100] },
+      ),
+      control: 'opacity',
+    },
   ],
 };
 

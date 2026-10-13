@@ -24,7 +24,7 @@ Rename to `grafalith.extension.json` at the zip root when packing.
 | `priority` | no | `"high"` runs first in each phase (built-ins); default normal. |
 | `dependencies` | no | `publisher.id` → range; missing/circular deps skip with a toast. |
 | `permissions` | no | `notifications`, `clipboard`, `filesystem:read/write`, `network`. Undeclared clipboard/fs access is denied; undeclared notifications warn. |
-| `activationEvents` | no | `onStartup`, `onHome`, `onProject`, `onEditor:design\|whiteboard\|diagram\|*`, `onCommand:<id>`, `onView:<id>`. Absent means eager. |
+| `activationEvents` | no | `onStartup`, `onHome`, `onProject`, `onEditor:design\|whiteboard\|slides\|*`, `onCommand:<id>`, `onView:<id>`. Absent means eager. |
 | `contributes` | no | `commands`, `menus`, `keybindings`, `configuration`, `activityBarItems`, `statusBarItems`, `panels`, `modals`, `toolbarItems`, `editorTools` (per kind), `themes`, `diagramNodes`, `assetProviders`, `homeWidgets`, `projectTemplates`. |
 
 ## Status lifecycle

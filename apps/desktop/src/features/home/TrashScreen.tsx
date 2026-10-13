@@ -8,6 +8,7 @@ import {
 } from '../../platform/projects/projectService';
 import { parseProjectError, type ProjectError, type TrashedProjectSummary } from '../../platform/projects/types';
 import { Button, EmptyState, LoadingState } from '../../ui/primitives/controls';
+import { clearColorRecents } from '../editor/inspector/colorSwatches';
 import { DeletePermanentlyDialog } from './ProjectDialogs';
 import './trash.css';
 
@@ -64,6 +65,7 @@ export function TrashScreen() {
     setActionError(null);
     try {
       await getProjectStore().deletePermanently(project.id);
+      clearColorRecents(project.id);
       notify(t('projects.notifications.deleted', { name: project.name }));
       setDeleteProject(null);
       await refresh(false);
@@ -117,10 +119,9 @@ export function TrashScreen() {
         />
       ) : null}
       {loadState.kind === 'ready' && projects.length === 0 ? (
-        <EmptyState
-          title={t('projects.trash.emptyTitle')}
-          description={t('projects.trash.emptyDescription')}
-        />
+        <div className="trash__empty">
+          <EmptyState title={t('projects.trash.emptyTitle')} />
+        </div>
       ) : null}
       {projects.length > 0 ? (
         <div className="trash__list">

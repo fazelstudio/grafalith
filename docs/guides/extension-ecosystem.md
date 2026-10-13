@@ -4,7 +4,7 @@ Design contract for the `.grlt` extension ecosystem. The host is the
 Tauri desktop app (`apps/desktop`); the authoring surface is
 `packages/grafalith-sdk`; native capabilities stay in
 `crates/grafalith-sdk`. Adapted from the VSCode extension model for a
-Home-first app with three editor kinds (`design`, `whiteboard`, `diagram`).
+Home-first app with three editor kinds (`design`, `whiteboard`, `slides`).
 
 ## 1. Audit summary (what existed before this change)
 
@@ -29,7 +29,7 @@ Home-first app with three editor kinds (`design`, `whiteboard`, `diagram`).
   Phase 3 Home Ready — render Home, activate `onStartup` then `onHome`
 [Create/Open Project] → editor kind known
   Phase 4 Editor Bootstrap — load project, activate `onProject`,
-    then `onEditor:*` / `onEditor:design|whiteboard|diagram`
+    then `onEditor:*` / `onEditor:design|whiteboard|slides`
   Phase 5 Editor Ready — palette populated, UI contributions rendered
 [Close editor → Home] — fire `willUnmount`/`didClose`, deactivate
   editor-scoped extensions (subscriptions disposed, views removed)
@@ -70,7 +70,7 @@ Required identity: `id`, `publisher`, `name`, `version` (semver `x.y.z`),
 
 Activation events: `onStartup`, `onHome`, `onProject`,
 `onEditor:*`, `onEditor:design`, `onEditor:whiteboard`,
-`onEditor:diagram`, `onCommand:<id>`, `onView:<id>`. No events means
+`onEditor:slides`, `onCommand:<id>`, `onView:<id>`. No events means
 eager (actives on every trigger, used by built-ins).
 
 Contributes: `commands`, `menus` (menubar, canvas/layers/statusbar/

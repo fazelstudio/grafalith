@@ -1,7 +1,7 @@
 import { createLocalProjectStore } from './localAdapter';
 import { isTauriRuntime, tauriProjectStore } from './tauriAdapter';
 import { persistenceConfig } from './persistenceConfig';
-import type { ProjectKind, ProjectOpenResult, ProjectSummary, TrashedProjectSummary } from './types';
+import type { ProjectCanvas, ProjectKind, ProjectOpenResult, ProjectSummary, TrashedProjectSummary } from './types';
 
 /** Trash entries are permanently removed after this many days. */
 export const TRASH_RETENTION_DAYS = persistenceConfig.trashRetentionDays;
@@ -30,7 +30,7 @@ export interface ProjectStore {
   list(): Promise<ProjectSummary[]>;
   listTrash(): Promise<TrashedProjectSummary[]>;
   purgeExpired(): Promise<void>;
-  create(name: string, sceneJson: string, kind?: ProjectKind): Promise<ProjectSummary>;
+  create(name: string, sceneJson: string, kind?: ProjectKind, canvas?: ProjectCanvas): Promise<ProjectSummary>;
   open(id: string): Promise<ProjectOpenResult>;
   preview(id: string): Promise<ProjectOpenResult>;
   rename(id: string, name: string): Promise<ProjectSummary>;

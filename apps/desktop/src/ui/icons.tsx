@@ -88,6 +88,26 @@ export function LayersIcon(props: IconProps) {
   );
 }
 
+export function LockIcon(props: IconProps) {
+  return base(
+    props,
+    <>
+      <rect x="3.5" y="7" width="9" height="7" rx="1" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </>,
+  );
+}
+
+/** Collapse every tree folder: stacked chevrons pointing inward-up. */
+export function CollapseAllIcon(props: IconProps) {
+  return base(props, <path d="M3.5 9 8 4.5 12.5 9M3.5 13.5 8 9l4.5 4.5" />);
+}
+
+/** Expand every tree folder: stacked chevrons pointing outward-down. */
+export function ExpandAllIcon(props: IconProps) {
+  return base(props, <path d="M3.5 7 8 11.5 12.5 7M3.5 2.5 8 7l4.5-4.5" />);
+}
+
 export function SelectToolIcon(props: IconProps) {
   return base(props, <path d="m3 2 8.5 8.5-4 .5-2 3.5L3 2Z" />);
 }
@@ -261,6 +281,49 @@ export function KeyboardIcon(props: IconProps) {
     <>
       <rect x="1.5" y="4" width="13" height="8" rx="1.5" />
       <path d="M4 6.5h.01M6.5 6.5h.01M9 6.5h.01M11.5 6.5h.01M4 9.5h8" strokeWidth={2} />
+    </>,
+  );
+}
+
+export function PenNibIcon(props: IconProps) {
+  return base(
+    props,
+    <>
+      <path d="M11.6 2.1 13.8 4.3 5.6 12.5 2.3 13.7 3.5 10.4 11.6 2.1Z" />
+      <path d="m9.7 4 2.2 2.2" />
+      <path d="m3.5 10.4 2.1 2.1" />
+    </>,
+  );
+}
+
+export function PresentationBoardIcon(props: IconProps) {
+  return base(
+    props,
+    <>
+      <rect x="2.1" y="2" width="11.8" height="7.8" rx="0.8" />
+      <path d="M4.1 4.5c.7-.8 1.3.8 2 0s1.3.8 2 0M4.1 7h5.2" />
+      <path d="M8 9.8v2.1M8 11.9l-2.2 2M8 11.9l2.2 2" />
+    </>,
+  );
+}
+
+export function SlidesIcon(props: IconProps) {
+  return base(
+    props,
+    <>
+      <rect x="2" y="2.2" width="12" height="8" rx="1" />
+      <path d="M7 4.9 10.2 6.5 7 8.1Z" />
+      <path d="M8 10.2v1.6M5.8 13.8h4.4" />
+    </>,
+  );
+}
+
+export function ResetIcon(props: IconProps) {
+  return base(
+    props,
+    <>
+      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
+      <path d="M13.5 2.5v3h-3" />
     </>,
   );
 }

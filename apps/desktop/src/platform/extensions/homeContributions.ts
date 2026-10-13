@@ -16,7 +16,7 @@ export interface HomeWidgetContribution {
 export interface ProjectTemplateContribution {
   id: string;
   title: string;
-  kind: 'design' | 'whiteboard' | 'diagram';
+  kind: 'design' | 'whiteboard' | 'slides';
   /** Extension package that owns the template. */
   extensionId: string;
 }
@@ -46,7 +46,7 @@ export function homeWidgets(): readonly HomeWidgetContribution[] {
 /** Register project templates for the create-new flow. */
 export function registerProjectTemplates(entries: readonly ProjectTemplateContribution[]): void {
   for (const entry of entries) {
-    if (!['design', 'whiteboard', 'diagram'].includes(entry.kind)) {
+    if (!['design', 'whiteboard', 'slides'].includes(entry.kind)) {
       throw new Error(`unknown template kind "${entry.kind}" for "${entry.id}"`);
     }
     if (templates.some((template) => template.id === entry.id)) {
@@ -57,7 +57,7 @@ export function registerProjectTemplates(entries: readonly ProjectTemplateContri
 }
 
 /** Project templates, optionally filtered by editor kind. */
-export function projectTemplates(kind?: 'design' | 'whiteboard' | 'diagram'): readonly ProjectTemplateContribution[] {
+export function projectTemplates(kind?: 'design' | 'whiteboard' | 'slides'): readonly ProjectTemplateContribution[] {
   return templates.filter((template) => !kind || template.kind === kind);
 }
 
